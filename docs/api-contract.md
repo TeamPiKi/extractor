@@ -40,7 +40,7 @@
 { "name": "나이키 에어포스", "imageUrl": "https://...", "currentPrice": 99000, "currency": "KRW" }
 ```
 
-- **4개 필드 전부 non-null 을 Extractor 가 보장한다** (PIKI-Server 의 READY 불변식 `requireReadyInvariant` 와 동일 조건). 보장할 수 없으면 성공이 아니라 422 다. 호출자의 엔티티 불변식은 최후 보루로 유지된다.
+- **`name`(non-blank)·`imageUrl`·`currentPrice` 의 non-null 을 Extractor 가 보장한다** — PIKI-Server 의 READY 불변식(`requireReadyInvariant`: name·price·imageUrl·extractedAt, extractedAt 은 호출자가 전이 시점에 채움)과 동일 조건이다. 보장할 수 없으면 성공이 아니라 422(`UNTRUSTWORTHY_VALUE`)다. `currency` 는 READY 필수가 아니라 **nullable** 이다. 호출자의 엔티티 불변식은 최후 보루로 유지된다.
 
 확정 실패 422:
 
