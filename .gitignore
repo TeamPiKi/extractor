@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/settings.local.json
+.claude/worktrees/
+
+# IDE - 개인 설정 제외
+.idea/*
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+*.iml
+out/
+
+# Gradle
+.gradle/
+build/
+
+# Environment — .env* 전부 무시하되 템플릿(.env.example)은 커밋 유지
+.env*
+!.env.example

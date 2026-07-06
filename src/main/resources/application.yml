@@ -1,0 +1,42 @@
+server:
+  # 8080=PIKI-Server, 8000=piki-hb(헤드리스) 와 겹치지 않는 포트. dev 는 본 서버 박스에 컨테이너로 동거한다.
+  port: 8090
+
+spring:
+  application:
+    name: piki-extractor
+  config:
+    # .env 다음에 .env.local 을 읽어 로컬 개인 override 를 덮어쓴다(뒤가 우선). 둘 다 optional·gitignore.
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:.env.local[.properties]
+  threads:
+    virtual:
+      # 파이프라인이 블로킹 외부 I/O(대상 몰 fetch·Gemini·S3) 중심이고 호출당 수십 초를 대기한다.
+      # virtual threads 로 요청 스레드풀 사이징 문제를 제거한다.
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # PIKI-Server 와 동일한 2층 구조 전제: 외부 노출 없음(보안그룹) + 박스 내부 Alloy 만 scrape.
+        include: health, prometheus
+  metrics:
+    tags:
+      # Grafana Cloud 에서 서비스 단위 구분용 공통 라벨. PIKI-Server(application=PIKI)와 별개 시계열.
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      # PIKI-Server 와 동일하게 전수 추적. 볼륨이 부담되면 그때 하향.
+      probability: 1.0
+    export:
+      otlp:
+        # 로컬엔 수집기(Alloy)가 없어 기본 off. 운영 컨테이너에만 TRACING_OTLP_ENABLED=true 를 준다.
+        # off 여도 trace 생성·전파(traceparent 수용, PIKI-Server item.parse span 아래 연결)는 그대로다.
+        enabled: ${TRACING_OTLP_ENABLED:false}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
