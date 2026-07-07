@@ -19,7 +19,7 @@ public enum ExtractionErrorCode {
     IMAGE_UNSUPPORTED, // 확정 실패 — 이미지 형식 불가(빈 이미지·미지원 MIME)
     STORAGE_ERROR,     // 일시 실패 — S3 read/write 오류
 
-    // 헤드리스 렌더 경로 (이관 7단계 추가분)
+    // 헤드리스 렌더 경로
     HEADLESS_BLOCKED,  // 일시 실패 — 실제 브라우저로도 차단(verdict=BLOCK). 일시 챌린지(429 등)가 섞여 fail-safe 로 일시
     HEADLESS_UPSTREAM, // 일시 실패 — 렌더 서비스 연결 실패·타임아웃·빈 렌더·브라우저 오류
 }

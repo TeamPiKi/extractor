@@ -18,7 +18,6 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-// PIKI-Server: product/service/structured/StructuredDataExtractor.kt 포팅.
 // fetch 된 HTML 의 구조화 데이터(JSON-LD schema.org/Product · OpenGraph)를 코드로 파싱해
 // LLM 호출 없이 ProductSnapshot 을 만든다. 필수 필드(name+currentPrice)가 검증을 통과하면 Extracted,
 // 미달·부재·검증위반이면 사유를 담은 Miss 를 돌려 오케스트레이터가 Gemini fallback 으로 넘어가게 한다.
@@ -461,7 +460,7 @@ public class StructuredDataExtractor {
         return value >= 0 ? value : null;
     }
 
-    // 깨진 ld+json 한 덩어리가 전체를 죽이지 않도록 파싱을 격리한다(원본 runCatching 대응).
+    // 깨진 ld+json 한 덩어리가 전체를 죽이지 않도록 파싱을 격리한다.
     private JsonNode readTreeOrNull(String json) {
         try {
             return objectMapper.readTree(json);

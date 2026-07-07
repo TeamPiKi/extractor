@@ -9,7 +9,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-// PIKI-Server: product/domain/CurrencyCodeTest.kt 포팅.
 class CurrencyCodeTest {
 
     @ParameterizedTest

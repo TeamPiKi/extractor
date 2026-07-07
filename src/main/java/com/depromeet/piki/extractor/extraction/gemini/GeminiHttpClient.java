@@ -10,8 +10,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.ObjectMapper;
 
-// PIKI-Server: product/service/gemini/GeminiHttpClient.kt 포팅.
-//
 // Gemini generateContent 호출의 공통 뼈대.
 //
 // RestClient 셋업 · timeout · 헤더 · {model}:generateContent 호출 + GeminiRetry 적용

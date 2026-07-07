@@ -12,12 +12,10 @@ import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// PIKI-Server: product/service/FallbackProductLinkExtractorTest.kt 포팅.
 // Fallback(진입점)이 "plain 먼저, 막히면 headless" 를 flag·escalatable 규칙대로 엮는지 Spring 없이 검증한다.
 // 통합 테스트는 외부 경계(PageFetcher·GeminiClient)만 stub 하고 이 라우팅을 실제로 타므로, 분기 망라는 여기 단위에서.
 // 두 전략은 실제 빈이 네트워크/브라우저를 요구해 단위로 세울 수 없어, LinkExtractionStrategy fake 로 "전략의 결과"만 주입한다.
-// (포팅 노트: escalation 메트릭의 category 태그 값이 원본 ErrorCategory 명 → ExtractionErrorCode 명으로 바뀌었다.
-//  원본 단언 INVALID_INPUT 은 FETCH_CLIENT_ERROR/BLOCKED_HOST 로 대응된다.)
+// (escalation 메트릭의 category 태그 값은 ExtractionErrorCode 명이다.)
 class FallbackProductLinkExtractorTest {
 
     private final ProductLink link = ProductLink.parse("https://shop.example.com/p");

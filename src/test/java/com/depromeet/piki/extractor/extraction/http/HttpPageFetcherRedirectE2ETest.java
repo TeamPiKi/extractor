@@ -11,7 +11,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-// PIKI-Server: product/service/http/HttpPageFetcherRedirectE2ETest.kt 포팅.
 // 실제 외부 페이지 fetch (지그재그 same-domain redirect · 무신사 OneLink cross-domain redirect).
 // 비용·외부 의존성이 있어 기본 @Disabled. 검증 필요 시 수동 enable.
 @Disabled("실제 외부 페이지 fetch (지그재그 same-domain · 무신사 OneLink cross-domain). 검증 필요 시 수동 enable.")

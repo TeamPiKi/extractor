@@ -5,7 +5,6 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import org.springframework.stereotype.Component;
 
-// PIKI-Server: product/service/HeadlessProductLinkExtractor.kt 포팅 (이관 7단계에서 구현).
 // 차단 우회 헤드리스 추출 "전략". 정적 HTTP fetch 가 봇 차단에 막히는 플랫폼을, 실제 브라우저를 띄우는 별도
 // 서비스(PIKI-HeadlessBrowser 의 POST /render)로 뚫는 경로다. 렌더된 HTML 을 받아 정적 fetch 와 동일한
 // 파이프라인(구조화 → LLM fallback)에 흘려넣으므로, READY 불변식(name·price·imageUrl 보장)도 같은 검증이 진다.

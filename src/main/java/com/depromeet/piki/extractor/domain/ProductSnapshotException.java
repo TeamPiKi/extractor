@@ -3,7 +3,7 @@ package com.depromeet.piki.extractor.domain;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
-// PIKI-Server: product/service/ProductSnapshotException.kt 포팅. 둘 다 재시도 무의미한 확정 실패(422).
+// 둘 다 재시도 무의미한 확정 실패(422).
 public final class ProductSnapshotException extends ExtractionException {
 
     private ProductSnapshotException(String message, ExtractionErrorCode code) {

@@ -2,7 +2,6 @@ package com.depromeet.piki.extractor.extraction;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
 
-// PIKI-Server: product/service/PageContent.kt 포팅.
 public record PageContent(
     // 요청받은 원본 URL. 호출자의 저장·식별(item.link) 정체성이라 redirect 와 무관하게 원본을 유지한다.
     ProductLink link,

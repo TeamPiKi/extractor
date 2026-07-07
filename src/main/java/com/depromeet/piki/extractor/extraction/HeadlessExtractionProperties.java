@@ -6,8 +6,7 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-// PIKI-Server: product/service/HeadlessExtractionProperties.kt 포팅.
-// 헤드리스(차단 우회) 추출 설정 — PIKI-HeadlessBrowser 의 POST /render 호출 파라미터 (이관 7단계에서 구현).
+// 헤드리스(차단 우회) 추출 설정 — PIKI-HeadlessBrowser 의 POST /render 호출 파라미터.
 // 운영 주입은 relaxed binding 환경변수: PRODUCT_EXTRACT_HEADLESS_ENABLED · PRODUCT_EXTRACT_HEADLESS_BASE_URL.
 //
 //   readTimeout — 실측(kream 프록시 5.5s·oliveyoung 1.6s·ably 1.9s) 대비 약 4배 여유. 렌더 서비스 내부

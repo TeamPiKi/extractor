@@ -4,7 +4,6 @@ import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 
-// PIKI-Server: product/service/gemini/GeminiExtractionResult.kt 포팅.
 public record GeminiExtractionResult(
     boolean isProductPage,
     String name,

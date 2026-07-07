@@ -6,8 +6,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-// PIKI-Server: image/domain/ProductImage.kt 포팅.
-//
 // 추출 대상 이미지를 표현하는 값 객체.
 //
 // 빈 바이트 · 미지정 / 미지원 MIME 타입을 of 팩토리에서 차단한다.
@@ -68,7 +66,7 @@ public final class ProductImage {
 
     // 스토리지 object key 확장자에서 mimeType 을 복원한다 — extension() 의 역. 이미지 워커가 S3 download 시
     // content-type 메타를 못 받았을 때, 등록 때 key 에 박은 확장자로 mimeType 을 되살리는 fallback 으로 쓴다.
-    // 알 수 없는 확장자면 null — 호출자가 이 fallback 실패를 처리한다 (원본 String? 파리티).
+    // 알 수 없는 확장자면 null — 호출자가 이 fallback 실패를 처리한다.
     public static String mimeTypeOfExtension(String extension) {
         return switch (extension.toLowerCase(Locale.ROOT)) {
             case "png" -> "image/png";
@@ -106,7 +104,7 @@ public final class ProductImage {
         return extension;
     }
 
-    // mapOf 의 삽입순 보존(LinkedHashMap)을 옮겨 지원 포맷 열거 순서를 원본과 동일하게 유지한다.
+    // LinkedHashMap(삽입순 보존)으로 지원 포맷 열거 순서를 고정한다.
     private static Map<String, String> mimeToExtension() {
         Map<String, String> map = new LinkedHashMap<>();
         map.put("image/png", "png");

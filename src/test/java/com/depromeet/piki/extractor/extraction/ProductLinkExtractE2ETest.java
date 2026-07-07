@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.ObjectMapper;
 
-// PIKI-Server: product/service/ProductLinkExtractE2ETest.kt 포팅.
 // 실제 Gemini API + 외부 쇼핑몰 fetch 를 호출하는 E2E 측정 테스트.
 // 비용·외부 의존성·quota 가 발생하므로 기본은 @Disabled. 측정이 필요할 때만 명시적으로 enable.
 // GEMINI_API_KEY 가 OS env 에 있다고 가정한다.

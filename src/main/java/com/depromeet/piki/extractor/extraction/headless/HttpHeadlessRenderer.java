@@ -135,7 +135,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         return html.length() > max ? html.substring(0, max) : html;
     }
 
-    // 상대 URL resolve(Jsoup baseUri)용 최종 URL. 렌더 서비스가 redirect 를 따라갔으면 원본과 다를 수 있다.
+    // 상대 URL resolve(Jsoup baseUri)용 최종 URL. 렌더 서비스가 redirect 를 따라갔으면 원본 link 와 다를 수 있다.
     // 값이 없거나 우리 형식(https 등)에 안 맞으면 원본 link 로 폴백한다 — baseUri 부정확은 치명이 아니고,
     // 여기서 INVALID_URL(422 확정) 을 새면 렌더는 성공했는데 실패로 종결되는 오판이 된다.
     private ProductLink resolveFinalUrl(String finalUrl, ProductLink link) {

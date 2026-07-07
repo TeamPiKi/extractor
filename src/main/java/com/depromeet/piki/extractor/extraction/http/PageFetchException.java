@@ -3,8 +3,7 @@ package com.depromeet.piki.extractor.extraction.http;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
-// PIKI-Server: product/service/http/PageFetchException.kt 포팅 (#657 escalatable 축 포함).
-// 원본의 ErrorCategory 는 계약 매핑 규칙(RETRYABLE→일시 502, 그 외→확정 422)에 따라 permanent 로 번역했다.
+// fetch 실패의 계약 예외. permanent(일시 502 vs 확정 422) 축에 더해 escalatable(헤드리스 에스컬레이션 대상 여부, #657) 축을 가진다.
 public final class PageFetchException extends ExtractionException {
 
     // 접근 실패는 어느 단계 실패든 같은 안내라 한 상수를 공유한다(단계 구분은 호출 지점 로그로). 로그 전용 — 응답엔 code 만 나간다.

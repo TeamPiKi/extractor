@@ -20,7 +20,6 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-// PIKI-Server: product/service/http/HttpPageFetcher.kt 포팅.
 // fetch 용 RestClient 와 host→IP 해석(dnsResolver)을 생성자로 주입받는다. 둘 다 밖에서 교체할 수 있어야
 // 네트워크 없이 redirect 루프(3xx 따라가기·cross-domain 따라가기·다운그레이드 차단·hop 상한)를 단위 테스트로 검증할 수 있다.
 //
@@ -46,7 +45,7 @@ public class HttpPageFetcher implements PageFetcher {
     private final RestClient restClient;
     private final RequestScopedDnsResolver dnsResolver;
     private final InternalHostGuard internalHostGuard;
-    // 원본 companion const 였던 hop 상한·fetch cap 을 FetchProperties 로 외부화(기본값 동일).
+    // hop 상한·fetch cap 은 FetchProperties 로 외부화되어 있다.
     private final int maxRedirects;
     private final int maxFetchChars;
 

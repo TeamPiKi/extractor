@@ -10,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-// PIKI-Server: image/service/ImageCropper.kt 포팅.
 // 원본 이미지에서 bbox(0~1000 normalized) 영역만 잘라 PNG 바이트로 돌려준다.
 // ImageIO 가 디코딩하는 PNG/JPEG 만 지원한다. HEIC/WebP 등 디코딩 불가·실패 시 null(크롭 스킵).
 @Component

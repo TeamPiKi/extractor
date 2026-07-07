@@ -1,6 +1,5 @@
 package com.depromeet.piki.extractor.domain;
 
-// PIKI-Server: product/service/ProductSnapshot.kt 포팅.
 // 상품 추출 시점의 상태를 캡처한 결과. URL 추출(link)·이미지 추출(image) 두 경로가 공유하는 표현이며,
 // 이미지 추출은 URL 이 없어 link 가 null 이다.
 public record ProductSnapshot(

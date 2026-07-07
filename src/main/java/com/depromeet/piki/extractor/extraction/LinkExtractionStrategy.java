@@ -3,10 +3,9 @@ package com.depromeet.piki.extractor.extraction;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 
-// PIKI-Server: product/service/LinkExtractionStrategy.kt 포팅.
 // 상품 URL 추출의 "한 전략". 두 구현:
 //   - DefaultProductLinkExtractor  : 정적 HTTP fetch + 구조화(JSON-LD/OG) 우선 + LLM fallback (싸고 빠른 기본 경로)
-//   - HeadlessProductLinkExtractor : 차단 우회 헤드리스 브라우저 (차단 플랫폼용, 이관 7단계까지 placeholder)
+//   - HeadlessProductLinkExtractor : 차단 우회 헤드리스 브라우저 (차단 플랫폼용)
 //
 // 공개 진입점(ProductLinkExtractor)과 분리한다: API 계층은 진입점만 알고, 전략이 늘거나 바뀌어도 영향받지 않는다.
 // FallbackProductLinkExtractor(진입점 구현)가 이 전략들을 "plain 먼저, 막히면 headless" 로 엮는다.

@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-// PIKI-Server: product/service/http/RequestScopedDnsResolver.kt 포팅.
 // SSRF 가드와 실제 HTTP 연결이 "같은 IP 를 본다"를 보장하는 요청 스코프 DNS 캐시.
 //
 // 가드(guardAgainstInternalHost)가 host→IP 를 한 번 조회해 사설/내부 IP 를 차단한 뒤, 실제 연결(HttpClient5 의
@@ -20,7 +19,7 @@ import org.springframework.stereotype.Component;
 public class RequestScopedDnsResolver {
 
     // host→IP 실제 조회 위임. 테스트가 가짜 IP 를 주입해 SSRF 가드/캐시 로직을 네트워크 없이 검증하도록 교체점을 연다.
-    // InetAddress.getAllByName 이 checked UnknownHostException 을 던지므로(Kotlin 엔 checked 예외가 없어 그냥 흘렸다)
+    // InetAddress.getAllByName 이 checked UnknownHostException 을 던지므로
     // 전용 함수형 인터페이스로 그 시그니처를 그대로 표현한다.
     @FunctionalInterface
     public interface HostResolver {

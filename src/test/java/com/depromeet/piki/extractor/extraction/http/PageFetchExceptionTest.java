@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// PIKI-Server: product/service/http/PageFetchExceptionTest.kt 포팅.
 // "무조건 폴백" 계약을 팩토리 단위로 고정한다: SSRF 만 빼고 모든 fetch 실패가 escalatable(일시 오류 502/503/504 포함).
 class PageFetchExceptionTest {
 

@@ -13,8 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
-// 원본은 ErrorCategory(RETRYABLE / SERVER_ERROR) 로 단언했으나, 이 서비스엔 ErrorCategory 가 없어
-// 계약 매핑(RETRYABLE -> permanent=false·LLM_UPSTREAM, SERVER_ERROR -> permanent=true·LLM_INVALID_RESPONSE)으로 단언한다.
+// 계약은 permanent(일시 vs 확정)와 code(일시 LLM_UPSTREAM / 확정 LLM_INVALID_RESPONSE)로 표현된다 — 그에 맞춰 단언한다.
 class GeminiApiExceptionTest {
 
     @ParameterizedTest

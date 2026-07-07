@@ -13,7 +13,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.ObjectMapper;
 
-// PIKI-Server: product/service/structured/StructuredDataExtractorTest.kt 포팅.
 // 구조화 파서는 순수 컴포넌트라 Spring·DB 없이 HTML 문자열을 직접 넣어 분기를 망라한다.
 // 성공 = name+currentPrice 가 검증을 통과한 Extracted(snapshot), 실패 = 사유를 담은 Miss(→오케스트레이터가 LLM fallback).
 // 실패 케이스는 reason(no_data/missing_field/invalid_value)까지 단언해 reason 분류 로직도 함께 검증한다.

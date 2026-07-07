@@ -19,12 +19,10 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// PIKI-Server: product/service/http/HttpPageFetcherRedirectTest.kt 포팅.
 // redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 차단·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
 // 응답은 MockRestServiceServer 로 제어하고, DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시켜 redirect 로직만 격리한다.
 //
-// 원본은 ErrorCategory/httpStatus 로 단언했으나, 이 서비스의 PageFetchException 은 code()/permanent()/escalatable() 로
-// 계약을 표현하므로(커널 번역) 같은 실패 갈래를 code() 로 고정한다.
+// PageFetchException 은 code()/permanent()/escalatable() 로 계약을 표현하므로 각 실패 갈래를 code() 로 고정한다.
 class HttpPageFetcherRedirectTest {
 
     // 모든 host 를 공인 IP 로 해석해 가드를 통과시킨다(여기선 redirect 따라가기·도메인 차단 로직만 검증).

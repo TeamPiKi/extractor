@@ -2,7 +2,6 @@ package com.depromeet.piki.extractor.extraction.structured;
 
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 
-// PIKI-Server: product/service/structured/StructuredExtraction.kt 포팅.
 // 구조화 데이터(JSON-LD/OpenGraph) 파싱 결과. 성공(Extracted)이면 오케스트레이터가 그대로 쓰고,
 // 실패(Miss)면 그 사유(reason)를 메트릭 라벨로 남긴 뒤 LLM fallback 으로 넘어간다.
 // reason 은 "직접 파싱 적중률을 올리려면 어디를 보강할지" 판단의 단서다:

@@ -22,8 +22,8 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
-// PIKI-Server 에는 S3ImageStorage 단위테스트가 없어(외부 경계라 통합/E2E 로만 탔다), download·upload round-trip 과
-// 예외 변환을 검증하는 단위테스트를 신규 작성한다. AWS SDK 실호출은 하지 않는다 — S3Client 는 인터페이스라
+// download·upload round-trip 과
+// 예외 변환을 검증하는 단위테스트. AWS SDK 실호출은 하지 않는다 — S3Client 는 인터페이스라
 // 손수 만든 in-memory fake(모킹 라이브러리 금지 컨벤션)로 격리한다. putObject·getObjectAsBytes 는 SDK 의 default
 // 메서드라 두 개만 override 하면 되고, 나머지 abstract(serviceName·close)만 no-op 로 채운다.
 class S3ImageStorageTest {

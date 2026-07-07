@@ -3,7 +3,7 @@ package com.depromeet.piki.extractor.domain;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
-// PIKI-Server: product/domain/ProductLinkException.kt 포팅. 정상 흐름에선 호출자가 등록 경계에서 동기 검증을
+// 정상 흐름에선 호출자가 등록 경계에서 동기 검증을
 // 이미 끝내고 보내므로 여기 닿지 않는다 — 다층 방어의 자기 경계 검증이며, 셋 다 INVALID_URL(확정 실패)로 답한다.
 public final class ProductLinkException extends ExtractionException {
 

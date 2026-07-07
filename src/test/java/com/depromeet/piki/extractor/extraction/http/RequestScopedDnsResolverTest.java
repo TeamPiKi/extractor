@@ -11,10 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// PIKI-Server: product/service/http/RequestScopedDnsResolverTest.kt 포팅.
 // 요청 스코프 DNS 캐시가 "한 fetch 동안 host 당 실제 조회 1회"를 보장하는지 검증한다.
 // 이게 IP pin 의 핵심 계약 — 가드와 연결이 같은 IP 를 보게 해 DNS rebinding(두 조회가 다른 IP)을 닫는다.
-// (Java 람다는 mutable 지역변수를 캡처하지 못하므로 원본의 var calls 대신 AtomicInteger 로 호출 횟수를 센다.)
+// (Java 람다는 mutable 지역변수를 캡처하지 못하므로 AtomicInteger 로 호출 횟수를 센다.)
 class RequestScopedDnsResolverTest {
 
     @Test

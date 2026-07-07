@@ -10,7 +10,6 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
-// PIKI-Server: product/service/gemini/GeminiHtmlExtractor.kt 포팅.
 // 구조화 우선 파싱이 실패했을 때의 fallback. 오케스트레이터(DefaultProductLinkExtractor)가 파싱한 Document 를
 // 공유받아 LLM 입력으로 직렬화한다. 구조화 파서가 먼저 읽기를 끝낸 뒤 호출되므로, 이 단계에서 Document 를
 // 직접 변형(불필요 노드 제거)해도 안전하다.

@@ -18,7 +18,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
-// PIKI-Server: product/service/http/PageFetchHttpClientConfig.kt 포팅.
 // 상품 페이지 fetch 용 RestClient 빈. HttpPageFetcher 안에서 직접 만들면 테스트가 가짜 응답을 끼울 수 없어,
 // 생성을 이 Config 로 분리해 주입한다(MockRestServiceServer 로 redirect 루프를 검증하기 위함).
 //

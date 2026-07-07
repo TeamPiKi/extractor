@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// PIKI-Server: product/service/gemini/GeminiExtractionRequest.kt 포팅.
 // Gemini JSON Schema 파서는 "properties": null 같은 잉여 null 필드를 스키마 위반으로 취급한다.
 // 직렬화 단계에서 null 필드를 전부 생략해 요청 페이로드를 최소한의 형태로 유지한다.
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -38,7 +37,7 @@ public record GeminiExtractionRequest(
         Boolean nullable
     ) {
 
-        // 원본 Kotlin 의 명명 인자·default(null) 를 대신하는 편의 팩토리 — 타입만, 타입+nullable(true) 만 지정하는 두 형태.
+        // 나머지 필드를 null 로 채우는 편의 팩토리 — 타입만, 타입+nullable(true) 만 지정하는 두 형태.
         static JsonSchema ofType(String type) {
             return new JsonSchema(type, null, null, null, null, null);
         }
@@ -89,7 +88,7 @@ public record GeminiExtractionRequest(
 
     private static final JsonSchema EXTRACTION_SCHEMA = extractionSchema();
 
-    // mapOf 는 삽입순을 보존하므로(LinkedHashMap) 스키마 property 순서를 원본과 동일하게 유지한다.
+    // LinkedHashMap(삽입순 보존)으로 스키마 property 순서를 고정한다.
     private static JsonSchema extractionSchema() {
         Map<String, JsonSchema> properties = new LinkedHashMap<>();
         properties.put("isProductPage", JsonSchema.ofType("boolean"));

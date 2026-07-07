@@ -15,7 +15,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// PIKI-Server: product/service/http/HttpPageFetcherCharsetTest.kt 포팅.
 // 응답 charset 디코딩 검증: 응답 Content-Type charset → HTML meta charset → UTF-8 순.
 // RestClient 의 기본 String 변환은 Content-Type 에 charset 이 없으면 ISO-8859-1 로 떨어져 UTF-8 한글이 깨졌다(카카오).
 // 바이트로 받아 직접 charset 을 정해 디코딩하는지 본다. 네트워크 없이 MockRestServiceServer 로 응답을 제어한다.

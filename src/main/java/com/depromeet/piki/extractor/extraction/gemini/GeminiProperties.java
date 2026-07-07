@@ -4,7 +4,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-// PIKI-Server: product/service/gemini/GeminiProperties.kt 포팅.
 @ConfigurationProperties(prefix = "gemini")
 public record GeminiProperties(
     String apiKey,
@@ -23,8 +22,8 @@ public record GeminiProperties(
      */
     public static final String DEFAULT_MODEL = "gemini-3.1-flash-lite";
 
-    // model 기본값은 클래스 상수(DEFAULT_MODEL)라 @DefaultValue(상수) 대신 여기서 채운다 (원본 Kotlin 의 default arg 대응).
-    // model 미지정(null)이면 DEFAULT_MODEL, 명시적 blank("")이면 계약 위반으로 던진다 — 원본 require(model.isNotBlank()) 유지.
+    // model 기본값은 클래스 상수(DEFAULT_MODEL)라 @DefaultValue(상수) 대신 여기서 채운다.
+    // model 미지정(null)이면 DEFAULT_MODEL, 명시적 blank("")이면 계약 위반으로 던진다.
     // 생성자가 둘(canonical + 편의)이라 Spring 바인딩 대상 생성자를 @ConstructorBinding 으로 명시한다.
     @ConstructorBinding
     public GeminiProperties {
@@ -42,7 +41,7 @@ public record GeminiProperties(
         }
     }
 
-    // 원본 Kotlin 의 명명 인자·default(model=DEFAULT_MODEL, retry=Retry()) 를 대신하는 편의 생성자. 테스트·직접 생성용.
+    // model=DEFAULT_MODEL, retry=Retry() 기본값을 채우는 편의 생성자. 테스트·직접 생성용.
     public GeminiProperties(String apiKey) {
         this(apiKey, DEFAULT_MODEL, new Retry());
     }
@@ -57,7 +56,7 @@ public record GeminiProperties(
      * Gemini 호출 재시도 파라미터. maxAttempts 는 곧 한 요청이 유발할 수 있는
      * billed API 호출 횟수 상한이므로, API 비용·quota 를 고려해 운영에서 직접 조정한다.
      *
-     * @DefaultValue 는 부분 바인딩(예: max-attempts 만 지정)에서도 원본 default(1 / 1000)를 유지시킨다.
+     * @DefaultValue 는 부분 바인딩(예: max-attempts 만 지정)에서도 default(1 / 1000)를 유지시킨다.
      * 아래 no-arg 생성자의 (1, 1000) 과 값이 같아야 한다.
      */
     public record Retry(

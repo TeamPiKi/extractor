@@ -5,14 +5,11 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-// PIKI-Server: product/service/gemini/GeminiRetry.kt 포팅.
-//
 // Gemini 호출의 일시 장애를 지수 백오프로 재시도한다.
 //
 // 재시도 대상(permanent=false)인 GeminiApiException(5xx · 429 · 408 · 네트워크 타임아웃 · 빈 응답)만 재시도하고,
 // 확정 실패(permanent=true) 등 재시도해도 의미 없는 실패는 즉시 전파한다. 재시도 여부 판단을 예외 타입이 아니라
 // GeminiApiException 의 일시/확정 구분에 위임하므로 분류가 한 곳(GeminiApiException)에 모인다.
-// (원본은 ErrorCategory.RETRYABLE 로 판정 — 번역 규칙: RETRYABLE ⟷ permanent=false.)
 //
 // 재시도 횟수·백오프는 GeminiProperties.Retry 로 외부 주입한다 — maxAttempts 가 곧 billed API 호출 상한이라
 // 운영에서 비용·quota 에 맞춰 조정할 수 있어야 하기 때문이다.
@@ -65,7 +62,7 @@ public class GeminiRetry {
         return ThreadLocalRandom.current().nextLong(exponential + 1);
     }
 
-    // Kotlin Thread.sleep 은 InterruptedException 을 던지지 않았으나 Java 는 checked 라 여기서 처리한다.
+    // Thread.sleep 의 checked InterruptedException 을 여기서 처리한다.
     // 인터럽트는 재시도 대기 중의 비정상 종료 신호라 interrupt 플래그를 복원하고 불변식 위반(500)으로 올린다.
     private void sleep(long delayMs) {
         try {

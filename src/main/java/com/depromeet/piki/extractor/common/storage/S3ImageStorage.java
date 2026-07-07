@@ -12,9 +12,8 @@ import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-// PIKI-Server: common/storage/S3ImageStorage.kt 포팅 (download·upload 만).
 // AWS SDK 예외(네트워크·권한·객체 없음·timeout)를 계약 예외 ImageStorageException(일시 502)으로 변환한다.
-// presign·exists·delete·deleteByPrefix 는 등록 수명주기라 PIKI-Server 소관 — 포팅하지 않는다.
+// presign·exists·delete·deleteByPrefix 는 등록 수명주기라 PIKI-Server 소관이다.
 @Component
 public class S3ImageStorage implements ImageStorage {
 
@@ -28,7 +27,7 @@ public class S3ImageStorage implements ImageStorage {
 
     @Override
     public String upload(String bucket, byte[] bytes, String key, String contentType) {
-        // AWS SDK 예외를 계약 예외(일시 502)로 변환해 호출부가 일관되게 다루게 한다. URL 조립까지 같은 경계 안에 둔다(원본 runCatching 범위).
+        // AWS SDK 예외를 계약 예외(일시 502)로 변환해 호출부가 일관되게 다루게 한다. URL 조립까지 같은 경계 안에 둔다.
         try {
             // S3 object key 는 raw 로 저장하고, 반환 URL 만 경로 인코딩한다.
             s3Client.putObject(
@@ -64,7 +63,7 @@ public class S3ImageStorage implements ImageStorage {
     }
 
     // key 의 각 경로 세그먼트를 URL 인코딩한다 ('/' 는 구분자로 보존). 공백/한글/예약문자 키도 접근 가능한 URL 이 되게 한다
-    // (URLEncoder 의 '+' 는 path 에선 '%20' 이어야 한다). split(-1)로 후행 빈 세그먼트를 보존해 Kotlin split 과 동작을 맞춘다.
+    // (URLEncoder 의 '+' 는 path 에선 '%20' 이어야 한다). split(-1)로 후행 빈 세그먼트도 보존해 key 와 URL 경로가 1:1 로 대응한다.
     private static String encodePath(String key) {
         return Arrays.stream(key.split("/", -1))
             .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20"))

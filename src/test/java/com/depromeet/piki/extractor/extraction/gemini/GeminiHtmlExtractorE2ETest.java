@@ -25,9 +25,8 @@ import tools.jackson.databind.json.JsonMapper;
  * 비용·외부 의존성이 있으므로 기본은 @Disabled. 호출 경로(인증·스키마·직렬화·모델)가 살아 있는지
  * 확인이 필요할 때만 명시적으로 enable. GEMINI_API_KEY 가 환경에 있다고 가정한다.
  *
- * 포팅 노트: 원본은 정적 fetch 레이어(HttpPageFetcher)로 HTML 을 가져왔으나, 이 레이어는 아직 이관되지 않았다.
- * 이 E2E 의 목적은 "Gemini 호출 자체의 생존성"이라, fetch 레이어 이관 전까지는 표준 JDK HttpClient 로 대체한다.
- * fetch 레이어 이관 후에는 HttpPageFetcher 로 되돌려 원본과 완전히 일치시키는 것이 좋다.
+ * 이 E2E 의 목적은 "Gemini 호출 자체의 생존성"이라, HTML fetch 는 관심사가 아니어서 표준 JDK HttpClient 로
+ * 간단히 가져온다. 정적 fetch 경로까지 함께 태우려면 HttpPageFetcher 를 쓰면 된다.
  */
 @Disabled("실제 Gemini API 호출. 검증 필요 시 수동으로 enable 후 실행.")
 class GeminiHtmlExtractorE2ETest {

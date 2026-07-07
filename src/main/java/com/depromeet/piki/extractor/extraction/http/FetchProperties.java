@@ -4,8 +4,8 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-// PIKI-Server: product/service/http/HttpPageFetcher.kt + PageFetchHttpClientConfig.kt 의 companion object 하드코딩 상수 외부화.
-// 기본값은 원본 상수와 동일 — 튜닝 여지(yml 오버라이드)만 열고 동작은 그대로 둔다. application.yml 에 fetch 섹션이 없어도
+// HttpPageFetcher · PageFetchHttpClientConfig 가 쓰는 fetch 상수의 외부화 설정 — 기본값이 기본 동작을 정의하고,
+// yml 오버라이드로 튜닝 여지만 연다. application.yml 에 fetch 섹션이 없어도
 // 모든 컴포넌트가 @DefaultValue 를 가져 constructor binding 으로 완전한 기본 인스턴스가 만들어진다.
 //   userAgent                — 기본 RestClient UA 는 일부 사이트에서 차단되므로 실제 브라우저 UA 로 위장.
 //   connectTimeout           — TCP 연결 수립 상한.
@@ -28,8 +28,8 @@ public record FetchProperties(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
             + "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
-    // Spring 없이 도는 단위·E2E 테스트가 원본과 동일한 기본값으로 fetcher 를 조립할 수 있게 하는 편의 팩토리.
-    // (Kotlin 은 companion const 를 클래스 안에서 바로 읽었으나, 외부화하면서 기본값 조립점을 한 곳으로 모은다.)
+    // Spring 없이 도는 단위·E2E 테스트가 기본값으로 fetcher 를 조립할 수 있게 하는 편의 팩토리 —
+    // 기본값 조립점을 한 곳으로 모은다.
     public static FetchProperties defaults() {
         return new FetchProperties(
             DEFAULT_USER_AGENT,

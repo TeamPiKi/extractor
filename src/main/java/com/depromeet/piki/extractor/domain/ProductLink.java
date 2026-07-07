@@ -5,9 +5,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
-// PIKI-Server: product/domain/ProductLink.kt 포팅.
-// 미지원 플랫폼 판정(verifySupportedPlatform·UNSUPPORTED_HOSTS)은 등록 입력 경계의 정책이라 호출자(PIKI-Server)에
-// 남기고 가져오지 않았다 — 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식)과 안전 로깅만 책임진다.
+// 미지원 플랫폼 판정은 등록 입력 경계의 정책이라 호출자(PIKI-Server) 소관이다 —
+// 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식)과 안전 로깅만 책임진다.
 public final class ProductLink {
 
     private static final Set<String> HTTP_SCHEMES = Set.of("https");

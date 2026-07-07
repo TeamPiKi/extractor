@@ -5,14 +5,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// PIKI-Server: image/service/gemini/GeminiImageRequest.kt 포팅.
 // Gemini JSON Schema 파서는 "properties": null 같은 잉여 null 필드를 스키마 위반으로 취급한다.
 // (GeminiExtractionRequest 와 동일 정책) 직렬화 단계에서 null 필드를 전부 생략한다.
 //
-// 주의(파리티): 이미지 경로의 wire 는 link 경로(GeminiExtractionRequest)와 다르다 —
+// 주의: 이미지 경로의 wire 는 link 경로(GeminiExtractionRequest)와 다르다 —
 // 필드명은 responseJsonSchema 가 아니라 responseSchema, 스키마 type 은 소문자 문자열이 아니라 SchemaType enum
 // (직렬화 시 "OBJECT"/"STRING"/"INTEGER" 대문자), 그리고 이미지 part 를 담는 sealed Part(Text/Image) 가 있다.
-// 두 경로가 원본에서 이미 갈라져 있으므로 그대로 유지한다.
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record GeminiImageRequest(
     GenerationConfig generationConfig,
@@ -36,9 +34,9 @@ public record GeminiImageRequest(
         List<Part> parts
     ) {}
 
-    // Kotlin sealed interface Part { Text; Image } 포팅. 텍스트 파트와 이미지 파트가 한 리스트에 섞여 온다.
+    // 텍스트 파트와 이미지 파트가 한 리스트에 섞여 온다.
     // 이 요청은 직렬화만 되고 역직렬화되지 않으므로 타입 판별자(discriminator)가 붙지 않는다 —
-    // Jackson 은 런타임 타입의 컴포넌트만 찍어 {"text":...} / {"inlineData":...} 로 나간다 (원본과 동일 바이트).
+    // Jackson 은 런타임 타입의 컴포넌트만 찍어 {"text":...} / {"inlineData":...} 로 나간다.
     public sealed interface Part permits Part.Text, Part.Image {
 
         record Text(String text) implements Part {}
@@ -60,7 +58,7 @@ public record GeminiImageRequest(
         Boolean nullable
     ) {
 
-        // 원본 Kotlin 의 명명 인자·default(null) 를 대신하는 편의 팩토리 — 타입만, 타입+nullable(true) 만 지정하는 두 형태.
+        // 나머지 필드를 null 로 채우는 편의 팩토리 — 타입만, 타입+nullable(true) 만 지정하는 두 형태.
         static Schema ofType(SchemaType type) {
             return new Schema(type, null, null, null, null);
         }
@@ -99,7 +97,7 @@ public record GeminiImageRequest(
 
     private static final Schema PRODUCT_SCHEMA = productSchema();
 
-    // mapOf 는 삽입순을 보존하므로(LinkedHashMap) 스키마 property 순서를 원본과 동일하게 유지한다.
+    // LinkedHashMap(삽입순 보존)으로 스키마 property 순서를 고정한다.
     private static Schema productSchema() {
         Map<String, Schema> boundingBoxProperties = new LinkedHashMap<>();
         boundingBoxProperties.put("yMin", Schema.ofNullableType(SchemaType.INTEGER));

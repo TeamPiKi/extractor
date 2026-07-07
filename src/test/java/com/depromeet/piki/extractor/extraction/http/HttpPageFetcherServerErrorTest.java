@@ -18,13 +18,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// PIKI-Server: product/service/http/HttpPageFetcherServerErrorTest.kt 포팅.
 // 대상 서버의 5xx 를 status 별로 일시(UPSTREAM_ERROR)/영구(PERMANENT_UPSTREAM)로 가르는지 네트워크 없이 검증한다.
 // 봇 차단을 500(no body)으로 응답하는 쇼핑몰이 무의미하게 재시도되지 않도록 500/501 은 영구로 본다.
 // 응답은 MockRestServiceServer 로 제어하고, DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다.
 //
-// 원본은 ErrorCategory/httpStatus 로 단언했으나, 이 서비스의 PageFetchException 은 code()(어느 실패)와
-// permanent()(RETRYABLE↔일시 vs SERVER_ERROR/INVALID_INPUT↔확정)로 계약을 표현한다(커널 번역). 그에 맞춰 단언한다.
+// PageFetchException 의 계약은 code()(어느 실패)와 permanent()(422 확정 vs 502 일시)로 표현된다 — 그에 맞춰 단언한다.
 class HttpPageFetcherServerErrorTest {
 
     private final RequestScopedDnsResolver.HostResolver publicIp =

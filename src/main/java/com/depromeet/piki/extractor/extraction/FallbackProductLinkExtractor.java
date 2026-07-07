@@ -10,7 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-// PIKI-Server: product/service/FallbackProductLinkExtractor.kt 포팅.
 // 상품 URL 추출의 공개 진입점(ProductLinkExtractor). 두 전략을 "우리 먼저, 막히면 헤드리스" 공식으로 엮는다:
 //   1) plain(DefaultProductLinkExtractor)   : 정적 HTTP + 구조화/LLM. 싸고 빠른 기본 경로.
 //   2) headless(HeadlessProductLinkExtractor): 차단 우회 브라우저. 비싸고 느려, plain 이 "차단"으로 막힌 경우에만 탄다.
@@ -106,8 +105,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     // "무조건 폴백"이라 낭비(특히 일시 오류를 헤드리스로 보냈는데 실패)가 생기므로, 그 비율을 category 별로 봐서
     // 후속 per-host 튜닝의 근거로 삼는다(메트릭=추세, host 로그=원장). headless 예외는 그대로 상위로 전파해
     // API 계층의 계약 매핑(422/502)에 맡긴다.
-    // (포팅 노트: 원본의 category 값은 ErrorCategory 명이었으나, 이 서비스엔 ErrorCategory 가 없어
-    //  ExtractionErrorCode 명으로 대체했다. 라벨 키 집합 {outcome, category} 는 모든 발행 경로에서 동일하다.)
+    // (category 태그 값은 ExtractionErrorCode 명이다. 라벨 키 집합 {outcome, category} 는 모든 발행 경로에서 동일하다.)
     private ProductSnapshot escalateToHeadless(ProductLink link, RuntimeException plainFailure) {
         String category = categoryOf(plainFailure);
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());

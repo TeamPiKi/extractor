@@ -8,7 +8,7 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// PIKI-Server: product/service/ProductSnapshotTest.kt 포팅 (fromExtracted 정규화·범위검증 분기).
+// fromExtracted 정규화·범위검증 분기를 망라한다.
 class ProductSnapshotTest {
 
     private final ProductLink link = ProductLink.parse("https://shop.example.com/products/42");

@@ -3,9 +3,8 @@ package com.depromeet.piki.extractor.image.domain;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
-// PIKI-Server: image/domain/ProductImageException.kt 포팅.
-// 원본은 사용자 업로드 검증 실패라 400(계약)이었다. 이 서비스의 클라이언트는 PIKI-Server 워커이고,
-// 빈 이미지·미지원 MIME 은 같은 바이트를 재시도해도 결과가 같으므로 확정 실패(permanent=true → 422)로 옮긴다.
+// 이 서비스의 클라이언트는 PIKI-Server 워커이고,
+// 빈 이미지·미지원 MIME 은 같은 바이트를 재시도해도 결과가 같으므로 확정 실패(permanent=true → 422)다.
 // 셋 다 code=IMAGE_UNSUPPORTED (api-contract.md 의 "422 code 추가분: IMAGE_UNSUPPORTED").
 // 세 팩토리의 서로 다른 message 는 로그·cause 용이며 응답 body 에는 code 만 나간다.
 public final class ProductImageException extends ExtractionException {
