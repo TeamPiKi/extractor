@@ -15,6 +15,10 @@ public class StubImageStorage implements ImageStorage {
         throw new IllegalStateException("stub.onDownload 를 테스트 본문에서 명시 세팅해야 한다. CLAUDE.md '테스트' 절 참고.");
     };
 
+    // 마지막 업로드 바이트 캡처 — bbox 크롭 배선(크롭 결과가 실제로 업로드로 이어지는지)을 API 레벨에서 단언하는 데 쓴다.
+    // 공유 컨텍스트라 값이 테스트 간 남을 수 있으므로, 검증하는 테스트가 본문에서 먼저 null 로 초기화한다.
+    public byte[] lastUploadedBytes;
+
     @Override
     public StoredImage download(String bucket, String key) {
         return onDownload.apply(bucket, key);
@@ -22,6 +26,7 @@ public class StubImageStorage implements ImageStorage {
 
     @Override
     public String upload(String bucket, byte[] bytes, String key, String contentType) {
+        lastUploadedBytes = bytes;
         return UPLOADED_URL;
     }
 }

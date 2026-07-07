@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +11,10 @@ import com.depromeet.piki.extractor.image.gemini.GeminiImageResult;
 import com.depromeet.piki.extractor.support.IntegrationTestSupport;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import com.depromeet.piki.extractor.support.StubImageStorage;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +64,49 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.currentPrice").value(89000))
             .andExpect(jsonPath("$.currency").value("KRW"))
             .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+    }
+
+    @Test
+    @DisplayName("download 가 content-type 메타를 못 줘도 key 확장자로 mimeType 을 복원해 200 으로 끝난다")
+    void nullContentTypeRecoversFromKeyExtension() throws Exception {
+        // S3 GetObject 가 content-type 메타를 안 싣는 상황 — 등록 때 호출자가 key 에 박은 확장자(.png)로 복원해야
+        // 메타 결함이 IMAGE_UNSUPPORTED(비복구 확정 실패)로 새지 않는다. (구 PIKI-Server embedded 워커의 계약을
+        // 이관 8단계에서 이 레포로 흡수 — 서버엔 더 이상 download 경로가 없다.)
+        stubGeminiClient.reset();
+        stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, null);
+        stubGeminiClient.build = request -> new GeminiImageResult("복원 상품", 12000, null, "KRW", null);
+
+        mockMvc().perform(post("/internal/extractions/image")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("items/raw/meta-missing.png")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("복원 상품"));
+    }
+
+    @Test
+    @DisplayName("bbox 가 있으면 크롭된 이미지가 업로드된다 - 크롭 결과가 업로드 배선으로 실제 이어지는지 검증")
+    void boundingBoxCropIsWiredToUpload() throws Exception {
+        // ImageCropper 는 실제 빈으로 태운다(단위 테스트는 crop 계산만 봄 — 여기서는 "크롭 결과가 원본 대신
+        // 업로드된다"는 오케스트레이션 배선을 고정한다). 800x800 원본에 bbox(100,100,500,500 normalized 0~1000)
+        // → 320x320 크롭이 업로드돼야 한다.
+        stubGeminiClient.reset();
+        stubImageStorage.lastUploadedBytes = null;
+        BufferedImage source = new BufferedImage(800, 800, BufferedImage.TYPE_INT_RGB);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(source, "png", out);
+        stubImageStorage.onDownload = (bucket, key) -> new StoredImage(out.toByteArray(), "image/png");
+        stubGeminiClient.build = request ->
+            new GeminiImageResult("크롭 상품", 45000, null, "KRW", new GeminiImageResult.BoundingBoxDto(100, 100, 500, 500));
+
+        mockMvc().perform(post("/internal/extractions/image")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("items/raw/crop.png")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+
+        BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));
+        assertEquals(320, uploaded.getWidth());
+        assertEquals(320, uploaded.getHeight());
     }
 
     @Test
