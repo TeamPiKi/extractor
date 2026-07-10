@@ -7,7 +7,7 @@ PIKI-Server(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 UR
 - **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(PIKI-Server outbox)의 몫이다.
 - **소비자는 PIKI-Server 워커 하나뿐.** 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
 - **계약의 single source 는 `docs/api-contract.md`.** 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
-- 차단 우회 **방법론**(스텔스·프록시·IP 전략)은 private repo(PIKI-HeadlessBrowser)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
+- 차단 우회 **방법론**(스텔스·프록시·IP 전략)은 renderer repo(TeamPiKi/renderer, 구 PIKI-HeadlessBrowser)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
 
 ## 언어: Java 25
 
