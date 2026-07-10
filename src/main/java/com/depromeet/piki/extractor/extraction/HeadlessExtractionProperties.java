@@ -6,13 +6,14 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-// 헤드리스(차단 우회) 추출 설정 — PIKI-HeadlessBrowser 의 POST /render 호출 파라미터.
-// 운영 주입은 relaxed binding 환경변수: PRODUCT_EXTRACT_HEADLESS_ENABLED · PRODUCT_EXTRACT_HEADLESS_BASE_URL.
+// 헤드리스(차단 우회) 추출 설정 — renderer(구 PIKI-HeadlessBrowser)의 POST /render 호출 파라미터.
+// 운영 주입은 relaxed binding 환경변수: PRODUCT_EXTRACT_HEADLESS_ENABLED · PRODUCT_EXTRACT_HEADLESS_BASE_URL
+// (· PRODUCT_EXTRACT_HEADLESS_ZSTD_DICT_DIR — 사전 도입 시).
 //
 //   readTimeout — 실측(kream 프록시 5.5s·oliveyoung 1.6s·ably 1.9s) 대비 약 4배 여유. 렌더 서비스 내부
-//                 최악(goto 40s + 가격 대기 8s)을 다 기다리지 않는 이유: 호출자(PIKI-Server) read 55s 예산 안에서
-//                 LLM fallback(30s) 몫을 남겨야 한다(docs/api-contract.md §3). 상한 초과 렌더는 일시 실패로
-//                 떨어져 outbox recover 가 재시도한다.
+//                 최악(goto 40s + 렌더 정착 대기 8s)을 다 기다리지 않는 이유: 호출자(PIKI-Server) read 55s 예산
+//                 안에서 LLM fallback(30s) 몫을 남겨야 한다(docs/api-contract.md §3). 상한 초과 렌더는 일시
+//                 실패로 떨어져 outbox recover 가 재시도한다.
 //   maxHtmlChars — 렌더된 DOM 보관·파싱 비용의 안전 상한 (정적 fetch 의 FetchProperties.maxFetchChars 와 같은 값).
 @ConfigurationProperties(prefix = "product.extract.headless")
 public record HeadlessExtractionProperties(
@@ -22,7 +23,15 @@ public record HeadlessExtractionProperties(
     @DefaultValue("") String baseUrl,
     @DefaultValue("2s") Duration connectTimeout,
     @DefaultValue("20s") Duration readTimeout,
-    @DefaultValue("3000000") int maxHtmlChars
+    @DefaultValue("3000000") int maxHtmlChars,
+    // 응답 zstd 압축 전송 요청(서버간 전송 절감, renderer 실측 5~12x). 해제는 응답 헤더(X-Encoding) 기준이라
+    // compress 필드를 모르는 구버전 renderer(무시하고 plain JSON 응답)와도 호환 — 켜 둔 채 배포 순서 무관하게
+    // 안전하고, 이 스위치는 압축 경로 문제 시 끄는 kill-switch 용도다.
+    @DefaultValue("true") boolean compress,
+    // zstd 학습 사전 디렉토리(파일명 = 사전ID, renderer compress.py 의 DICT_ID 규약). 빈값 = 사전 없음.
+    // 롤아웃: 사전 파일을 여기 먼저 배포한 뒤 renderer 의 ZSTD_DICT_PATH 를 켠다 — 순서가 뒤집히면
+    // 미보유 사전ID 수신 = 해제 불가(일시 실패)다.
+    @DefaultValue("") String zstdDictDir
 ) {
 
     public HeadlessExtractionProperties {
@@ -61,7 +70,9 @@ public record HeadlessExtractionProperties(
             enabled ? "http://headless.test:8000" : "",
             Duration.ofSeconds(2),
             Duration.ofSeconds(20),
-            3_000_000
+            3_000_000,
+            true,
+            ""
         );
     }
 }

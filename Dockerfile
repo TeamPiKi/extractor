@@ -10,4 +10,5 @@ COPY build/libs/piki-extractor-*.jar app.jar
 # 실행 시점에 SSM Parameter Store 에서 읽어 env 로 주입한다(배포 스크립트 소관).
 EXPOSE 8090
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# --enable-native-access: zstd-jni(렌더 응답 해제)의 JNI 로드 허용 — Java 25 는 경고, 미래 JDK 는 차단(JEP 472).
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "app.jar"]

@@ -46,6 +46,10 @@ dependencies {
     // JDK HttpURLConnection 은 IP pin 시 TLS SNI·인증서 수동 복구가 필요해 깨지기 쉽다. 버전은 Spring Boot BOM 관리.
     implementation("org.apache.httpcomponents.client5:httpclient5")
 
+    // renderer(POST /render)의 압축 응답(X-Encoding: zstd) 해제 — 학습 사전(X-Zstd-Dict) 지원 포함.
+    // Spring Boot BOM 미관리라 버전 명시.
+    implementation("com.github.luben:zstd-jni:1.5.7-3")
+
     // 이미지(OCR) 경로: S3 raw 읽기 + 크롭 결과 업로드 (이관 6단계). 버전은 위 BOM 이 관리.
     implementation("software.amazon.awssdk:s3")
 
@@ -63,4 +67,7 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // zstd-jni 의 JNI 네이티브 로드 허용 — Java 25 는 경고만 내지만 미래 JDK 는 차단한다(JEP 472).
+    // 런타임은 Dockerfile ENTRYPOINT 가 같은 플래그를 준다.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

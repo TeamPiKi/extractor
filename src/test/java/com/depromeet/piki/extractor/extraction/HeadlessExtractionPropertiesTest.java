@@ -13,7 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class HeadlessExtractionPropertiesTest {
 
     private HeadlessExtractionProperties propertiesWith(boolean enabled, String baseUrl) {
-        return new HeadlessExtractionProperties(enabled, baseUrl, Duration.ofSeconds(2), Duration.ofSeconds(20), 3_000_000);
+        return new HeadlessExtractionProperties(enabled, baseUrl, Duration.ofSeconds(2), Duration.ofSeconds(20), 3_000_000, true, "");
     }
 
     @ParameterizedTest(name = "enabled=true + base-url [{0}] 은 부팅에서 거부된다")

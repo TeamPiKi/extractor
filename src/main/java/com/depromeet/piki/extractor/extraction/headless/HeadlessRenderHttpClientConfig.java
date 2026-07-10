@@ -34,4 +34,11 @@ public class HeadlessRenderHttpClientConfig {
             .observationRegistry(observationRegistry)
             .build();
     }
+
+    // zstd 압축 응답 해제용 사전 보관소. 부팅 시 디렉토리를 읽어 오설정을 fail-fast 로 드러낸다
+    // (기본값 zstd-dict-dir="" 는 사전 없음 — 파일 IO 없이 빈 보관소).
+    @Bean
+    public ZstdDictionaries zstdDictionaries(HeadlessExtractionProperties properties) {
+        return ZstdDictionaries.load(properties.zstdDictDir());
+    }
 }
