@@ -50,15 +50,15 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 테스트
 
-core 테스트 컨벤션의 Java 번역판. 원문 규약이 더 자세하다 (core `.claude/rules/testing-convention.md`).
+**원칙은 infra 정본**이다 — 분류·가치 판단·분기 위치 결정 트리·모킹 금지 stub 우선·셋업 원칙·네이밍 접미사·기계 강제, 그리고 JVM/Spring 공통(컨텍스트 캐싱·E2E 격리·동시성)까지. `install.sh` 가 설치하고 아래 import 로 자동 로드된다. 여기에는 **이 repo 의 Java·무DB 바인딩**만 적는다.
 
-- **분류**: 단위(Spring 없이 분기 망라) / 통합(HTTP 진입 계약 검증, 외부는 stub) / E2E(실제 몰·Gemini 호출, env 격리). **DB 가 없으므로 Testcontainers·Docker 불필요** — `./gradlew test` 가 그냥 돈다.
-- **모킹 금지, stub 우선.** Mockito/`@MockBean` 금지. 외부 경계(GeminiClient·PageFetcher·S3)는 `IntegrationStubs` 한 곳에 `@Primary` stub 빈으로 등록, default 람다는 throw.
-- **단일 컨텍스트**: `@SpringBootTest` 는 `support/IntegrationTestSupport` 한 곳에만. 클래스별 `@Import`/`@TestPropertySource`/`@ActiveProfiles`/`@DirtiesContext` 금지.
-- **셋업 hook 금지**: `@BeforeEach`/`@BeforeAll` 없이 각 테스트 본문이 자기 시나리오를 완결적으로 만든다.
-- **네이밍**: 단위 `{대상}Test` / 통합 `{기능}IntegrationTest` / E2E `{대상}E2ETest`(반드시 `@Disabled` 또는 `@EnabledIfEnvironmentVariable` 격리). 메서드는 Java 라 backtick 불가 — **`@DisplayName` 에 한국어 한 문장**.
-- 단언은 JUnit 5 `Assertions` 기본, 컬렉션·객체 그래프 비교만 AssertJ.
-- 메타 테스트 `TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)는 파싱 포팅(3단계)과 함께 이식한다.
+@.claude/rules/testing-principles.md
+
+- **메서드명**: Java 는 backtick 식별자가 안 되므로 **`@DisplayName` 에 한국어 한 문장**으로 시나리오를 적는다 (원칙의 "메서드명은 시나리오를 한 문장으로" 를 Java 로 바인딩한 것).
+- **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
+- **DB 가 없다** — Testcontainers·Docker 불필요. `./gradlew test` 가 그냥 돈다. 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
+- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(GeminiClient·PageFetcher·S3)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
+- **메타 테스트**: `TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)는 파싱 포팅(3단계)과 함께 이식한다. 그 전까지 원칙 준수는 사람 리뷰가 책임진다.
 
 ## 의존성
 

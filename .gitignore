@@ -6,6 +6,7 @@
 .claude/settings.local.json
 .claude/worktrees/
 .claude/commands/
+.claude/rules/testing-principles.md
 
 # IDE - 개인 설정 제외
 .idea/*
