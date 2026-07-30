@@ -4,6 +4,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
@@ -61,7 +62,10 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.name").value("직접파싱 상품"))
             .andExpect(jsonPath("$.imageUrl").value("https://cdn.example.com/p.png"))
             .andExpect(jsonPath("$.currentPrice").value(39000))
-            .andExpect(jsonPath("$.currency").value("KRW"));
+            .andExpect(jsonPath("$.currency").value("KRW"))
+            // additive 계약(core#825): 리다이렉트 없으면 finalUrl == 요청 원본, 구조화 경로는 method=STRUCTURED.
+            .andExpect(jsonPath("$.finalUrl").value("https://shop.example.com/p/1"))
+            .andExpect(jsonPath("$.method").value("STRUCTURED"));
 
         if (stubGeminiClient.invocations() != 0) {
             throw new AssertionError("구조화 파싱 성공 시 LLM 을 호출하면 안 된다");
@@ -81,7 +85,29 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
                 .content(body("https://shop.example.com/p/2")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("엘엘엠 상품"))
-            .andExpect(jsonPath("$.currentPrice").value(12000));
+            .andExpect(jsonPath("$.currentPrice").value(12000))
+            // LLM 분기도 withOrigin 을 거친다 — finalUrl 전달 회귀를 method 단언만으로는 못 잡는다.
+            .andExpect(jsonPath("$.finalUrl").value("https://shop.example.com/p/2"))
+            .andExpect(jsonPath("$.method").value("LLM"));
+    }
+
+    @Test
+    @DisplayName("리다이렉트를 따라갔으면 finalUrl 이 귀결점을 담는다 - 단축링크 정체성 정규화의 입력")
+    void finalUrlReflectsRedirectDestination() throws Exception {
+        stubGeminiClient.reset();
+        // 단축링크가 정식 상품 페이지로 리다이렉트된 상황 — fetcher 가 최종 URL 을 함께 돌려준다.
+        stubPageFetcher.build = link -> new PageContent(
+            link,
+            STRUCTURED_HTML,
+            ProductLink.parse("https://real-shop.example.com/products/42")
+        );
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://short.example.com/abc123")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.finalUrl").value("https://real-shop.example.com/products/42"))
+            .andExpect(jsonPath("$.method").value("STRUCTURED"));
     }
 
     @Test

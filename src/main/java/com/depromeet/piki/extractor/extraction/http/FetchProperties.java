@@ -11,7 +11,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 //   connectTimeout           — TCP 연결 수립 상한.
 //   readTimeout              — 응답(read) 상한.
 //   connectionRequestTimeout — 커넥션 풀에서 커넥션 획득까지의 최대 대기. 미설정 시 HttpClient5 기본 3분이라 짧게 명시(fail-fast).
-//   maxRedirects             — 수동 redirect 추적 hop 상한. www↔non-www·http→https 정도라 한두 번이면 충분, 무한·체인은 여기서 끊는다.
+//   maxRedirects             — 수동 redirect 추적 hop 상한. 단축·딥링크 체인이 실측 2 hop(지그재그 s.zigzag)까지
+//                              쓰므로 여유를 두되(5), 무한·과도한 체인은 여기서 끊는다. hop 마다 host 를 재검증(SSRF)하므로
+//                              상한 완화가 보안 부담을 늘리지 않는다.
 //   maxFetchChars            — fetch 본문 보관·파싱 비용을 막는 안전 상한(LLM 토큰 상한 아님). 구조화 추출이 페이지 전체를
 //                              보게 넉넉히 두되, 동시 파싱 메모리(상한 x 동시 수)를 감안해 무제한이 아니라 3MB 로 바운드.
 @ConfigurationProperties("fetch")
@@ -20,7 +22,7 @@ public record FetchProperties(
     @DefaultValue("5s") Duration connectTimeout,
     @DefaultValue("15s") Duration readTimeout,
     @DefaultValue("2s") Duration connectionRequestTimeout,
-    @DefaultValue("3") int maxRedirects,
+    @DefaultValue("5") int maxRedirects,
     @DefaultValue("3000000") int maxFetchChars
 ) {
 
@@ -36,7 +38,7 @@ public record FetchProperties(
             Duration.ofSeconds(5),
             Duration.ofSeconds(15),
             Duration.ofSeconds(2),
-            3,
+            5,
             3_000_000
         );
     }
