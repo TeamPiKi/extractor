@@ -86,6 +86,8 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("엘엘엠 상품"))
             .andExpect(jsonPath("$.currentPrice").value(12000))
+            // LLM 분기도 withOrigin 을 거친다 — finalUrl 전달 회귀를 method 단언만으로는 못 잡는다.
+            .andExpect(jsonPath("$.finalUrl").value("https://shop.example.com/p/2"))
             .andExpect(jsonPath("$.method").value("LLM"));
     }
 
