@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.image;
 
 import com.depromeet.piki.extractor.common.storage.ImageStorage;
 import com.depromeet.piki.extractor.common.storage.StoredImage;
+import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.image.domain.ProductImage;
 import java.util.UUID;
@@ -46,8 +47,10 @@ public class ImageExtractionService {
         log.info("image extract bucket={} key={} croppedUrl={}", bucket, key, imageUrl);
 
         // 추출 스냅샷(link=null, imageUrl 미채움)에 업로드 결과 URL 을 채워 돌려준다.
+        // 이미지 경로는 원본 URL 이 없어 finalUrl 도 없고, 추출은 Gemini 라 method 는 항상 LLM 이다.
         ProductSnapshot s = extraction.snapshot();
-        return new ProductSnapshot(s.link(), s.name(), imageUrl, s.currentPrice(), s.currency());
+        return new ProductSnapshot(s.link(), s.name(), imageUrl, s.currentPrice(), s.currency())
+            .withOrigin(null, ExtractionMethod.LLM);
     }
 
     private String mimeTypeFromKeyOrStored(String key, StoredImage stored) {

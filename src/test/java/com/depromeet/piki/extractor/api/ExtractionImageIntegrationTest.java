@@ -63,7 +63,10 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.name").value("나이키 신발"))
             .andExpect(jsonPath("$.currentPrice").value(89000))
             .andExpect(jsonPath("$.currency").value("KRW"))
-            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 없고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").doesNotExist())
+            .andExpect(jsonPath("$.method").value("LLM"));
     }
 
     @Test
@@ -102,7 +105,10 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("items/raw/crop.png")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 없고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").doesNotExist())
+            .andExpect(jsonPath("$.method").value("LLM"));
 
         BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));
         assertEquals(320, uploaded.getWidth());

@@ -1,14 +1,29 @@
 package com.depromeet.piki.extractor.domain;
 
 // 상품 추출 시점의 상태를 캡처한 결과. URL 추출(link)·이미지 추출(image) 두 경로가 공유하는 표현이며,
-// 이미지 추출은 URL 이 없어 link 가 null 이다.
+// 이미지 추출은 URL 이 없어 link 와 finalUrl 이 null 이다.
+// finalUrl 은 리다이렉트를 따라간 최종 페이지 URL — 호출자(core)가 상품 정체성(canonical) 정규화의 입력으로
+// 쓴다(core#825). 단축링크는 경로가 불투명 코드라 이 값 없이는 같은 상품을 알아볼 수 없다.
 public record ProductSnapshot(
     ProductLink link,
     String name,
     String imageUrl,
     Integer currentPrice,
-    String currency
+    String currency,
+    ProductLink finalUrl,
+    ExtractionMethod method
 ) {
+
+    // 추출값 5필드만으로 만드는 편의 생성자. 값과 출처의 생산 시점이 달라서다 — 값은 파서·LLM(fromExtracted)이
+    // 만들지만, finalUrl 과 method 는 그 바깥(파이프라인·이미지 서비스)만 안다. 출처는 withOrigin 으로 나중에 채운다.
+    public ProductSnapshot(ProductLink link, String name, String imageUrl, Integer currentPrice, String currency) {
+        this(link, name, imageUrl, currentPrice, currency, null, null);
+    }
+
+    // 출처(귀결점·추출 경로)를 표기한 사본 — record 라 wither 로 채운다.
+    public ProductSnapshot withOrigin(ProductLink finalUrl, ExtractionMethod method) {
+        return new ProductSnapshot(link, name, imageUrl, currentPrice, currency, finalUrl, method);
+    }
 
     // 컬럼 길이 제약은 호출자(core items 테이블)의 계약이다. 값이 바뀌면 양쪽을 함께 갱신한다.
     private static final int NAME_MAX_LENGTH = 512;

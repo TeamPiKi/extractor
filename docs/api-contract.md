@@ -38,9 +38,18 @@
 성공 200:
 
 ```json
-{ "name": "나이키 에어포스", "imageUrl": "https://...", "currentPrice": 99000, "currency": "KRW" }
+{
+  "name": "나이키 에어포스",
+  "imageUrl": "https://...",
+  "currentPrice": 99000,
+  "currency": "KRW",
+  "finalUrl": "https://www.musinsa.com/products/6760200",
+  "method": "STRUCTURED"
+}
 ```
 
+- `finalUrl` (additive, core#825): 리다이렉트를 따라간 최종 페이지 URL. 호출자가 상품 정체성(canonical) 정규화의 입력으로 쓴다 — 단축링크(onelink 등)는 경로가 불투명 코드라 이 값 없이 같은 상품을 알아볼 수 없다. link 경로는 항상 채워지고 image 경로는 null. 호출자는 이 값이 없으면(구버전 Extractor) canonical 확정을 건너뛴다 — 배포 순서 무관.
+- `method` (additive, core#825): 값을 만든 추출 경로. `STRUCTURED`(구조화 파싱, 결정론적) | `LLM`(Gemini — URL fallback·image 경로). 호출자가 snapshot 출처(SERVER/SERVER_LLM)를 구분 저장하는 근거다. tolerant reader 라 모르는 값이 와도 무시하고 출처 미기록으로 둔다.
 - **`name`(non-blank)·`imageUrl`·`currentPrice` 의 non-null 을 Extractor 가 보장한다** — core 의 READY 불변식(`requireReadyInvariant`: name·price·imageUrl·extractedAt, extractedAt 은 호출자가 전이 시점에 채움)과 동일 조건이다. 보장할 수 없으면 성공이 아니라 422(`UNTRUSTWORTHY_VALUE`)다. `currency` 는 READY 필수가 아니라 **nullable** 이다. 호출자의 엔티티 불변식은 최후 보루로 유지된다.
 
 확정 실패 422:
