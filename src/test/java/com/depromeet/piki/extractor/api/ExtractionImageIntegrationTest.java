@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,8 +65,8 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.currentPrice").value(89000))
             .andExpect(jsonPath("$.currency").value("KRW"))
             .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
-            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 없고, 추출은 Gemini 라 method=LLM.
-            .andExpect(jsonPath("$.finalUrl").doesNotExist())
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
             .andExpect(jsonPath("$.method").value("LLM"));
     }
 
@@ -106,8 +107,8 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
                 .content(body("items/raw/crop.png")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
-            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 없고, 추출은 Gemini 라 method=LLM.
-            .andExpect(jsonPath("$.finalUrl").doesNotExist())
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
             .andExpect(jsonPath("$.method").value("LLM"));
 
         BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));

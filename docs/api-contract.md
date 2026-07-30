@@ -92,7 +92,14 @@
 성공 200 (link 경로와 **동일한 필드 모양**):
 
 ```json
-{ "name": "...", "imageUrl": "https://dev-piki-images-250758375457.s3.ap-northeast-2.amazonaws.com/items/0f3a....png", "currentPrice": 12000, "currency": "KRW" }
+{
+  "name": "...",
+  "imageUrl": "https://dev-piki-images-250758375457.s3.ap-northeast-2.amazonaws.com/items/0f3a....png",
+  "currentPrice": 12000,
+  "currency": "KRW",
+  "finalUrl": null,
+  "method": "LLM"
+}
 ```
 
 - Extractor 가 `download(bucket,key) → OCR 추출 → bbox 크롭(불가 시 원본) → upload(bucket, items/{uuid}.png)` 를 다 하고, 업로드한 결과 이미지의 public URL 을 `imageUrl` 로 돌려준다. imageUrl 은 항상 non-null(크롭 실패해도 원본을 올린다 — 본 서버 워커의 `bbox?.crop ?: 원본` 동작과 동일).

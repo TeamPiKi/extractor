@@ -1,5 +1,7 @@
 package com.depromeet.piki.extractor.domain;
 
+import java.util.Objects;
+
 // 상품 추출 시점의 상태를 캡처한 결과. URL 추출(link)·이미지 추출(image) 두 경로가 공유하는 표현이며,
 // 이미지 추출은 URL 이 없어 link 와 finalUrl 이 null 이다.
 // finalUrl 은 리다이렉트를 따라간 최종 페이지 URL — 호출자(core)가 상품 정체성(canonical) 정규화의 입력으로
@@ -21,7 +23,10 @@ public record ProductSnapshot(
     }
 
     // 출처(귀결점·추출 경로)를 표기한 사본 — record 라 wither 로 채운다.
+    // method 는 표기 지점(파이프라인·이미지 서비스)이 항상 확정하므로 null 을 받지 않는다(놓치면 코드 버그).
+    // finalUrl 은 이미지 경로에 원본 URL 이 없어 null 이 유효하다.
     public ProductSnapshot withOrigin(ProductLink finalUrl, ExtractionMethod method) {
+        Objects.requireNonNull(method, "method");
         return new ProductSnapshot(link, name, imageUrl, currentPrice, currency, finalUrl, method);
     }
 
