@@ -83,10 +83,10 @@
 요청:
 
 ```json
-{ "bucket": "dev-piki-images-250758375457", "key": "items/raw/0f3a....png" }
+{ "bucket": "dev-piki-images-996918499382", "key": "items/raw/0f3a....png" }
 ```
 
-- **`bucket` 을 요청이 준다** — Extractor 는 dev/staging/prod 세 환경 트래픽을 받고 각 환경의 이미지 버킷이 다르다(dev-piki-images-* · staging-piki-images-* · piki-images-*). 버킷을 고정 config 로 두지 않고 요청별로 받아 버킷 무관하게 동작한다. IAM 은 `*piki-images-250758375457/items/*` 와일드카드로 세 버킷을 덮는다.
+- **`bucket` 을 요청이 준다** — Extractor 는 dev/staging/prod 세 환경 트래픽을 받고 각 환경의 이미지 버킷이 다르다(dev-piki-images-* · staging-piki-images-* · piki-images-*). 버킷을 고정 config 로 두지 않고 요청별로 받아 버킷 무관하게 동작한다. IAM 은 `*piki-images-996918499382/items/*` 와일드카드로 세 버킷을 덮는다.
 - `key`: raw 원본 object key(등록 시 본 서버가 `items/raw/{uuid}.{ext}` 로 durable 적재한 것).
 
 성공 200 (link 경로와 **동일한 필드 모양**):
@@ -94,7 +94,7 @@
 ```json
 {
   "name": "...",
-  "imageUrl": "https://dev-piki-images-250758375457.s3.ap-northeast-2.amazonaws.com/items/0f3a....png",
+  "imageUrl": "https://dev-piki-images-996918499382.s3.ap-northeast-2.amazonaws.com/items/0f3a....png",
   "currentPrice": 12000,
   "currency": "KRW",
   "finalUrl": null,
