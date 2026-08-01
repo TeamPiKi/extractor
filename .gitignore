@@ -1,9 +1,12 @@
 # macOS
 .DS_Store
 
-# Claude Code
+# Claude Code — commands/ 는 infra(TeamPiKi/infra) install.sh 가 SessionStart 마다 설치하는
+# 공용 스킬 설치본 전용이라 디렉토리째 무시한다 (repo 전용 스킬이 생기면 core 처럼 파일 단위로 전환).
 .claude/settings.local.json
 .claude/worktrees/
+.claude/commands/
+.claude/rules/testing-principles.md
 
 # IDE - 개인 설정 제외
 .idea/*

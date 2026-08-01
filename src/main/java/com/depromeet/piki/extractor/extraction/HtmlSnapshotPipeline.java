@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
@@ -63,7 +64,9 @@ public class HtmlSnapshotPipeline {
                     page.html().length(),
                     page.link().safeLogString()
                 );
-                yield extracted.snapshot();
+                // 출처 표기는 값 생산자(파서·LLM)가 아니라 여기서 — finalUrl 을 아는 유일한 층이고,
+                // 두 분기가 각자 method 를 확정하는 지점이라 표기가 갈라질 수 없다.
+                yield extracted.snapshot().withOrigin(page.finalUrl(), ExtractionMethod.STRUCTURED);
             }
             case StructuredExtraction.Miss miss -> {
                 long llmStart = System.nanoTime();
@@ -77,7 +80,7 @@ public class HtmlSnapshotPipeline {
                     page.html().length(),
                     page.link().safeLogString()
                 );
-                yield snapshot;
+                yield snapshot.withOrigin(page.finalUrl(), ExtractionMethod.LLM);
             }
         };
     }

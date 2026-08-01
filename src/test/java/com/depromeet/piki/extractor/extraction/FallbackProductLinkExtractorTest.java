@@ -144,7 +144,7 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("headless 도 실패하면 그 예외를 전파하고 escalation 을 failed 로 집계한다")
     void headlessFailureIsCountedAndPropagated() {
-        // 호출자(PIKI-Server 워커)의 재시도 판정과 맞물리는 지점이라, headless 예외가 그대로 상위로 전파돼야 한다.
+        // 호출자(core 워커)의 재시도 판정과 맞물리는 지점이라, headless 예외가 그대로 상위로 전파돼야 한다.
         // "폴백했는데도 못 가져온" 이 outcome=failed 로 집계돼, 무조건-폴백의 낭비·한계를 관측할 수 있어야 한다.
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.clientError(new RuntimeException("403"));
@@ -201,7 +201,7 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("headless 가 꺼져 있으면 headlessFirst 힌트도 무시하고 plain 에 위임한다")
     void headlessFirstIgnoredWhenDisabled() {
-        // 호출자(PIKI-Server)의 라우팅 정책이 이 서비스의 스위치보다 앞설 수 없다 — 스위치가 꺼진 동안은 zero-diff.
+        // 호출자(core)의 라우팅 정책이 이 서비스의 스위치보다 앞설 수 없다 — 스위치가 꺼진 동안은 zero-diff.
         FakeStrategy plain = new FakeStrategy(l -> snapshot);
         FakeStrategy headless = new FakeStrategy(l -> {
             throw new IllegalStateException("headless 는 호출되면 안 됨");

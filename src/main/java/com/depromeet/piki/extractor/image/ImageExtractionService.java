@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.image;
 
 import com.depromeet.piki.extractor.common.storage.ImageStorage;
 import com.depromeet.piki.extractor.common.storage.StoredImage;
+import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.image.domain.ProductImage;
 import java.util.UUID;
@@ -10,7 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 이미지 추출 오케스트레이터. 상태 전이(markReady·raw 회수)는 호출자(PIKI-Server) 소관이고,
+ * 이미지 추출 오케스트레이터. 상태 전이(markReady·raw 회수)는 호출자(core) 소관이고,
  * 이 서비스는 download→extract→crop→upload 만 책임진다.
  *
  * <p>bucket 을 요청이 주므로 환경별 버킷을 모두 다룬다.
@@ -38,8 +39,10 @@ public class ImageExtractionService {
         String imageUrl = imageStorage.upload(bucket, resultBytes, "items/" + UUID.randomUUID() + ".png", "image/png");
         log.info("image extract bucket={} key={} croppedUrl={}", bucket, key, imageUrl);
 
+        // 이미지 경로는 원본 URL 이 없어 finalUrl 도 없고, 추출이 Gemini 라 method 는 항상 LLM 이다.
         ProductSnapshot s = extraction.snapshot();
-        return new ProductSnapshot(s.link(), s.name(), imageUrl, s.currentPrice(), s.currency());
+        return new ProductSnapshot(s.link(), s.name(), imageUrl, s.currentPrice(), s.currency())
+            .withOrigin(null, ExtractionMethod.LLM);
     }
 
     private String mimeTypeFromKeyOrStored(String key, StoredImage stored) {

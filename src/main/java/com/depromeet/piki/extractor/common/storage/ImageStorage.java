@@ -2,7 +2,7 @@ package com.depromeet.piki.extractor.common.storage;
 
 /**
  * 이미지(OCR) 경로가 쓰는 두 연산만 둔다 — download 는 outbox 재실행 시점에 등록 워커가 적재한 raw 원본을 다시 읽는 용도다.
- * <p>presign·exists·delete·deleteByPrefix 는 등록 수명주기(발급·확인·회수·탈퇴 파기)라 PIKI-Server 소관이다.
+ * <p>presign·exists·delete·deleteByPrefix 는 등록 수명주기(발급·확인·회수·탈퇴 파기)라 core 소관이다.
  */
 public interface ImageStorage {
 

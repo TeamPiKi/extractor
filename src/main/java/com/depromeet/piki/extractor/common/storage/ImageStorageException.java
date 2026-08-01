@@ -4,7 +4,8 @@ import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
 /**
- * 스토리지(S3) 실패의 계약 예외 — 호출자(PIKI-Server 워커)는 일시 실패로 받아 PROCESSING 유지 후 recover 재시도한다.
+ * 스토리지(S3) 실패의 계약 예외 — 우리 밖 의존성이라 정상 요청도 닿을 수 있고, permanent=false(일시 실패)로
+ * 고정한다. 호출자(core 워커)는 PROCESSING 유지 후 recover 재시도한다.
  * <p>message 는 로그·디버깅용 고정 문구이고 응답 body 에는 code 만 나간다(내부 정보 비노출).
  */
 public final class ImageStorageException extends ExtractionException {

@@ -21,7 +21,7 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * renderer(구 PIKI-HeadlessBrowser)의 POST /render 호출 + verdict 를 계약으로 번역하는 wire 구현.
+ * renderer 의 POST /render 호출 + verdict 를 계약으로 번역하는 wire 구현.
  * 렌더 서비스는 실제 브라우저(patchright)로 페이지를 열어 최선의 HTML 을 돌려준다 — 파싱은 그쪽이 하지 않으므로
  * 렌더된 HTML 을 PageContent 로 되돌려 기존 파이프라인(구조화 → LLM)에 흘려넣는다.
  *
@@ -29,8 +29,9 @@ import tools.jackson.databind.ObjectMapper;
  * <ul>
  *   <li>BLOCK → {@link HeadlessRenderException#blocked()}. 일시 신호가 섞여 영구/일시를 가를 수 없어
  *       fail-safe 로 일시에 두는 근거는 그 팩토리에 있다.</li>
- *   <li>그 외 + html 있음 → 진행. 정상 경로는 OK 지만, 구계약 잔재(PASS/PARTIAL)·미지의 verdict 라도 html 이
- *       있으면 버리지 않는다 — verdict 로 HTML 을 버리면 recall 을 잃는다.</li>
+ *   <li>그 외 + html 있음 → 진행. verdict 는 렌더 서비스가 자기 정규식 파서로 title·price 를 찾았는지일 뿐이라,
+ *       EMPTY 여도 그 DOM 에서 우리 파이프라인(구조화·LLM)이 뽑아낼 수 있다 — verdict 로 HTML 을 버리면
+ *       그 recall 을 잃는다.</li>
  *   <li>그 외 + html 없음 → {@link HeadlessRenderException#upstream(String, Throwable)}. 빈 렌더·브라우저 오류.</li>
  * </ul>
  *

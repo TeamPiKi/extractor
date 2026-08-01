@@ -1,13 +1,13 @@
-# PIKI-Extractor 프로젝트 컨벤션
+# extractor 프로젝트 컨벤션
 
 ## 이 서비스의 정체
 
-PIKI-Server(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또는 S3 이미지)을 받아 fetch → 구조화 파싱(JSON-LD/OG) → LLM(Gemini) fallback → 정규화를 거쳐 추출 결과를 돌려준다.
+core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또는 S3 이미지)을 받아 fetch → 구조화 파싱(JSON-LD/OG) → LLM(Gemini) fallback → 정규화를 거쳐 추출 결과를 돌려준다.
 
-- **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(PIKI-Server outbox)의 몫이다.
-- **소비자는 PIKI-Server 워커 하나뿐.** 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
+- **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(core outbox)의 몫이다.
+- **소비자는 core 워커 하나뿐.** 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
 - **계약의 single source 는 `docs/api-contract.md`.** 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
-- 차단 우회 **방법론**(스텔스·프록시·IP 전략)은 renderer repo(TeamPiKi/renderer, 구 PIKI-HeadlessBrowser)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
+- 차단 우회 **방법론**(스텔스·프록시·IP 전략)은 private repo(renderer)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
 
 ## 언어: Java 25
 
@@ -38,7 +38,7 @@ PIKI-Server(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 UR
 
 ### Null 처리
 
-PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
+core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 - 파라미터·필드의 non-null 강제는 `Objects.requireNonNull(x, "메시지")`.
 - "없을 수 있음"을 반환할 땐 `Optional<T>` 또는 도메인 결과 타입(sealed). **null 반환 금지.**
@@ -50,7 +50,7 @@ PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 예외 정책
 
-판단 기준 한 줄은 PIKI-Server 와 같다: **"정상 호출로 여기 닿을 수 있나?"** 단, 이 서비스의 클라이언트는 PIKI-Server 워커다.
+판단 기준 한 줄은 core 와 같다: **"정상 호출로 여기 닿을 수 있나?"** 단, 이 서비스의 클라이언트는 core 워커다.
 
 - 닿는다 → **계약** → `ExtractionException`(커스텀, code + 일시/확정 구분 내장) → 핸들러가 422 또는 502 로 매핑.
 - 못 닿는다 → **불변식** → `IllegalStateException`/`IllegalArgumentException` → 일반 500. 호출자는 이를 "일시 실패"로 보고 bounded 재시도하므로 안전하다.
@@ -67,26 +67,26 @@ PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
 ## 포팅 규율 (이관 기간 한정)
 
 - **동작 등가(파리티)가 목표다.** Kotlin 원본의 분기·상수·메시지를 그대로 옮기고, 개선·리팩터링은 이관 완료 후 별도 작업으로 뺀다.
-- 포팅한 클래스의 Javadoc 에 원본 경로를 남긴다: `PIKI-Server: product/service/http/HttpPageFetcher.kt 포팅`.
+- 포팅한 클래스의 Javadoc 에 원본 경로를 남긴다: `core: product/service/http/HttpPageFetcher.kt 포팅`.
 - 하드코딩이던 상수(fetch 3MB cap·UA·타임아웃·LLM 200K char cap)는 `@ConfigurationProperties` 로 외부화하되 **기본값은 원본과 동일**하게 둔다.
 
 ## 테스트
 
-PIKI-Server 테스트 컨벤션의 Java 번역판. 원문 규약이 더 자세하다 (PIKI-Server `.claude/rules/testing-convention.md`).
+**원칙은 infra 정본**이다 — 분류·가치 판단·분기 위치 결정 트리·모킹 금지 stub 우선·셋업 원칙·네이밍 접미사·기계 강제, 그리고 JVM/Spring 공통(컨텍스트 캐싱·E2E 격리·동시성)까지. `install.sh` 가 설치하고 아래 import 로 자동 로드된다. 여기에는 **이 repo 의 Java·무DB 바인딩**만 적는다.
 
-- **분류**: 단위(Spring 없이 분기 망라) / 통합(HTTP 진입 계약 검증, 외부는 stub) / E2E(실제 몰·Gemini 호출, env 격리). **DB 가 없으므로 Testcontainers·Docker 불필요** — `./gradlew test` 가 그냥 돈다.
-- **모킹 금지, stub 우선.** Mockito/`@MockBean` 금지. 외부 경계(GeminiClient·PageFetcher·S3)는 `IntegrationStubs` 한 곳에 `@Primary` stub 빈으로 등록, default 람다는 throw.
-- **단일 컨텍스트**: `@SpringBootTest` 는 `support/IntegrationTestSupport` 한 곳에만. 클래스별 `@Import`/`@TestPropertySource`/`@ActiveProfiles`/`@DirtiesContext` 금지.
-- **셋업 hook 금지**: `@BeforeEach`/`@BeforeAll` 없이 각 테스트 본문이 자기 시나리오를 완결적으로 만든다.
-- **네이밍**: 단위 `{대상}Test` / 통합 `{기능}IntegrationTest` / E2E `{대상}E2ETest`(반드시 `@Disabled` 또는 `@EnabledIfEnvironmentVariable` 격리). 메서드는 Java 라 backtick 불가 — **`@DisplayName` 에 한국어 한 문장**.
-- 단언은 JUnit 5 `Assertions` 기본, 컬렉션·객체 그래프 비교만 AssertJ.
-- 메타 테스트 `TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)는 파싱 포팅(3단계)과 함께 이식한다.
+@.claude/rules/testing-principles.md
+
+- **메서드명**: Java 는 backtick 식별자가 안 되므로 **`@DisplayName` 에 한국어 한 문장**으로 시나리오를 적는다 (원칙의 "메서드명은 시나리오를 한 문장으로" 를 Java 로 바인딩한 것).
+- **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
+- **DB 가 없다** — Testcontainers·Docker 불필요. `./gradlew test` 가 그냥 돈다. 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
+- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(GeminiClient·PageFetcher·S3)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
+- **메타 테스트**: `TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)는 파싱 포팅(3단계)과 함께 이식한다. 그 전까지 원칙 준수는 사람 리뷰가 책임진다.
 
 ## 의존성
 
 - 버전의 single source 는 `build.gradle.kts`. 문서에 버전 숫자를 박지 않는다.
 - 새 의존성은 Maven Central 최신 안정 버전(pre-release 제외), Spring Boot BOM 관리 대상은 버전 명시 금지.
-- PIKI-Server 와 공유하는 라인(jsoup·guava·AWS SDK·springdoc)은 그쪽과 버전을 맞춘다.
+- core 와 공유하는 라인(jsoup·guava·AWS SDK·springdoc)은 그쪽과 버전을 맞춘다.
 
 ## 브랜치·PR
 

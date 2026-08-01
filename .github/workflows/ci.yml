@@ -1,4 +1,4 @@
-# PIKI-Server 의 ci.yml 과 같은 구조를 따르되, 이 서비스는 DB 가 없어 Testcontainers/Docker 없이 test 까지 그냥 돈다.
+# core 의 ci.yml 과 같은 구조를 따르되, 이 서비스는 DB 가 없어 Testcontainers/Docker 없이 test 까지 그냥 돈다.
 name: CI
 
 on:

@@ -7,9 +7,9 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 public interface ProductLinkExtractor {
 
     /**
-     * @param headlessFirst 호출자의 플랫폼 라우팅 정책 힌트. 정책의 단일 진실은 호출자 쪽 동적 설정에 있고, 무상태인
-     *     이 서비스는 요청 단위 힌트로만 받는다. true 면 plain(정적 fetch)을 건너뛰고 처음부터 헤드리스로 추출한다 —
-     *     단 이 서비스의 헤드리스 스위치가 꺼져 있으면 무시된다.
+     * @param headlessFirst 호출자(core)의 플랫폼 라우팅 정책 힌트. 정책의 단일 진실은 호출자 쪽 동적 설정(DB,
+     *     백오피스)에 있고, 무상태인 이 서비스는 요청 단위 힌트로만 받는다. true 면 plain(정적 fetch)을 건너뛰고
+     *     처음부터 헤드리스로 추출한다 — 단 이 서비스의 헤드리스 스위치가 꺼져 있으면 무시된다.
      */
     ProductSnapshot extract(ProductLink link, boolean headlessFirst);
 }

@@ -12,8 +12,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param userAgent 기본 RestClient UA 는 일부 사이트에서 차단되므로 실제 브라우저 UA 로 위장한다.
  * @param connectionRequestTimeout 커넥션 풀에서 커넥션 획득까지의 최대 대기. 미설정 시 HttpClient5 기본이
  *     분 단위라, 풀 고갈·느린 upstream 에서 워커가 오래 붙잡히지 않게 짧게 명시한다(fail-fast).
- * @param maxRedirects 수동 redirect 추적 hop 상한. www↔non-www·http→https 정도라 한두 번이면 충분하고,
- *     무한·체인은 여기서 끊는다.
+ * @param maxRedirects 수동 redirect 추적 hop 상한. 단축·딥링크 체인이 실측 2 hop 까지 쓰므로 여유를 두되 무한·과도한
+ *     체인은 여기서 끊는다. hop 마다 host 를 재검증(SSRF)하므로 상한을 늘려도 보안 부담이 커지지 않는다.
  * @param maxFetchChars fetch 본문 보관·파싱 비용을 막는 안전 상한(LLM 토큰 상한이 아니다). 구조화 추출이
  *     페이지 전체를 보게 넉넉히 두되, 동시 파싱 메모리(상한 x 동시 수)를 감안해 무제한으로 두지 않는다.
  */
@@ -23,7 +23,7 @@ public record FetchProperties(
     @DefaultValue("5s") Duration connectTimeout,
     @DefaultValue("15s") Duration readTimeout,
     @DefaultValue("2s") Duration connectionRequestTimeout,
-    @DefaultValue("3") int maxRedirects,
+    @DefaultValue("5") int maxRedirects,
     @DefaultValue("3000000") int maxFetchChars
 ) {
 
@@ -41,7 +41,7 @@ public record FetchProperties(
             Duration.ofSeconds(5),
             Duration.ofSeconds(15),
             Duration.ofSeconds(2),
-            3,
+            5,
             3_000_000
         );
     }

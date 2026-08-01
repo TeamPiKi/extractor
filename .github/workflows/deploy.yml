@@ -1,0 +1,157 @@
+# 배포: 수동 트리거(workflow_dispatch) 단일 잡. 빌드 → 이미지 push → SSH 배포까지 러너가 주관한다.
+#
+# - transport 는 core 와 같은 "러너에서 SSH" 단일이다 (SSM Run Command 수동 배포를 대체 - 배포 블록 공통화 결정,
+#   SG 22 개방은 #5). 기동·헬스 판정은 TeamPiKi/infra 의 공용 블록(run_container·healthcheck)을 매 배포
+#   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
+# - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
+#   롤백은 이전 커밋을 골라 workflow_dispatch 로 재배포.
+# - 교체식 단일 컨테이너라 전환 사이 수초 다운타임이 있다. 소비자는 PIKI-Server 의 outbox 워커뿐이고
+#   실패 시 재시도로 흡수되므로 blue-green 은 두지 않는다 (현행 수동 배포와 같은 특성).
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-arm64-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-arm64-
+
+      - name: Build bootJar
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 태그·image ref 는 셸 보간 injection 을 피해 env 로 받아 "$VAR" 로 쓴다 (core deploy 와 같은 관례).
+      - name: Build and push image
+        env:
+          IMAGE_LATEST: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:latest
+          IMAGE_SHA: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ github.sha }}
+        run: |
+          docker build -t "$IMAGE_LATEST" -t "$IMAGE_SHA" .
+          docker push "$IMAGE_LATEST"
+          docker push "$IMAGE_SHA"
+
+      # 공용 블록 정본을 받아 박스로 올린다. strip_components: 2 로 shared-infra/blocks/ 를 떼어
+      # /tmp/piki-blocks/*.sh 로 안착 (core deploy 와 동일 패턴).
+      - name: Checkout infra blocks
+        uses: actions/checkout@v4
+        with:
+          repository: TeamPiKi/infra
+          ref: main
+          # 경로 별칭은 shared-infra - 서비스 자신의 파일과 "공용 정본" 이 이름으로 구분되게 한다 (core 와 동일).
+          path: shared-infra
+          sparse-checkout: blocks
+          persist-credentials: false
+
+      - name: Upload blocks
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh"
+          target: "/tmp/piki-blocks"
+          strip_components: 2
+
+      - name: Deploy (SSM env pull + run_container + healthcheck)
+        uses: appleboy/ssh-action@v1
+        env:
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: IMAGE
+          script: |
+            set -euo pipefail
+
+            # ── 앱 시크릿/설정을 SSM 에서 pull 해 env 파일로 만든다 (/piki-extractor/app/<kebab-key>) ──
+            # 경로를 app/ 하위로 좁혀 앱 소비분만 받는다 - 같은 prefix 의 관측 자격(grafana-*, 박스 Alloy 용)이
+            # 경로 전량 pull 로 앱 컨테이너 env 에 섞이던 것을 이름 필터 대신 경로로 구조적으로 분리한다.
+            # 값은 로그에 절대 남기지 않는다(set -x·echo 금지). aws-cli 는 공용 ECR 이미지(패치 태그 고정),
+            # --network host 로 박스 instance role(IMDS) 자격증명에 닿는다 (읽기 권한 = extractor terraform 의 ssm-params).
+            AWSCLI_IMAGE="public.ecr.aws/aws-cli/aws-cli:2.35.21"
+            if ! PARAMS_JSON="$(docker run --rm --network host "$AWSCLI_IMAGE" \
+              ssm get-parameters-by-path \
+              --path "/piki-extractor/app/" --recursive --with-decryption \
+              --region ap-northeast-2 --output json)"; then
+              echo "::error::SSM get-parameters-by-path 호출 실패 - IAM 권한(ssm-params)·네트워크 확인"
+              exit 1
+            fi
+
+            umask 077
+            ENV_FILE="$(mktemp)"
+            trap 'rm -f "$ENV_FILE"' EXIT
+            # kebab-key -> UPPER_SNAKE 로 복원해 KEY=VALUE 라인으로 쓴다. docker --env-file 은 다중행 값을
+            # 싣지 못하므로(현 파라미터는 전부 단일행) 다중행이 들어오면 조용히 깨지기 전에 여기서 실패시킨다.
+            # PEM 류 다중행 파라미터가 생기면 core deploy 의 '-e KEY passthrough' 방식으로 옮길 것.
+            if ! printf '%s' "$PARAMS_JSON" | python3 -c '
+            import sys, json
+            params = json.load(sys.stdin).get("Parameters", [])
+            if not params:
+                raise SystemExit("no parameters under /piki-extractor/app/")
+            for p in params:
+                key = p["Name"].rsplit("/", 1)[1].replace("-", "_").upper()
+                val = p["Value"]
+                if "\n" in val:
+                    raise SystemExit(f"multi-line value not supported by --env-file: {key}")
+                print(f"{key}={val}")' > "$ENV_FILE"; then
+              echo "::error::SSM 파라미터 -> env 파일 변환 실패 (파라미터 0개 또는 다중행 값)"
+              exit 1
+            fi
+            # 튜닝값(비시크릿)은 여기 고정 - 시크릿이 아니라 SSM 에 두지 않는다.
+            echo "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70" >> "$ENV_FILE"
+            # 관측 배선(비시크릿): 트레이스는 박스 로컬 Alloy(4318, 아래 --add-host 의 host-gateway 경유)로
+            # push 하고, 로그는 공통 Loki 파이프라인이 전제하는 ECS JSON 으로 낸다. 아래 --label piki.* 와
+            # 함께 관측 계약(TeamPiKi/infra contracts/observability.md)을 이룬다.
+            echo "TRACING_OTLP_ENABLED=true" >> "$ENV_FILE"
+            echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
+            echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
+            echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
+
+            chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh
+
+            bash /tmp/piki-blocks/run_container.sh \
+              --name piki-extractor --image "$IMAGE" --restart unless-stopped \
+              --publish 8090:8090 --env-file "$ENV_FILE" --pull --replace \
+              --add-host host.docker.internal:host-gateway \
+              --label piki.observe=true --label piki.service=piki-extractor \
+              --label piki.metrics.port=8090 --label piki.metrics.path=/actuator/prometheus
+
+            bash /tmp/piki-blocks/healthcheck.sh \
+              --url http://localhost:8090/actuator/health --interval 5 --attempts 24 \
+              --expect-body '"status":"UP"'
+
+            # 이전 이미지 정리 (dangling 만 - 직전 sha 태그는 남겨 수동 롤백 여지 유지)
+            docker image prune -f >/dev/null

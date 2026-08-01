@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,14 +65,17 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.name").value("나이키 신발"))
             .andExpect(jsonPath("$.currentPrice").value(89000))
             .andExpect(jsonPath("$.currency").value("KRW"))
-            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
+            .andExpect(jsonPath("$.method").value("LLM"));
     }
 
     @Test
     @DisplayName("download 가 content-type 메타를 못 줘도 key 확장자로 mimeType 을 복원해 200 으로 끝난다")
     void nullContentTypeRecoversFromKeyExtension() throws Exception {
-        // S3 GetObject 가 content-type 메타를 안 싣는 상황 — key 확장자로 복원해야 메타 결함이
-        // IMAGE_UNSUPPORTED(확정 실패)로 새지 않는다. 호출자(PIKI-Server)엔 download 경로가 없어
+        // S3 GetObject 가 content-type 메타를 안 싣는 상황 — 등록 때 호출자가 key 에 박은 확장자(.png)로 복원해야
+        // 메타 결함이 IMAGE_UNSUPPORTED(비복구 확정 실패)로 새지 않는다. 호출자(core)엔 download 경로가 없어
         // 이 계약은 이 레포만 보증한다.
         stubGeminiClient.reset();
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, null);
@@ -102,7 +106,10 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("items/raw/crop.png")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL));
+            .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
+            // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
+            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
+            .andExpect(jsonPath("$.method").value("LLM"));
 
         BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));
         assertEquals(320, uploaded.getWidth());

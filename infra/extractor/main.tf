@@ -50,7 +50,7 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# --- IAM: SSM(관리 접근, SSH inbound 0) + 시크릿을 SSM Param 에서 읽기 ---
+# --- IAM: SSM(관리·비상 접근) + 시크릿을 SSM Param 에서 읽기. 배포는 SSH(단일 transport)로 통일 ---
 resource "aws_iam_role" "extractor" {
   name = var.name_prefix
   assume_role_policy = jsonencode({
@@ -79,7 +79,11 @@ resource "aws_iam_role_policy" "extractor_params" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
-      Resource = "arn:aws:ssm:ap-northeast-2:*:parameter/${var.name_prefix}/*"
+      # 관측 자격은 세 서비스가 공유 경로 하나를 읽는다(회전 1곳화, TeamPiKi/core#771).
+      Resource = [
+        "arn:aws:ssm:ap-northeast-2:*:parameter/${var.name_prefix}/*",
+        "arn:aws:ssm:ap-northeast-2:*:parameter/piki/observability/*",
+      ]
     }]
   })
 }
@@ -119,6 +123,17 @@ resource "aws_security_group" "extractor" {
     security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
   }
 
+  # SSH 단일 transport 결정(배포 블록 공통화): 배포가 core 와 같은 "러너에서 SSH" 경로로 통일된다.
+  # GH 러너는 고정 IP 가 없어 전역 개방. 인증은 키 전용(비밀번호 로그인 없음)이라 실질 위험은
+  # sshd 자체 취약점 노출면이며, 이는 core 박스가 이미 수용 중인 것과 같은 등급이다.
+  ingress {
+    description = "SSH for deploy (GitHub Actions runner) and ops"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   egress {
     description = "all outbound (arbitrary product links + Gemini API + headless render)"
     from_port   = 0
@@ -155,7 +170,7 @@ resource "aws_instance" "extractor" {
   }
 
   # 얇은 베이스: Docker 만 설치(arm64). 추출 서비스 컨테이너는 terraform 이 안 건드리고
-  # 앱 배포 레이어가 올린다(→ JVM/앱 버전이 바뀌어도 이 terraform 무변경). SSH 키 없음 — 관리는 SSM 으로.
+  # 앱 배포 레이어가 올린다(→ JVM/앱 버전이 바뀌어도 이 terraform 무변경). SSH 공개키는 terraform 밖에서 주입(authorized_keys).
   user_data = <<-EOF
     #!/usr/bin/env bash
     set -euxo pipefail

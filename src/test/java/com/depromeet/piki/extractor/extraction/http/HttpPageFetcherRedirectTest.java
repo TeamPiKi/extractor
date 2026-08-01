@@ -116,8 +116,9 @@ class HttpPageFetcherRedirectTest {
     void breaksOnTooManyRedirects() {
         HttpPageFetcher fetcher =
             fetcherWith(server -> {
-                // hop 상한+1 만큼의 self-redirect — 끝내 페이지에 도달하지 못한다.
-                for (int i = 0; i < 4; i++) {
+                // 같은 도메인 self-redirect 를 hop 상한+1 만큼 — 끝내 페이지에 도달하지 못한다.
+                // 상한을 하드코딩하지 않고 defaults 에서 파생해, 상한 조정이 이 테스트를 조용히 무력화하지 않게 한다.
+                for (int i = 0; i < FetchProperties.defaults().maxRedirects() + 1; i++) {
                     server.expect(requestTo("https://zigzag.kr/loop"))
                         .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("https://zigzag.kr/loop")));
                 }
