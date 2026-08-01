@@ -12,7 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-// 사전 로딩 규약(파일명 = 사전ID, renderer compress.py 의 DICT_ID 와 대칭)과 오설정 fail-fast 를 검증한다.
+/** 사전 로딩 규약(파일명 = 사전ID, renderer compress.py 의 DICT_ID 와 대칭)과 오설정 fail-fast 를 검증한다. */
 class ZstdDictionariesTest {
 
     @Test

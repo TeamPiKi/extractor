@@ -18,9 +18,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-// POST /internal/extractions/link 의 HTTP 계약(docs/api-contract.md 응답 3갈래)을 실제 파이프라인
-// (Fallback→plain→구조화→LLM fallback, 외부 경계 PageFetcher·GeminiClient 만 stub)으로 검증한다.
-// 호출자(PIKI-Server)의 전이 판정이 status 만 보므로, status 와 body 모양(code·필드)이 이 테스트의 계약이다.
+/**
+ * {@code POST /internal/extractions/link} 의 HTTP 계약(docs/api-contract.md 응답 3갈래)을 실제 파이프라인
+ * (Fallback→plain→구조화→LLM fallback)으로 검증한다. 외부 경계인 PageFetcher·GeminiClient 만 stub 이다.
+ *
+ * <p>호출자(PIKI-Server)의 전이 판정이 status 만 보므로, status 와 body 모양(code·필드)이 이 테스트의 계약이다.
+ */
 class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
 
     private static final String STRUCTURED_HTML = """
@@ -87,8 +90,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("headlessFirst 힌트는 headless 스위치가 꺼진 기본 구성에서 무시되고 plain 경로로 정상 추출한다")
     void headlessFirstHintIgnoredWhenHeadlessDisabled() throws Exception {
-        // additive 필드 headlessFirst 의 wire 바인딩과 "스위치 off 면 힌트 무시" 계약을 함께 고정한다.
-        // (힌트를 안 보내는 구버전 호출자의 하위호환은 이 클래스의 나머지 케이스 전부가 url 만 보내며 상시 검증한다.)
+        // 힌트를 안 보내는 구버전 호출자의 하위호환은 이 클래스의 나머지 케이스 전부가 url 만 보내며 상시 검증한다.
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
 
@@ -118,7 +120,6 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     void incompleteExtraction() throws Exception {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
-        // imageUrl 없음 — 호출자 READY 불변식(name·price·imageUrl)을 못 채우므로 성공으로 내리면 안 된다.
         stubGeminiClient.build = request -> new GeminiExtractionResult(true, "이미지 없는 상품", 5000, "KRW", null);
 
         mockMvc().perform(post("/internal/extractions/link")

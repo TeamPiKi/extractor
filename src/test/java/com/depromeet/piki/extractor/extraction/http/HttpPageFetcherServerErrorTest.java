@@ -18,11 +18,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// 대상 서버의 5xx 를 status 별로 일시(UPSTREAM_ERROR)/영구(PERMANENT_UPSTREAM)로 가르는지 네트워크 없이 검증한다.
-// 봇 차단을 500(no body)으로 응답하는 쇼핑몰이 무의미하게 재시도되지 않도록 500/501 은 영구로 본다.
-// 응답은 MockRestServiceServer 로 제어하고, DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다.
-//
-// PageFetchException 의 계약은 code()(어느 실패)와 permanent()(422 확정 vs 502 일시)로 표현된다 — 그에 맞춰 단언한다.
+/**
+ * 대상 서버의 5xx 를 status 별로 일시/영구로 가르는지 네트워크 없이 검증한다.
+ *
+ * <p>봇 차단을 500(no body)으로 응답하는 쇼핑몰이 무의미하게 재시도되지 않도록 500/501 은 영구로 본다.
+ * DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다.
+ *
+ * <p>permanent() 가 호출자 쪽 422 확정 vs 502 일시를 가르므로 code() 와 함께 단언한다.
+ */
 class HttpPageFetcherServerErrorTest {
 
     private final RequestScopedDnsResolver.HostResolver publicIp =
@@ -96,7 +99,6 @@ class HttpPageFetcherServerErrorTest {
     @DisplayName("4xx 는 확정 실패이되 봇 클로킹 가능성으로 escalatable 이다")
     void status4xxIsPermanentButEscalatable() {
         // 봇 방어가 404("없는 척")·403(차단)·429(throttle)로 클로킹할 수 있어, 4xx 는 헤드리스로 뚫릴 후보로 본다(무조건 폴백).
-        // 입력 URL 문제로 보는 확정 실패(FETCH_CLIENT_ERROR)이나 escalatable=true.
         for (HttpStatus status : List.of(HttpStatus.FORBIDDEN, HttpStatus.NOT_FOUND, HttpStatus.GONE, HttpStatus.TOO_MANY_REQUESTS)) {
             HttpPageFetcher fetcher =
                 fetcherWith(server -> server.expect(requestTo("https://shop.example.com/p")).andRespond(withStatus(status)));

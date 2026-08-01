@@ -23,9 +23,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-// POST /internal/extractions/image 의 HTTP 계약(docs/api-contract.md §2)을 실제 파이프라인
-// (download→OCR→crop→upload, 외부 경계 S3(ImageStorage)·GeminiClient 만 stub)으로 검증한다.
-// 응답 모양은 link 와 같고(name·imageUrl·currentPrice·currency), imageUrl 은 업로드 결과 URL 이다.
+/**
+ * {@code POST /internal/extractions/image} 의 HTTP 계약(docs/api-contract.md §2)을 실제 파이프라인
+ * (download→OCR→crop→upload)으로 검증한다. 외부 경계인 S3({@code ImageStorage})·GeminiClient 만 stub 이다.
+ */
 class ExtractionImageIntegrationTest extends IntegrationTestSupport {
 
     private static final String BUCKET = "dev-piki-images-250758375457";
@@ -52,7 +53,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     void imageSuccess() throws Exception {
         stubGeminiClient.reset();
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, "image/png");
-        // bbox 없이 반환 → 크롭 스킵하고 원본을 업로드(imageUrl 은 항상 채워진다).
+        // bbox 없이 반환 → 크롭을 건너뛰고 원본을 업로드한다.
         stubGeminiClient.build = request -> new GeminiImageResult("나이키 신발", 89000, "신발", "KRW", null);
 
         mockMvc().perform(post("/internal/extractions/image")
@@ -69,9 +70,9 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("download 가 content-type 메타를 못 줘도 key 확장자로 mimeType 을 복원해 200 으로 끝난다")
     void nullContentTypeRecoversFromKeyExtension() throws Exception {
-        // S3 GetObject 가 content-type 메타를 안 싣는 상황 — 등록 때 호출자가 key 에 박은 확장자(.png)로 복원해야
-        // 메타 결함이 IMAGE_UNSUPPORTED(비복구 확정 실패)로 새지 않는다. (이 계약은 이 레포가 유일하게 보증한다 —
-        // 호출자(PIKI-Server)엔 download 경로가 없다.)
+        // S3 GetObject 가 content-type 메타를 안 싣는 상황 — key 확장자로 복원해야 메타 결함이
+        // IMAGE_UNSUPPORTED(확정 실패)로 새지 않는다. 호출자(PIKI-Server)엔 download 경로가 없어
+        // 이 계약은 이 레포만 보증한다.
         stubGeminiClient.reset();
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, null);
         stubGeminiClient.build = request -> new GeminiImageResult("복원 상품", 12000, null, "KRW", null);
@@ -86,9 +87,8 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("bbox 가 있으면 크롭된 이미지가 업로드된다 - 크롭 결과가 업로드 배선으로 실제 이어지는지 검증")
     void boundingBoxCropIsWiredToUpload() throws Exception {
-        // ImageCropper 는 실제 빈으로 태운다(단위 테스트는 crop 계산만 봄 — 여기서는 "크롭 결과가 원본 대신
-        // 업로드된다"는 오케스트레이션 배선을 고정한다). 800x800 원본에 bbox(100,100,500,500 normalized 0~1000)
-        // → 320x320 크롭이 업로드돼야 한다.
+        // ImageCropper 는 실제 빈으로 태운다 — crop 계산이 아니라 "크롭 결과가 원본 대신 업로드된다"는
+        // 오케스트레이션 배선을 고정하는 것이 목적이다. 800x800 원본 + bbox(0~1000 정규화) → 320x320.
         stubGeminiClient.reset();
         stubImageStorage.lastUploadedBytes = null;
         BufferedImage source = new BufferedImage(800, 800, BufferedImage.TYPE_INT_RGB);
@@ -113,7 +113,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     @DisplayName("미지원 이미지 형식이면 422 IMAGE_UNSUPPORTED 를 반환한다")
     void unsupportedFormat() throws Exception {
         stubGeminiClient.reset();
-        // key 확장자 txt·content-type 도 미지원 → ProductImage.of 가 확정 실패로 던진다.
+        // 확장자·content-type 둘 다 미지원이라 확장자 복원 경로로도 살아나지 못한다.
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, "text/plain");
 
         mockMvc().perform(post("/internal/extractions/image")

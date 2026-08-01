@@ -12,8 +12,10 @@ public record GeminiExtractionResult(
     String imageUrl
 ) {
 
-    // LLM 고유의 "상품 페이지인가" 판정만 여기서 하고, 정규화·범위검증은 ProductSnapshot.fromExtracted 에 위임한다.
-    // (구조화 파싱 경로와 같은 검증을 공유하는 single source.)
+    /**
+     * LLM 고유의 "상품 페이지인가" 판정만 여기서 하고, 정규화·범위검증은 ProductSnapshot.fromExtracted 에 위임한다
+     * — 구조화 파싱 경로와 같은 검증을 공유하는 single source 다.
+     */
     public ProductSnapshot toProductSnapshot(ProductLink link) {
         if (!isProductPage) {
             throw ProductSnapshotException.notProductPage();

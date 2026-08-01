@@ -18,18 +18,19 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
-// 상품 페이지 fetch 용 RestClient 빈. HttpPageFetcher 안에서 직접 만들면 테스트가 가짜 응답을 끼울 수 없어,
-// 생성을 이 Config 로 분리해 주입한다(MockRestServiceServer 로 redirect 루프를 검증하기 위함).
-//
-// SSRF IP-pin: HttpClient5 의 DnsResolver 에 RequestScopedDnsResolver 를 끼워, 가드가 검증한 그 IP 로만 연결하게 한다.
-// HttpClient5 는 IP 만 이 resolver 가 정한 값으로 바꾸고 TLS SNI·인증서 hostname 검증·Host 헤더는 원 도메인을
-// 유지하므로, "검증된 IP 로 연결 + 도메인 정체성 유지"가 양립한다. JDK HttpURLConnection 으로는 SNI·인증서를 수동
-// 복구해야 해(JDK-8144566 등) 깨지기 쉬워 HttpComponents 로 교체했다.
+/**
+ * 상품 페이지 fetch 용 RestClient 빈. HttpPageFetcher 안에서 직접 만들면 테스트가 가짜 응답을 끼울 수 없어,
+ * 생성을 이 Config 로 분리해 주입한다(MockRestServiceServer 로 redirect 루프를 검증하기 위함).
+ *
+ * <p>SSRF IP-pin: HttpClient5 의 DnsResolver 에 RequestScopedDnsResolver 를 끼워, 가드가 검증한 그 IP 로만
+ * 연결하게 한다. HttpClient5 는 IP 만 이 resolver 가 정한 값으로 바꾸고 TLS SNI·인증서 hostname 검증·Host 헤더는
+ * 원 도메인을 유지하므로, "검증된 IP 로 연결 + 도메인 정체성 유지"가 양립한다. JDK HttpURLConnection 으로는
+ * SNI·인증서를 수동 복구해야 해(JDK-8144566 등) 깨지기 쉬워 HttpComponents 로 교체했다.
+ */
 @Configuration
 public class PageFetchHttpClientConfig {
 
-    // RestClient 빈이 둘(pageFetch·headlessRender)이라 주입 지점이 @Qualifier 로 이 이름을 참조한다 — 상수로
-    // 못박아 rename-safe + single-source (LinkExtractionStrategy 의 빈 이름 상수와 같은 이유).
+    /** 주입 지점이 참조하는 빈 이름 — 상수로 못박아 rename-safe + single source. */
     public static final String PAGE_FETCH_REST_CLIENT = "pageFetchRestClient";
 
     @Bean(PAGE_FETCH_REST_CLIENT)
@@ -38,8 +39,8 @@ public class PageFetchHttpClientConfig {
         RequestScopedDnsResolver dnsResolver,
         FetchProperties properties
     ) {
-        // host→IP 해석을 RequestScopedDnsResolver 에 위임한다. 가드(guardAgainstInternalHost)도 같은 인스턴스를 쓰므로
-        // 한 fetch 동안 host 당 단 한 번만 실제 조회하고, 가드가 검증한 그 IP 로 연결이 이뤄진다(DNS rebinding 차단).
+        // InternalHostGuard 도 같은 resolver 인스턴스를 보므로, 가드가 검증한 그 IP 로 연결이 이뤄진다
+        // (DNS rebinding 차단).
         DnsResolver httpClientDnsResolver = new DnsResolver() {
             @Override
             public InetAddress[] resolve(String host) throws UnknownHostException {
@@ -68,8 +69,6 @@ public class PageFetchHttpClientConfig {
                 .disableRedirectHandling()
                 .setDefaultRequestConfig(
                     RequestConfig.custom()
-                        // connectionRequestTimeout 은 미설정 시 기본 3분이라, 풀 고갈·느린 upstream 에서 워커가 오래 대기한다.
-                        // 빠르게 실패시켜 상위가 적절히 처리·재시도하게 둔다.
                         .setConnectionRequestTimeout(Timeout.ofMilliseconds(properties.connectionRequestTimeout().toMillis()))
                         .setResponseTimeout(Timeout.ofMilliseconds(properties.readTimeout().toMillis()))
                         .build())
@@ -79,7 +78,6 @@ public class PageFetchHttpClientConfig {
             .defaultHeader(HttpHeaders.USER_AGENT, properties.userAgent())
             .defaultHeader(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,*/*;q=0.8")
             .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ko,en;q=0.9")
-            // 상품 페이지 fetch 가 trace 의 한 구간(HTTP client span)으로 잡히게 한다. RestClient 레벨이라 factory 교체와 무관.
             .observationRegistry(observationRegistry)
             .build();
     }

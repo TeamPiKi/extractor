@@ -26,17 +26,17 @@ class GeminiHtmlExtractorTest {
 
         String out = GeminiHtmlExtractor.sanitize(Jsoup.parse(html));
 
-        assertTrue(out.contains("\"price\":84150")); // application/json data island 보존
-        assertTrue(out.contains("@type")); // JSON-LD 보존 (기존 동작 유지)
-        assertFalse(out.contains("console.log")); // type 없는 JS 코드 제거
-        assertFalse(out.contains("var bar")); // text/javascript 제거
+        assertTrue(out.contains("\"price\":84150"));
+        assertTrue(out.contains("@type"));
+        assertFalse(out.contains("console.log"));
+        assertFalse(out.contains("var bar"));
     }
 
     @Test
     @DisplayName("type 없는 inline JS state script 는 제거된다 - 거대 state 사이트는 전용 파서가 책임진다")
     void removesTypelessInlineJsState() {
-        // window.__PRELOADED_STATE__ 같은 inline JS 에 가격이 있어도 코드 덩어리라 LLM 입력에서 제외한다.
-        // (state 가 토큰 상한보다 큰 사이트는 Gemini 가 아니라 전용 파서로 추출한다.)
+        // window.__PRELOADED_STATE__ 처럼 inline JS 에 가격이 들어 있어도 코드 덩어리라 일부러 버린다 —
+        // state 가 토큰 상한을 넘는 사이트는 LLM 이 아니라 전용 파서의 몫이다.
         String html =
             """
             <html><head>

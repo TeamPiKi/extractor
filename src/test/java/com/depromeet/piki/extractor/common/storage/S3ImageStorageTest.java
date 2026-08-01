@@ -22,10 +22,11 @@ import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
-// download·upload round-trip 과
-// 예외 변환을 검증하는 단위테스트. AWS SDK 실호출은 하지 않는다 — S3Client 는 인터페이스라
-// 손수 만든 in-memory fake(모킹 라이브러리 금지 컨벤션)로 격리한다. putObject·getObjectAsBytes 는 SDK 의 default
-// 메서드라 두 개만 override 하면 되고, 나머지 abstract(serviceName·close)만 no-op 로 채운다.
+/**
+ * AWS SDK 실호출 없이 검증한다 — {@code S3Client} 는 인터페이스라 손수 만든 in-memory fake(모킹 라이브러리
+ * 금지 컨벤션)로 격리한다. {@code putObject}·{@code getObjectAsBytes} 는 SDK 의 default 메서드라 두 개만
+ * override 하면 되고, 나머지 abstract({@code serviceName}·{@code close})만 no-op 로 채운다.
+ */
 class S3ImageStorageTest {
 
     private static final String BUCKET = "piki-images";
@@ -44,9 +45,7 @@ class S3ImageStorageTest {
 
         String url = storage.upload(BUCKET, bytes, "items/raw/42.png", "image/png");
 
-        // 반환 URL: bucket+region 조합(https://{bucket}.s3.{region}.amazonaws.com/{key}) + key 경로 인코딩('/' 구분자 보존).
         assertEquals("https://piki-images.s3.ap-northeast-2.amazonaws.com/items/raw/42.png", url);
-        // putObject 가 받은 값: bucket(요청 인자)·key(raw)·contentType 원본 그대로.
         assertEquals(BUCKET, client.lastPutBucket);
         assertEquals("items/raw/42.png", client.lastPutKey);
         assertEquals("image/png", client.lastPutContentType);
@@ -77,7 +76,6 @@ class S3ImageStorageTest {
 
         assertEquals(
             "https://piki-images.s3.ap-northeast-2.amazonaws.com/items/%EC%82%AC%EC%A7%84%201.png", url);
-        // key 자체는 raw 로 저장한다(인코딩하지 않는다).
         assertEquals("items/사진 1.png", client.lastPutKey);
     }
 
@@ -107,9 +105,6 @@ class S3ImageStorageTest {
         assertEquals(ExtractionErrorCode.STORAGE_ERROR, e.code());
     }
 
-    // --- fakes (모킹 라이브러리 금지 컨벤션: S3Client 인터페이스를 손수 구현) ---
-
-    // putObject 로 받은 바이트/메타를 (bucket,key) 별로 담고 getObjectAsBytes 로 되돌려주는 in-memory S3.
     private static final class InMemoryS3Client implements S3Client {
         private final Map<String, byte[]> objects = new HashMap<>();
         private final Map<String, String> contentTypes = new HashMap<>();
@@ -162,7 +157,6 @@ class S3ImageStorageTest {
         }
     }
 
-    // 모든 오퍼레이션이 SDK 예외로 실패하는 S3 — 예외 변환 경로 검증용.
     private static final class ThrowingS3Client implements S3Client {
         @Override
         public PutObjectResponse putObject(PutObjectRequest request, RequestBody body) {

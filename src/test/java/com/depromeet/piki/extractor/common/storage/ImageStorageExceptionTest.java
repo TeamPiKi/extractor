@@ -8,7 +8,6 @@ import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// 스토리지 실패의 계약(permanent + code)을 고정한다 — permanent=false(일시 실패, 502), 전용 code 는 STORAGE_ERROR.
 class ImageStorageExceptionTest {
 
     private final RuntimeException cause = new RuntimeException("boom");

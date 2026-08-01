@@ -6,8 +6,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Gemini JSON Schema 파서는 "properties": null 같은 잉여 null 필드를 스키마 위반으로 취급한다.
-// 직렬화 단계에서 null 필드를 전부 생략해 요청 페이로드를 최소한의 형태로 유지한다.
+/**
+ * Gemini JSON Schema 파서는 {@code "properties": null} 같은 잉여 null 필드를 스키마 위반으로 취급한다.
+ * 그래서 직렬화 단계에서 null 필드를 전부 생략한다.
+ */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record GeminiExtractionRequest(
     GenerationConfig generationConfig,
@@ -37,7 +39,6 @@ public record GeminiExtractionRequest(
         Boolean nullable
     ) {
 
-        // 나머지 필드를 null 로 채우는 편의 팩토리 — 타입만, 타입+nullable(true) 만 지정하는 두 형태.
         static JsonSchema ofType(String type) {
             return new JsonSchema(type, null, null, null, null, null);
         }
@@ -47,8 +48,10 @@ public record GeminiExtractionRequest(
         }
     }
 
-    // 서버에서 직접 fetch 한 HTML 을 in-context 로 받기 때문에 Gemini 의 url_context tool 을 쓰지 않는다.
-    // CSR 페이지의 inline JSON-LD 등 정적 HTML 안의 정보를 LLM 이 직접 보고 추출하도록 유도.
+    /**
+     * 서버에서 직접 fetch 한 HTML 을 in-context 로 넘기므로 Gemini 의 url_context tool 을 쓰지 않는다.
+     * CSR 페이지의 inline JSON-LD 등 정적 HTML 안의 정보를 LLM 이 직접 보고 추출하도록 유도한다.
+     */
     private static final String SYSTEM_PROMPT = """
             You are a product information extractor. Given the URL and the HTML of a product page,
             extract information for the MAIN product of the page.
@@ -88,7 +91,6 @@ public record GeminiExtractionRequest(
 
     private static final JsonSchema EXTRACTION_SCHEMA = extractionSchema();
 
-    // LinkedHashMap(삽입순 보존)으로 스키마 property 순서를 고정한다.
     private static JsonSchema extractionSchema() {
         Map<String, JsonSchema> properties = new LinkedHashMap<>();
         properties.put("isProductPage", JsonSchema.ofType("boolean"));

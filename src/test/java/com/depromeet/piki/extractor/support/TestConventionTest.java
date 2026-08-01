@@ -18,13 +18,12 @@ import org.junit.jupiter.api.Test;
 /**
  * 테스트 컨벤션을 기계로 강제하는 메타 테스트.
  *
- * <p>PIKI-Extractor CLAUDE.md `## 테스트` 의 불변식 중 **오탐 없이 기계로 PASS/FAIL 을 가를 수 있는 것만**
- * 여기서 강제한다. 서비스 단독 테스트 여부·한국어 네이밍 적정성처럼 사람·모델 판단이 끼는 규칙은 산문(CLAUDE.md)에 둔다.
+ * <p>CLAUDE.md '테스트' 절의 불변식 중 오탐 없이 기계로 PASS/FAIL 을 가를 수 있는 것만 여기서 강제한다.
+ * 서비스 단독 테스트 여부·한국어 네이밍 적정성처럼 사람·모델 판단이 끼는 규칙은 산문(CLAUDE.md)에 둔다.
  *
- * <p>src/test/java 의 Java 소스를 **import 라인 기준**으로 스캔한다. import 기준이라
- * 이 파일이 문자열 리터럴로 들고 있는 금지 키워드 자체는 오탐하지 않는다.
- * Spring 컨텍스트를 띄우지 않으므로 단독 실행 가능하다
- * (`./gradlew test --tests "com.depromeet.piki.extractor.support.TestConventionTest"`).
+ * <p>src/test/java 의 Java 소스를 import 라인 기준으로 스캔한다. import 기준이라 이 파일이 문자열 리터럴로
+ * 들고 있는 금지 키워드 자체는 오탐하지 않는다. Spring 컨텍스트를 띄우지 않으므로 단독 실행 가능하다
+ * ({@code ./gradlew test --tests "com.depromeet.piki.extractor.support.TestConventionTest"}).
  */
 class TestConventionTest {
 
@@ -40,7 +39,6 @@ class TestConventionTest {
                     continue;
                 }
                 String body = trimmed.substring("import ".length()).trim();
-                // `import static a.b.C.method;` 의 static 과 뒤의 세미콜론을 떼어 순수 FQN 만 남긴다.
                 if (body.startsWith("static ")) {
                     body = body.substring("static ".length()).trim();
                 }

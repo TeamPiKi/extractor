@@ -20,6 +20,9 @@ repositories {
 // 이미지(OCR) 경로의 S3 raw 읽기·크롭 업로드용. 버전 라인은 PIKI-Server 와 동일하게 유지한다.
 val awsSdkVersion = "2.44.11"
 
+// 생성자 보일러플레이트 제거(@RequiredArgsConstructor) 전용 — 채택 범위·금지 애노테이션은 CLAUDE.md 참조.
+val lombokVersion = "1.18.46"
+
 dependencyManagement {
     imports {
         mavenBom("software.amazon.awssdk:bom:$awsSdkVersion")
@@ -61,8 +64,13 @@ dependencies {
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
+    compileOnly("org.projectlombok:lombok:$lombokVersion")
+    annotationProcessor("org.projectlombok:lombok:$lombokVersion")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testCompileOnly("org.projectlombok:lombok:$lombokVersion")
+    testAnnotationProcessor("org.projectlombok:lombok:$lombokVersion")
 }
 
 tasks.withType<Test> {

@@ -5,8 +5,10 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 
-// 미지원 플랫폼 판정은 등록 입력 경계의 정책이라 호출자(PIKI-Server) 소관이다 —
-// 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식)과 안전 로깅만 책임진다.
+/**
+ * 미지원 플랫폼 판정은 등록 입력 경계의 정책이라 호출자(PIKI-Server) 소관이다 —
+ * 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식)과 안전 로깅만 책임진다.
+ */
 public final class ProductLink {
 
     private static final Set<String> HTTP_SCHEMES = Set.of("https");
@@ -41,7 +43,7 @@ public final class ProductLink {
         return value;
     }
 
-    // 로그/메트릭용. 쿼리스트링·fragment 에 토큰/세션이 섞일 수 있어 host+path 만 노출한다.
+    /** 쿼리스트링·fragment 에 토큰/세션이 섞일 수 있어 host+path 만 노출한다 — 로그·메트릭에는 이 값만 쓴다. */
     public String safeLogString() {
         String host = value.getHost() == null ? "?" : value.getHost();
         String path = value.getRawPath() == null ? "" : value.getRawPath();

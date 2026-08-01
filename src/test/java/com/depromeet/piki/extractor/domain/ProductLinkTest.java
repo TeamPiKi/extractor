@@ -8,8 +8,10 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// parse·safeLogString 분기를 망라한다. 미지원 플랫폼 판정은 등록 입력 경계 정책이라 호출자(PIKI-Server) 소관이고,
-// 이 서비스의 ProductLink 에는 해당 메서드가 없어 관련 케이스도 없다.
+/**
+ * 미지원 플랫폼 판정은 등록 입력 경계 정책이라 호출자(PIKI-Server) 소관이고, 이 서비스의 {@code ProductLink} 에는
+ * 해당 메서드가 없어 관련 케이스도 없다.
+ */
 class ProductLinkTest {
 
     @Test

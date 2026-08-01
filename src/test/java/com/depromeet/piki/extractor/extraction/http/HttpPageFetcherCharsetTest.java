@@ -15,12 +15,15 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// 응답 charset 디코딩 검증: 응답 Content-Type charset → HTML meta charset → UTF-8 순.
-// RestClient 의 기본 String 변환은 Content-Type 에 charset 이 없으면 ISO-8859-1 로 떨어져 UTF-8 한글이 깨졌다(카카오).
-// 바이트로 받아 직접 charset 을 정해 디코딩하는지 본다. 네트워크 없이 MockRestServiceServer 로 응답을 제어한다.
+/**
+ * 응답 charset 디코딩 검증: 응답 Content-Type charset → HTML meta charset → UTF-8 순.
+ *
+ * <p>RestClient 의 기본 String 변환은 Content-Type 에 charset 이 없으면 ISO-8859-1 로 떨어져 UTF-8 한글이 깨졌다(카카오).
+ * 그래서 바이트로 받아 직접 charset 을 정해 디코딩하는지 본다.
+ */
 class HttpPageFetcherCharsetTest {
 
-    // 모든 host 를 공인 IP 로 해석해 SSRF 가드를 통과시킨다(여기선 charset 디코딩만 검증).
+    /** 모든 host 를 공인 IP 로 해석해 SSRF 가드를 통과시킨다 — 여기선 charset 디코딩만 격리해 본다. */
     private final RequestScopedDnsResolver.HostResolver publicIp =
         host -> new InetAddress[] {InetAddress.getByName("93.184.216.34")};
 
@@ -34,7 +37,7 @@ class HttpPageFetcherCharsetTest {
     @Test
     @DisplayName("Content-Type 에 charset 이 없는 UTF-8 페이지의 한글이 깨지지 않는다")
     void utf8WithoutHeaderCharsetKeepsKorean() {
-        // 카카오류: UTF-8 인데 Content-Type 에 charset 이 없는 페이지. 헤더 charset null → meta 없음 → UTF-8 폴백.
+        // 카카오류: UTF-8 인데 Content-Type 에 charset 을 안 실어 보내던 실제 페이지에서 온 픽스처.
         String html = "<html><head><meta property=\"og:title\" content=\"나이키 운동화\"></head><body></body></html>";
         HttpPageFetcher fetcher = fetcherReturning(html.getBytes(StandardCharsets.UTF_8), MediaType.TEXT_HTML);
 
@@ -60,7 +63,6 @@ class HttpPageFetcherCharsetTest {
     void fallsBackToMetaCharset() {
         Charset euckr = Charset.forName("EUC-KR");
         String html = "<html><head><meta charset=\"euc-kr\"></head><body>장바구니</body></html>";
-        // 헤더에 charset 없음(text/html) → HTML meta 의 euc-kr 을 감지해 디코딩해야 한다.
         HttpPageFetcher fetcher = fetcherReturning(html.getBytes(euckr), MediaType.TEXT_HTML);
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"));
@@ -71,7 +73,7 @@ class HttpPageFetcherCharsetTest {
     @Test
     @DisplayName("Content-Type charset 이 HTML meta charset 보다 우선한다")
     void headerCharsetTakesPrecedenceOverMeta() {
-        // Content-Type 은 UTF-8, meta 는 euc-kr 로 충돌. HTML5 spec 처럼 HTTP 헤더 charset 이 meta 보다 우선이라 UTF-8 로 디코딩돼야 한다.
+        // 우선순위 근거는 HTML5 spec — HTTP 헤더 charset 이 문서 안 meta 선언을 앞선다.
         String html = "<html><head><meta charset=\"euc-kr\"></head><body>운동화</body></html>";
         HttpPageFetcher fetcher =
             fetcherReturning(html.getBytes(StandardCharsets.UTF_8), MediaType.parseMediaType("text/html;charset=UTF-8"));

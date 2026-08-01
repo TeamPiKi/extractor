@@ -12,10 +12,13 @@ import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// Fallback(진입점)이 "plain 먼저, 막히면 headless" 를 flag·escalatable 규칙대로 엮는지 Spring 없이 검증한다.
-// 통합 테스트는 외부 경계(PageFetcher·GeminiClient)만 stub 하고 이 라우팅을 실제로 타므로, 분기 망라는 여기 단위에서.
-// 두 전략은 실제 빈이 네트워크/브라우저를 요구해 단위로 세울 수 없어, LinkExtractionStrategy fake 로 "전략의 결과"만 주입한다.
-// (escalation 메트릭의 category 태그 값은 ExtractionErrorCode 명이다.)
+/**
+ * Fallback(진입점)이 "plain 먼저, 막히면 headless" 를 flag·escalatable 규칙대로 엮는지 Spring 없이 검증한다.
+ *
+ * <p>통합 테스트는 외부 경계(PageFetcher·GeminiClient)만 stub 하고 이 라우팅을 실제로 타므로, 분기 망라는
+ * 여기 단위에서 한다. 두 전략은 실제 빈이 네트워크/브라우저를 요구해 단위로 세울 수 없어,
+ * LinkExtractionStrategy fake 로 "전략의 결과"만 주입한다.
+ */
 class FallbackProductLinkExtractorTest {
 
     private final ProductLink link = ProductLink.parse("https://shop.example.com/p");
@@ -72,7 +75,6 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("headless 가 꺼져 있으면 escalatable 차단이어도 plain 예외를 그대로 전파한다")
     void headlessOffPropagatesEscalatableFailure() {
-        // behavior-neutral: 플래그가 꺼진 동안엔 차단(escalatable)이라도 에스컬레이트하지 않고 현재 동작(예외 전파)을 유지한다.
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.clientError(new RuntimeException("403"));
         });
@@ -97,7 +99,7 @@ class FallbackProductLinkExtractorTest {
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
         assertEquals(1, headless.calls);
-        // clientError(4xx) → category=FETCH_CLIENT_ERROR. outcome·category 로 escalate 를 쪼개 낭비를 조사 가능하게 한다.
+        // outcome·category 로 escalate 를 쪼개야 어떤 차단 사유가 폴백을 유발하는지 조사할 수 있다.
         assertEquals(
             1.0,
             registry.counter("product.extract.escalation", "outcome", "success", "category", "FETCH_CLIENT_ERROR").count()
@@ -107,7 +109,6 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("headless 가 켜져 있어도 plain 이 성공하면 headless 는 호출하지 않는다")
     void headlessOnButPlainSucceeds() {
-        // 정상 흐름(가장 흔함): headless on 이어도 plain 이 성공하면 그 결과를 그대로 쓰고 headless 를 안 부른다.
         FakeStrategy plain = new FakeStrategy(l -> snapshot);
         FakeStrategy headless = new FakeStrategy(l -> {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
@@ -123,8 +124,8 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("headless 가 Error 로 실패해도 failed 로 집계하고 전파한다")
     void headlessErrorIsCountedAndPropagated() {
-        // headless 구현이 Error 계열로 실패해도(미구현·OOM 등), catch 가 Exception 으로 좁으면 outcome=failed
-        // 집계가 조용히 빠질 수 있다. Throwable 을 잡아 집계하고 그대로 전파함을 고정한다.
+        // headless 가 Error 계열로 실패할 때(미구현·OOM 등) catch 가 Exception 으로 좁으면 outcome=failed 집계가
+        // 조용히 빠진다 — 관측이 사라지는 이 함정을 고정한다.
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.clientError(new RuntimeException("403"));
         });

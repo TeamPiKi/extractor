@@ -10,23 +10,27 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.ObjectMapper;
 
-// Gemini generateContent 호출의 공통 뼈대.
-//
-// RestClient 셋업 · timeout · 헤더 · {model}:generateContent 호출 + GeminiRetry 적용
-// + 에러 분류(GeminiApiException.fromResponseError) + GeminiGenerateContentResponse.extractText
-// + result 파싱까지 한 곳에서 처리한다. 추출기가 자기 Request/Result 타입만 알면 되도록 일반 호출 템플릿을 흡수.
+/**
+ * Gemini generateContent 호출의 공통 뼈대. 추출기가 자기 Request/Result 타입만 알면 되도록
+ * 호출·재시도·에러 분류·응답 파싱을 이 한 곳으로 흡수한다.
+ */
 @Component
 public class GeminiHttpClient implements GeminiClient {
 
     private static final String BASE_URL = "https://generativelanguage.googleapis.com";
     private static final int CONNECT_TIMEOUT_MS = 5_000;
 
-    // LLM 응답이 길어질 수 있어 넉넉히 두되, 단건 파싱을 60s 안에 끝내기 위해 30 초로 제한한다.
-    // Gemini 내부 재시도는 기본 off(maxAttempts=1)라 이 30s 가 곧 한 번 호출의 상한이다.
+    /**
+     * LLM 응답이 길어질 수 있어 넉넉히 두되, 호출자 read 예산 안에 들도록 상한을 둔다
+     * (층별 예산의 정본은 docs/api-contract.md §3).
+     */
     private static final int READ_TIMEOUT_MS = 30_000;
 
-    // API 키는 access log 에 남지 않도록 쿼리 대신 헤더로 전달.
-    // https://ai.google.dev/gemini-api/docs/api-key#provide-api-key-explicitly
+    /**
+     * API 키는 access log 에 남지 않도록 쿼리 대신 헤더로 전달한다.
+     *
+     * @see <a href="https://ai.google.dev/gemini-api/docs/api-key#provide-api-key-explicitly">Gemini API key</a>
+     */
     private static final String GEMINI_API_KEY_HEADER = "x-goog-api-key";
 
     private final GeminiProperties geminiProperties;
@@ -34,8 +38,7 @@ public class GeminiHttpClient implements GeminiClient {
     private final RestClient restClient;
     private final GeminiRetry geminiRetry;
 
-    // ObservationRegistry 를 물려 Gemini 호출(최대 30s)이 trace 의 한 구간(HTTP client span)으로 잡히게 한다.
-    // 한 요청 trace 에서 LLM 호출 latency 가 막대로 또렷이 보인다.
+    /** ObservationRegistry 를 물려 Gemini 호출이 요청 trace 안의 HTTP client span 으로 잡히게 한다. */
     public GeminiHttpClient(
         GeminiProperties geminiProperties,
         ObjectMapper objectMapper,
@@ -56,8 +59,6 @@ public class GeminiHttpClient implements GeminiClient {
         this.geminiRetry = new GeminiRetry(geminiProperties.retry());
     }
 
-    // 임의 Request 본문으로 generateContent 를 호출하고, 응답 텍스트 파트를 resultType 으로 역직렬화해 반환한다.
-    // 일시 장애는 GeminiRetry 정책으로 재시도된다.
     @Override
     public <Req, Res> Res generateContent(Req request, Class<Res> resultType) {
         return geminiRetry.execute(() -> {

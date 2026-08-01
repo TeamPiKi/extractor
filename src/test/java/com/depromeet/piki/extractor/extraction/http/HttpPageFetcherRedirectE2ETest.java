@@ -11,8 +11,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-// 실제 외부 페이지 fetch (지그재그 same-domain redirect · 무신사 OneLink cross-domain redirect).
-// 비용·외부 의존성이 있어 기본 @Disabled. 검증 필요 시 수동 enable.
 @Disabled("실제 외부 페이지 fetch (지그재그 same-domain · 무신사 OneLink cross-domain). 검증 필요 시 수동 enable.")
 class HttpPageFetcherRedirectE2ETest {
 
@@ -27,7 +25,7 @@ class HttpPageFetcherRedirectE2ETest {
     @Timeout(value = 30, unit = TimeUnit.SECONDS)
     @DisplayName("www 지그재그 URL 은 same-domain redirect 를 따라가 본문을 받는다")
     void zigzagWwwFollowsSameDomainRedirect() {
-        // www.zigzag.kr → zigzag.kr 301 redirect. 보강 전엔 emptyBody 로 실패하던 케이스.
+        // 회귀: 보강 전엔 www.zigzag.kr 의 301 을 따라가지 못해 emptyBody 로 실패했다.
         ProductLink link = ProductLink.parse("https://www.zigzag.kr/catalog/products/136677613");
 
         PageContent page = fetcher.fetch(link);

@@ -34,10 +34,14 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.ObjectMapper;
 
-// POST /render 의 wire 계약(요청 필드·verdict 번역·SSRF 가드·final_url 폴백·html 상한·zstd 해제)을 네트워크
-// 없이 검증한다. verdict → 계약 번역이 이 클래스의 단일 책임이라, 소비자(HeadlessProductLinkExtractor)는
-// 여기서 못 가는 PageContent 를 절대 받지 않는다. DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다
-// (HttpPageFetcher 테스트와 같은 방식).
+/**
+ * POST /render 의 wire 계약(요청 필드·verdict 번역·SSRF 가드·final_url 폴백·html 상한·zstd 해제)을 네트워크
+ * 없이 검증한다.
+ *
+ * <p>verdict 를 계약으로 번역하는 것이 렌더러의 단일 책임이라, 소비자(HeadlessProductLinkExtractor)는 여기서
+ * 통과하지 못한 PageContent 를 절대 받지 않는다. DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다
+ * (HttpPageFetcher 테스트와 같은 방식).
+ */
 class HttpHeadlessRendererTest {
 
     private static final String BASE_URL = "http://headless.test:8000";
@@ -80,7 +84,7 @@ class HttpHeadlessRendererTest {
             .andExpect(jsonPath("$.url").value(link.value().toString()))
             // 파싱(구조화/LLM)은 우리가 하므로 렌더된 HTML 을 항상 요구한다.
             .andExpect(jsonPath("$.include_html").value(true))
-            // 서버간 전송 절감 — 응답 zstd 압축을 요청한다(구버전 renderer 는 무시하고 plain JSON).
+            // 서버간 전송량 절감을 위해 응답 zstd 압축을 요청한다.
             .andExpect(jsonPath("$.compress").value(true))
             .andRespond(withSuccess(
                 "{\"verdict\":\"OK\",\"proxied\":true,\"status\":200,"
@@ -283,7 +287,7 @@ class HttpHeadlessRendererTest {
         assertEquals(null, HttpHeadlessRenderer.maskUrls(null));
     }
 
-    // renderer 의 compress.py 와 대칭인 압축 — 사전을 주면 사전 압축(응답 X-Zstd-Dict 시나리오), null 이면 plain.
+    /** renderer 의 compress.py 와 대칭인 압축 — 사전을 주면 사전 압축, null 이면 plain zstd. */
     private static byte[] zstdCompress(String json, byte[] dict) {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZstdOutputStream zstd = new ZstdOutputStream(bytes)) {

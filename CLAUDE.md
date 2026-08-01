@@ -14,6 +14,28 @@ PIKI-Server(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 UR
 - 모던 idiom 을 기본으로: `record`(값 객체·DTO), `sealed`(닫힌 분기), pattern matching `switch`. 로컬 변수 `var` 는 우변에서 타입이 자명할 때만.
 - **이 repo 는 사람이 직접 읽고 이해하는 것을 우선한다.** 영리한 축약보다 평이하고 읽히는 코드. 포팅 시 Kotlin 원본의 의도를 보존하되 Java 다운 표현으로 옮긴다.
 
+### Lombok
+
+보일러플레이트 제거 전용으로만 쓴다 — 채택 목록은 `@RequiredArgsConstructor`·`@Slf4j` 둘뿐이다
+(근거·범위 결정: `docs/style-decisions.md`).
+
+- 순수 필드-대입 생성자는 쓰지 않는다 — `@RequiredArgsConstructor` 로 대체. `@Qualifier` 는 필드에 붙인다
+  (lombok.config 의 copyableAnnotations 가 생성자 파라미터로 복사).
+- 조립 로직이 있는 생성자(파생 필드·클라이언트 빌드·편의 생성자 다중)는 손으로 유지한다.
+- Logger 는 `@Slf4j` 로 선언한다 (필드명 `log`, 로거 이름은 붙인 클래스).
+- 애노테이션 순서는 Lombok 먼저, 그다음 Spring: `@Slf4j` → `@RequiredArgsConstructor` → `@Component`.
+- 값 객체·DTO 는 Lombok 이 아니라 `record`. `@Builder`·`@Setter`·`@Data`·`@Value`·`@Getter` 는 쓰지 않는다.
+
+### 주석
+
+**독자는 Java 코드를 잘 읽는 개발자다.** 남길지 판단하는 질문은 하나다 — "이 주석이 없으면 코드를 정독한 숙련 Java 개발자가 **놓칠 정보**가 있는가?" 아니라면 지운다. 애매한 중간 지대는 지우는 쪽이다.
+
+- **선언부**(클래스·인터페이스·record·enum·상수·필드·메서드·생성자) 주석은 Javadoc(`/** */`). 메서드 본문 안에서만 `//`.
+- **지운다**: 코드가 이미 말하는 "무엇", 시그니처 재진술 `@param`(`@param region S3 리전`), 클래스 Javadoc 과 같은 말의 반복, 흐름 나레이션(`// 1) fetch 한다`), 자명한 분기 설명, 테스트에서 `@DisplayName`·단언이 이미 말하는 라벨.
+- **남긴다**: 설계 근거(왜 이 대안을 버렸나), 코드로 안 보이는 외부 제약·함정, 계약·보안 판단의 이유, 도달 불가 분기의 불변식, 외부 명세 링크. 이 "왜" 주석이 이 repo 의 자산이다.
+- **SSOT 위반 주석 금지.** 정본이 딴 곳에 있는 수치·목록·동작 — 다른 repo(renderer·PIKI-Server)의 구현 상세, `docs/api-contract.md` 의 계약 서술·타임아웃 예산, **코드의 기본값·상수값**, 다른 클래스가 정본인 분류 — 을 복제하지 않는다(조용히 낡는다). 정본을 가리키는 참조 한 줄로 대신한다.
+- **Javadoc 문법 게이트: `./gradlew javadoc` 이 error 0 이어야 한다.** raw `<...>` 는 `{@code <script>}` 로 감싸고, 본문 줄머리에 `@` 로 시작하는 애노테이션 이름을 두지 않는다(`{@code @DefaultValue}`) — 둘 다 error 를 낸다. `>`·`&` 단독은 `&gt;`·`&amp;`, 목록은 `<ul><li>`, 문단은 `<p>`.
+
 ### Null 처리
 
 PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
@@ -37,7 +59,7 @@ PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 로깅
 
-- `private static final Logger log = LoggerFactory.getLogger(클래스.class);`
+- 클래스에 `@Slf4j` 를 붙여 쓴다(필드명 `log`). 명시적 `LoggerFactory.getLogger` 선언은 쓰지 않는다.
 - URL 은 반드시 마스킹(`safeLogString` 포팅본: host+path만, 쿼리스트링 제외). 토큰·원문 HTML·LLM 응답 원문을 로그에 남기지 않는다.
 - 레벨: info=정상 흐름·지표·호출자 계약 위반 / warn=외부(몰·Gemini·S3) 실패·에스컬레이션 실패·SSRF 차단 / error=서버 버그(스택 포함).
 - SLF4J `{}` placeholder 사용, 문자열 연결 금지.
@@ -45,7 +67,7 @@ PIKI-Server 의 Elvis 규칙에 대응하는 Java 규칙:
 ## 포팅 규율 (이관 기간 한정)
 
 - **동작 등가(파리티)가 목표다.** Kotlin 원본의 분기·상수·메시지를 그대로 옮기고, 개선·리팩터링은 이관 완료 후 별도 작업으로 뺀다.
-- 포팅한 클래스 상단 주석에 원본 경로를 남긴다: `// PIKI-Server: product/service/http/HttpPageFetcher.kt 포팅`.
+- 포팅한 클래스의 Javadoc 에 원본 경로를 남긴다: `PIKI-Server: product/service/http/HttpPageFetcher.kt 포팅`.
 - 하드코딩이던 상수(fetch 3MB cap·UA·타임아웃·LLM 200K char cap)는 `@ConfigurationProperties` 로 외부화하되 **기본값은 원본과 동일**하게 둔다.
 
 ## 테스트

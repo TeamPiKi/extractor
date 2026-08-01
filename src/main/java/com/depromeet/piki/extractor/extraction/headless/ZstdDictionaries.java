@@ -7,18 +7,18 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
-// renderer 가 zstd 사전 압축으로 보낸 응답(X-Zstd-Dict: <사전ID>)을 해제할 사전 보관소.
-// 사전ID = 파일명 — renderer compress.py 의 DICT_ID(ZSTD_DICT_PATH 의 basename) 규약과 대칭이다.
-//
-// 롤아웃 규약: 사전 파일을 이 서비스의 디렉토리에 먼저 배포한 뒤 renderer 의 ZSTD_DICT_PATH 를 켠다.
-// 그래서 renderer 가 아직 안 쓰는 사전을 미리 들고 있는 것은 정상이고, 반대로 미보유 사전ID 가 오는 것은
-// 롤아웃 순서 위반 — 조회한 쪽(HttpHeadlessRenderer)이 일시 실패로 번역한다.
+/**
+ * renderer 가 zstd 사전 압축으로 보낸 응답({@code X-Zstd-Dict: <사전ID>})을 해제할 사전 보관소.
+ * 사전ID 는 파일명이다 — renderer 쪽 사전 ID 규약(사전 파일의 basename)과 대칭이다.
+ *
+ * <p>롤아웃 규약: 사전 파일을 이 서비스의 디렉토리에 먼저 배포한 뒤 renderer 의 압축 사전을 켠다.
+ * 그래서 renderer 가 아직 안 쓰는 사전을 미리 들고 있는 것은 정상이고, 반대로 미보유 사전ID 가 오는 것은
+ * 롤아웃 순서 위반 — 조회한 쪽(HttpHeadlessRenderer)이 일시 실패로 번역한다.
+ */
+@Slf4j
 final class ZstdDictionaries {
-
-    private static final Logger log = LoggerFactory.getLogger(ZstdDictionaries.class);
 
     private final Map<String, byte[]> dictsById;
 
@@ -26,8 +26,10 @@ final class ZstdDictionaries {
         this.dictsById = Map.copyOf(dictsById);
     }
 
-    // 부팅 시 디렉토리의 사전 파일을 전부 로드한다. 오설정(없는 경로·파일 지정)은 부팅에서 fail-fast —
-    // 런타임 첫 사전 응답에서 터지면 일시 실패로 위장돼 recover 재시도 뒤에 숨는다(baseUrl 검증과 같은 결).
+    /**
+     * 부팅 시 디렉토리의 사전 파일을 전부 로드한다. 오설정(없는 경로·파일 지정)은 부팅에서 fail-fast —
+     * 런타임 첫 사전 응답에서 터지면 일시 실패로 위장돼 recover 재시도 뒤에 숨는다(baseUrl 검증과 같은 결).
+     */
     static ZstdDictionaries load(String dictDir) {
         if (dictDir.isBlank()) {
             return new ZstdDictionaries(Map.of());
@@ -51,7 +53,7 @@ final class ZstdDictionaries {
         }
     }
 
-    // 테스트 편의 팩토리 — 파일 IO 없이 조립한다.
+    /** 테스트 편의 팩토리 — 파일 IO 없이 조립한다. */
     static ZstdDictionaries none() {
         return new ZstdDictionaries(Map.of());
     }
