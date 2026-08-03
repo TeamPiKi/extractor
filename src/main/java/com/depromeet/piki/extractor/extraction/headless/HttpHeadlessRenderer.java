@@ -1,10 +1,12 @@
 package com.depromeet.piki.extractor.extraction.headless;
 
+import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import com.depromeet.piki.extractor.extraction.http.InternalHostGuard;
+import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
 import com.github.luben.zstd.ZstdInputStream;
 import java.io.ByteArrayInputStream;
@@ -197,19 +199,34 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     }
 
     /**
-     * 상대 URL resolve(Jsoup baseUri)용 최종 URL. 렌더 서비스가 redirect 를 따라갔으면 원본 link 와 다를 수 있다.
-     * 값이 없거나 우리 형식(https 등)에 안 맞으면 원본 link 로 폴백한다 — baseUri 부정확은 치명이 아니고,
-     * 여기서 INVALID_URL 을 새면 렌더는 성공했는데 확정 실패로 종결되는 오판이 된다.
+     * 렌더 서비스가 redirect 를 따라간 최종 URL. Jsoup baseUri 이자 응답 계약의 finalUrl 로 호출자에게 나간다.
+     * <p>형식 위반은 원본 link 로 폴백한다 — baseUri 부정확은 치명이 아니고, 여기서 INVALID_URL 을 새면 렌더는
+     * 성공했는데 확정 실패로 종결되는 오판이 된다.
+     * <p>단 <b>SSRF 판정은 폴백하지 않고 렌더 전체를 거부</b>한다. 원본 URL 만 검증하면 "외부 URL → 내부 주소"
+     * redirect 를 렌더 서비스가 대신 따라가 준 셈이 되어, 내부망 응답이 상품 HTML 로 흘러들고 그 주소가 호출자의
+     * 정체성(canonical) 입력으로까지 나간다. 정적 fetch 가 매 hop 을 검증하는 것과 같은 기준을 여기에도 세운다.
      */
     private ProductLink resolveFinalUrl(String finalUrl, ProductLink link) {
         if (finalUrl == null || finalUrl.isBlank()) {
             return link;
         }
+        ProductLink parsed;
         try {
-            return ProductLink.parse(finalUrl);
+            parsed = ProductLink.parse(finalUrl);
         } catch (ExtractionException e) {
             return link;
         }
+        try {
+            internalHostGuard.verify(parsed);
+        } catch (PageFetchException e) {
+            if (e.code() == ExtractionErrorCode.BLOCKED_HOST) {
+                throw e;
+            }
+            // 그 외(DNS 미해결 등)는 검증 불가일 뿐 내부망 근거가 아니다 — 원본 link 로 폴백해 렌더 결과는 살린다.
+            log.warn("headless render finalUrl 검증 실패 code={} url={}", e.code(), link.safeLogString());
+            return link;
+        }
+        return parsed;
     }
 
     /**

@@ -247,6 +247,29 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
+    @DisplayName("final_url 이 내부망으로 resolve 되면 렌더 전체를 거부한다 — 원본만 검증하면 redirect 로 가드를 우회한다")
+    void internalFinalUrlIsBlocked() {
+        // 원본 host 는 공인 IP, 렌더 서비스가 따라간 최종 host 만 내부망인 상황 — 정적 fetch 가 매 hop 을
+        // 검증하는 것과 달리 여기엔 검증이 없어, 내부망 응답이 상품 HTML 로 흘러들 수 있었다.
+        RequestScopedDnsResolver.HostResolver byHost = host -> "metadata.internal".equals(host)
+            ? new InetAddress[] {InetAddress.getByName("169.254.169.254")}
+            : new InetAddress[] {InetAddress.getByName("93.184.216.34")};
+
+        HttpHeadlessRenderer renderer = rendererWith(
+            HeadlessExtractionProperties.of(true), byHost, ZstdDictionaries.none(), server -> server
+                .expect(requestTo(BASE_URL + "/render"))
+                .andRespond(withSuccess(
+                    "{\"verdict\":\"OK\",\"html\":\"<html>ok</html>\","
+                        + "\"final_url\":\"https://metadata.internal/latest/meta-data/\"}",
+                    MediaType.APPLICATION_JSON
+                )));
+
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link));
+
+        assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
+    }
+
+    @Test
     @DisplayName("렌더 서비스의 5xx·비정상 응답은 일시 실패다")
     void renderServiceErrorIsTransient() {
         HttpHeadlessRenderer renderer = rendererWith(server -> server

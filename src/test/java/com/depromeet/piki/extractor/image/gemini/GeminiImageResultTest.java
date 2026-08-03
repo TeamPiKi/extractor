@@ -3,8 +3,10 @@ package com.depromeet.piki.extractor.image.gemini;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.image.domain.BoundingBox;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -115,5 +117,23 @@ class GeminiImageResultTest {
         assertNull(result.price());
         assertNull(result.category());
         assertNull(result.currency());
+    }
+
+    // ---------- link 경로와 같은 검증을 태운다 ----------
+
+    @Test
+    @DisplayName("LLM 이 준 음수 가격은 link 경로와 똑같이 거부된다 — 경로에 따라 검증이 갈리면 안 된다")
+    void negativePriceIsRejectedLikeLinkPath() {
+        GeminiImageResult result = new GeminiImageResult("우유", -100, "음료", "KRW", null);
+
+        assertThrows(ProductSnapshotException.class, result::toImageExtraction);
+    }
+
+    @Test
+    @DisplayName("공백뿐인 name 은 null 로 정규화된다 — link 경로의 fromExtracted 와 같은 처리")
+    void blankNameIsNormalizedLikeLinkPath() {
+        GeminiImageResult result = new GeminiImageResult("   ", 3500, "음료", "KRW", null);
+
+        assertNull(result.toImageExtraction().snapshot().name());
     }
 }

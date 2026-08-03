@@ -128,4 +128,10 @@ class ProductImageTest {
     void extensionForMimeTypeNullThrows() {
         assertThrows(ProductImageException.class, () -> ProductImage.extensionForMimeType(null));
     }
+
+    @Test
+    @DisplayName("of 는 바이트가 null 이어도 계약 예외다 — NPE 로 새면 확정 실패가 일시 실패로 오분류된다")
+    void nullBytesIsContractFailure() {
+        assertThrows(ProductImageException.class, () -> ProductImage.of(null, "image/png"));
+    }
 }

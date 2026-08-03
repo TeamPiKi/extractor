@@ -49,7 +49,8 @@ public final class ProductImage {
     }
 
     public static ProductImage of(byte[] bytes, String mimeType) {
-        if (bytes.length == 0) {
+        // null 도 "바이트 없음"이라 계약 위반(422)이다 — length 를 먼저 읽으면 NPE 로 새어 일시 실패(500)로 오분류된다.
+        if (bytes == null || bytes.length == 0) {
             throw ProductImageException.emptyImage();
         }
         return new ProductImage(bytes.clone(), normalizeMimeType(mimeType));
