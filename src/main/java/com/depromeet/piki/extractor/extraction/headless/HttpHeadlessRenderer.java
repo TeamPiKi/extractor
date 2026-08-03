@@ -204,7 +204,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
      * 성공했는데 확정 실패로 종결되는 오판이 된다.
      * <p>단 <b>SSRF 판정은 폴백하지 않고 렌더 전체를 거부</b>한다. 원본 URL 만 검증하면 "외부 URL → 내부 주소"
      * redirect 를 렌더 서비스가 대신 따라가 준 셈이 되어, 내부망 응답이 상품 HTML 로 흘러들고 그 주소가 호출자의
-     * 정체성(canonical) 입력으로까지 나간다. 정적 fetch 가 매 hop 을 검증하는 것과 같은 기준을 여기에도 세운다.
+     * 정체성(canonical) 입력으로까지 나간다.
+     *
+     * <p><b>한계 — 이 검증은 사후(post-hoc)다.</b> 렌더 응답을 받은 뒤에 도는 것이라 내부 주소로의 <i>요청 자체</i>는
+     * 막지 못하고, "외부 → 내부 → 외부"로 되돌아오는 체인은 최종 URL 이 외부라 여기서 걸리지 않는다. 정적 fetch 처럼
+     * hop 마다 막으려면 브라우저의 navigation 계층(자동 redirect 를 끄고 Location 마다 같은 판정) 또는 렌더 박스의
+     * egress 정책이 보안 경계여야 하며, 그건 renderer repo 소관이다. 여기 검증은 "내부망 콘텐츠를 상품으로 소비하고
+     * 그 주소를 호출자에게 넘기는 것"을 막는 다층 방어의 마지막 층이다.
      */
     private ProductLink resolveFinalUrl(String finalUrl, ProductLink link) {
         if (finalUrl == null || finalUrl.isBlank()) {

@@ -76,9 +76,9 @@ xhigh 리뷰(파인더 10 앵글 → 검증 → 스윕)로 확정 15건 + 백로
 
 주석을 쓰려면 코드를 정독해야 하므로 부수적으로 드러난 것들이다. 심각도 순.
 
-1. **헤드리스 경로의 redirect SSRF 비대칭** — `HttpHeadlessRenderer` 는 원본 URL 만 `InternalHostGuard` 로 검증하고, 렌더 서비스가 자체적으로 따라간 redirect(응답 `final_url`)는 우리 가드를 거치지 않는다. plain fetch 는 매 hop 검증하는데 여기만 1회다. renderer 쪽 책임인지 문서화도 안 돼 있다.
+1. ~~**헤드리스 경로의 redirect SSRF 비대칭**~~ — **부분 해소(#20)**. `final_url` 도 `InternalHostGuard` 를 태워 내부 주소가 최종 귀결점이면 렌더 전체를 거부한다. 다만 이 검증은 **사후**라 내부 주소로의 요청 자체는 못 막고, "외부 → 내부 → 외부" 체인도 못 잡는다(CodeRabbit 지적, 타당). **hop 단위 차단은 renderer repo 몫으로 남았다** — 실측 확인 결과 renderer 에는 SSRF·egress 가드가 전혀 없고(inbound SG 경계만) 브라우저가 redirect 를 자유롭게 따라간다. renderer 의 navigation 계층에서 자동 redirect 를 끄고 Location 마다 판정하거나, 렌더 박스에 egress 정책을 세워야 완결된다.
 2. **`ProductImage.of(null, ...)` → 500** — null 검사 전에 `bytes.length` 를 읽어 NPE 가 된다. 계약상 422(IMAGE_UNSUPPORTED)여야 할 입력이 일시 실패로 오분류된다.
-3. **이미지 경로의 정규화 비대칭** — `GeminiImageResult` 가 `ProductSnapshot.fromExtracted` 를 우회해, LLM 이 준 음수 가격·blank name 이 link 경로와 달리 검증 없이 통과한다(주석으로만 경고돼 있었다).
+3. ~~**이미지 경로의 정규화 비대칭**~~ — **해소(#20)**. — `GeminiImageResult` 가 `ProductSnapshot.fromExtracted` 를 우회해, LLM 이 준 음수 가격·blank name 이 link 경로와 달리 검증 없이 통과한다(주석으로만 경고돼 있었다).
 4. **`ProductImage.mimeTypeOfExtension` 하드코딩 switch** — `MIME_TO_EXTENSION` Javadoc 이 약속한 "포맷 추가는 한 곳"이 실제로는 깨져 있다(포맷 추가 시 두 곳 수정). 앞선 리뷰에서 파생 역맵으로 고쳤으나 그 워킹트리가 폐기돼 미반영.
 5. **`ImageCropper.crop` 의 첫 `catch (IOException)` 이 로그 없이 null 반환** — 디코딩 IO 실패가 관측되지 않는다(두 번째 catch 만 `log.warn`).
 6. **기본값 이중 정본** — `FetchProperties.defaults()`·`HeadlessExtractionProperties.of()` 가 `@DefaultValue` 수치를 코드로 다시 박는다. 한쪽만 바뀌면 바인딩 경로와 테스트 경로 기본값이 조용히 갈린다.
