@@ -13,7 +13,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
-// 계약은 permanent(일시 vs 확정)와 code(일시 LLM_UPSTREAM / 확정 LLM_INVALID_RESPONSE)로 표현된다 — 그에 맞춰 단언한다.
 class GeminiApiExceptionTest {
 
     @ParameterizedTest

@@ -6,31 +6,24 @@ import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.image.domain.ProductImage;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-// 이미지 OCR 추출의 오케스트레이터 — S3 raw 원본을 읽고(download) OCR 추출·크롭 후 결과 이미지를 S3 에 올려(upload)
-// 그 public URL 을 담은 ProductSnapshot 을 돌려준다. 상태 전이(markReady·raw 회수)는 호출자(core) 소관이고,
-// 이 서비스는 download→extract→crop→upload 만 책임진다. bucket 은 요청이 주므로 세 환경 버킷 모두 다룬다.
+/**
+ * 이미지 추출 오케스트레이터. 상태 전이(markReady·raw 회수)는 호출자(core) 소관이고,
+ * 이 서비스는 download→extract→crop→upload 만 책임진다.
+ *
+ * <p>bucket 을 요청이 주므로 환경별 버킷을 모두 다룬다.
+ */
+@Slf4j
+@RequiredArgsConstructor
 @Component
 public class ImageExtractionService {
-
-    private static final Logger log = LoggerFactory.getLogger(ImageExtractionService.class);
 
     private final ProductImageExtractor productImageExtractor;
     private final ImageCropper imageCropper;
     private final ImageStorage imageStorage;
-
-    public ImageExtractionService(
-        ProductImageExtractor productImageExtractor,
-        ImageCropper imageCropper,
-        ImageStorage imageStorage
-    ) {
-        this.productImageExtractor = productImageExtractor;
-        this.imageCropper = imageCropper;
-        this.imageStorage = imageStorage;
-    }
 
     public ProductSnapshot extract(String bucket, String key) {
         StoredImage stored = imageStorage.download(bucket, key);
@@ -41,13 +34,12 @@ public class ImageExtractionService {
 
         ImageExtraction extraction = productImageExtractor.extract(image);
 
-        // bbox 있으면 크롭 이미지를, 없으면(또는 크롭 불가 포맷) 원본을 결과 이미지로 올린다(READY 불변식: imageUrl 필수).
+        // 크롭이 불가능해도 원본을 올린다 — 호출자의 READY 불변식이 imageUrl 을 요구한다.
         byte[] resultBytes = croppedOrOriginal(image, extraction);
         String imageUrl = imageStorage.upload(bucket, resultBytes, "items/" + UUID.randomUUID() + ".png", "image/png");
         log.info("image extract bucket={} key={} croppedUrl={}", bucket, key, imageUrl);
 
-        // 추출 스냅샷(link=null, imageUrl 미채움)에 업로드 결과 URL 을 채워 돌려준다.
-        // 이미지 경로는 원본 URL 이 없어 finalUrl 도 없고, 추출은 Gemini 라 method 는 항상 LLM 이다.
+        // 이미지 경로는 원본 URL 이 없어 finalUrl 도 없고, 추출이 Gemini 라 method 는 항상 LLM 이다.
         ProductSnapshot s = extraction.snapshot();
         return new ProductSnapshot(s.link(), s.name(), imageUrl, s.currentPrice(), s.currency())
             .withOrigin(null, ExtractionMethod.LLM);
@@ -64,7 +56,6 @@ public class ImageExtractionService {
             return image.bytes();
         }
         byte[] cropped = imageCropper.crop(image.bytes(), extraction.boundingBox());
-        // 크롭 불가 포맷(HEIC/WebP 등 ImageIO 미지원)은 null → 원본으로 폴백.
         return cropped != null ? cropped : image.bytes();
     }
 }

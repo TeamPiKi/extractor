@@ -90,7 +90,6 @@ class ProductImageTest {
         assertEquals(expected, ProductImage.of(new byte[] {1}, mimeType).extension());
     }
 
-    // 이미지 등록 v2 발급 단계는 바이트가 아직 없어 content-type 만으로 raw key 확장자를 만든다.
     @ParameterizedTest
     @CsvSource({
         "image/png, png",
@@ -101,6 +100,7 @@ class ProductImageTest {
     })
     @DisplayName("content-type 만으로 바이트 없이 스토리지 확장자를 도출한다")
     void derivesStorageExtensionWithoutBytes(String mimeType, String expected) {
+        // 이미지 등록 v2 의 발급 단계는 바이트가 아직 없어 content-type 만으로 raw key 확장자를 만든다.
         assertEquals(expected, ProductImage.extensionForMimeType(mimeType));
     }
 

@@ -28,7 +28,7 @@ class ImageCropperTest {
     @DisplayName("정상 bbox 로 크롭하면 normalized 비율만큼의 PNG 를 돌려준다")
     void cropsToNormalizedRatio() throws IOException {
         byte[] bytes = pngBytes(1000, 1000);
-        // normalized 100~500 → 1000px 기준 100~500px → 400x400
+        // bbox 는 0~1000 normalized 좌표 — 1000px 원본에서 100~500 은 400px 폭이 된다.
         byte[] cropped = cropper.crop(bytes, new BoundingBox(100, 100, 500, 500));
 
         assertNotNull(cropped);
@@ -47,7 +47,6 @@ class ImageCropperTest {
     @DisplayName("원본 경계를 넘는 끝 좌표는 클램핑되어 크롭에 성공한다")
     void clampsOutOfBoundsEndCoordinates() throws IOException {
         byte[] bytes = pngBytes(1000, 1000);
-        // xMax/yMax=1000 → 픽셀 환산 시 경계를 넘지만 클램핑으로 크롭 성공
         byte[] cropped = cropper.crop(bytes, new BoundingBox(900, 900, 1000, 1000));
 
         assertNotNull(cropped);

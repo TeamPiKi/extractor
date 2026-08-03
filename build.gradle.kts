@@ -20,6 +20,9 @@ repositories {
 // 이미지(OCR) 경로의 S3 raw 읽기·크롭 업로드용. 버전 라인은 core 와 동일하게 유지한다.
 val awsSdkVersion = "2.44.11"
 
+// 생성자 보일러플레이트 제거(@RequiredArgsConstructor) 전용 — 채택 범위·금지 애노테이션은 CLAUDE.md 참조.
+val lombokVersion = "1.18.46"
+
 dependencyManagement {
     imports {
         mavenBom("software.amazon.awssdk:bom:$awsSdkVersion")
@@ -46,6 +49,10 @@ dependencies {
     // JDK HttpURLConnection 은 IP pin 시 TLS SNI·인증서 수동 복구가 필요해 깨지기 쉽다. 버전은 Spring Boot BOM 관리.
     implementation("org.apache.httpcomponents.client5:httpclient5")
 
+    // renderer(POST /render)의 압축 응답(X-Encoding: zstd) 해제 — 학습 사전(X-Zstd-Dict) 지원 포함.
+    // Spring Boot BOM 미관리라 버전 명시.
+    implementation("com.github.luben:zstd-jni:1.5.7-3")
+
     // 이미지(OCR) 경로: S3 raw 읽기 + 크롭 결과 업로드 (이관 6단계). 버전은 위 BOM 이 관리.
     implementation("software.amazon.awssdk:s3")
 
@@ -57,10 +64,18 @@ dependencies {
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
+    compileOnly("org.projectlombok:lombok:$lombokVersion")
+    annotationProcessor("org.projectlombok:lombok:$lombokVersion")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testCompileOnly("org.projectlombok:lombok:$lombokVersion")
+    testAnnotationProcessor("org.projectlombok:lombok:$lombokVersion")
 }
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // zstd-jni 의 JNI 네이티브 로드 허용 — Java 25 는 경고만 내지만 미래 JDK 는 차단한다(JEP 472).
+    // 런타임은 Dockerfile ENTRYPOINT 가 같은 플래그를 준다.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

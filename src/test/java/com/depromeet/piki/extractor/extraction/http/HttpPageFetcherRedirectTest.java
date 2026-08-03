@@ -19,13 +19,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-// redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 차단·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
-// 응답은 MockRestServiceServer 로 제어하고, DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시켜 redirect 로직만 격리한다.
-//
-// PageFetchException 은 code()/permanent()/escalatable() 로 계약을 표현하므로 각 실패 갈래를 code() 로 고정한다.
+/**
+ * redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 차단·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
+ *
+ * <p>DNS 를 가짜 공인 IP 로 주입해 SSRF 가드를 통과시켜 redirect 로직만 격리한다.
+ */
 class HttpPageFetcherRedirectTest {
 
-    // 모든 host 를 공인 IP 로 해석해 가드를 통과시킨다(여기선 redirect 따라가기·도메인 차단 로직만 검증).
+    /** 모든 host 를 공인 IP 로 해석해 가드를 통과시킨다 — 여기선 redirect 따라가기·차단 로직만 격리해 본다. */
     private final RequestScopedDnsResolver.HostResolver publicIp =
         host -> new InetAddress[] {InetAddress.getByName("93.184.216.34")};
 
@@ -59,7 +60,7 @@ class HttpPageFetcherRedirectTest {
     @DisplayName("cross-domain redirect 도 따라가 최종 페이지 본문을 받는다")
     void followsCrossDomainRedirect() {
         // 무신사 OneLink·bit.ly 등 단축·딥링크는 다른 도메인의 최종 상품 페이지로 보낸다. 도메인이 바뀌어도 따라간다.
-        // (사설망 SSRF 는 매 hop 의 guardAgainstInternalHost IP 가드가 막으므로 도메인 단위 차단은 불필요.)
+        // (사설망 SSRF 는 매 hop 의 InternalHostGuard IP 가드가 막으므로 도메인 단위 차단은 불필요.)
         HttpPageFetcher fetcher =
             fetcherWith(server -> {
                 server.expect(requestTo("https://musinsa.onelink.me/x"))
@@ -94,7 +95,6 @@ class HttpPageFetcherRedirectTest {
         PageFetchException ex = assertThrows(
             PageFetchException.class,
             () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
-        // 사설/메타데이터 주소로 가는 hop 은 blockedHost(BLOCKED_HOST)로 차단된다.
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
@@ -116,9 +116,8 @@ class HttpPageFetcherRedirectTest {
     void breaksOnTooManyRedirects() {
         HttpPageFetcher fetcher =
             fetcherWith(server -> {
-                // 같은 도메인 self-redirect 를 hop 상한+1 만큼. 끝내 페이지에 도달하지 못한다.
-                // 상한을 하드코딩하지 않고 defaults 에서 파생한다 — 상한 조정(3→5, 지그재그 2 hop 실측 여유)이
-                // 이 테스트를 조용히 무력화하거나 어긋나게 하지 않게.
+                // 같은 도메인 self-redirect 를 hop 상한+1 만큼 — 끝내 페이지에 도달하지 못한다.
+                // 상한을 하드코딩하지 않고 defaults 에서 파생해, 상한 조정이 이 테스트를 조용히 무력화하지 않게 한다.
                 for (int i = 0; i < FetchProperties.defaults().maxRedirects() + 1; i++) {
                     server.expect(requestTo("https://zigzag.kr/loop"))
                         .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("https://zigzag.kr/loop")));
@@ -128,7 +127,7 @@ class HttpPageFetcherRedirectTest {
         PageFetchException ex = assertThrows(
             PageFetchException.class,
             () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop")));
-        // redirect 루프는 재시도해도 결정론적 재실패라 확정 실패(TOO_MANY_REDIRECTS).
+        // redirect 루프는 재시도해도 결정론적으로 재실패하므로 확정 실패로 가른다.
         assertEquals(ExtractionErrorCode.TOO_MANY_REDIRECTS, ex.code());
     }
 
@@ -159,7 +158,6 @@ class HttpPageFetcherRedirectTest {
         PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"));
 
         assertEquals("<html>direct</html>", page.html());
-        // redirect 가 없으면 finalUrl 은 원본 link 와 같다.
         assertEquals(page.link(), page.finalUrl());
     }
 }

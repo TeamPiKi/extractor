@@ -75,7 +75,7 @@
 - 대상 몰 502/503/504·연결 실패·빈 body (`UPSTREAM_ERROR`)
 - Gemini 5xx/429/408/transport 오류 (`LLM_UPSTREAM`)
 - 헤드리스 렌더 차단 (`HEADLESS_BLOCKED`, 이관 7단계 추가) — 렌더 서비스의 BLOCK 판정(HTTP 401/403/405/429/490 + 챌린지 title)은 429·일시 챌린지가 섞여 영구/일시를 못 가르므로 fail-safe 로 일시. 결정론적 차단의 재시도 낭비는 attempt 상한이 바운드
-- 헤드리스 렌더 서비스 연결 실패·타임아웃·빈 렌더·브라우저 오류 (`HEADLESS_UPSTREAM`, 이관 7단계 추가). 렌더는 됐는데 렌더 서비스 자체 파서가 title·price 를 못 찾은 경우(verdict=EMPTY/PARTIAL)는 실패가 아니다 — HTML 이 있으면 Extractor 파이프라인(구조화·LLM)이 이어서 추출한다
+- 헤드리스 렌더 서비스 연결 실패·타임아웃·빈 렌더(verdict=EMPTY)·브라우저 오류(verdict=ERROR)·압축(zstd) 응답 해제 실패 (`HEADLESS_UPSTREAM`, 이관 7단계 추가). 렌더 서비스(renderer)는 파싱하지 않으므로(verdict=OK|BLOCK|EMPTY|ERROR) HTML 이 있으면 verdict 와 무관하게 Extractor 파이프라인(구조화·LLM)이 추출을 이어간다
 - body 에 code 를 실을 수 있으나 호출자는 읽지 않는다(관측용).
 
 ### POST `/internal/extractions/image` — S3 이미지 OCR 추출 + 크롭 (이관 6단계, 계약만 선확정)

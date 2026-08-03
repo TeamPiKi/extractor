@@ -16,9 +16,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
-// 헤드리스 전략의 조립을 검증한다: 렌더된 HTML 이 plain 과 동일한 파이프라인(구조화 우선 → LLM fallback)으로
-// 흐르는지. 렌더 자체의 wire·verdict 번역은 HttpHeadlessRendererTest 가, 직행/에스컬레이션 라우팅은
-// FallbackProductLinkExtractorTest 가 진다. 외부 경계(HeadlessRenderer·GeminiClient)만 fake/stub.
+/**
+ * 헤드리스 전략의 조립 — 렌더된 HTML 이 plain 과 동일한 파이프라인(구조화 우선 → LLM fallback)으로 흐르는지 본다.
+ *
+ * <p>렌더 자체의 wire·verdict 번역은 HttpHeadlessRendererTest 가, 직행/에스컬레이션 라우팅은
+ * FallbackProductLinkExtractorTest 가 진다. 외부 경계(HeadlessRenderer·GeminiClient)만 fake/stub.
+ */
 class HeadlessProductLinkExtractorTest {
 
     private final ProductLink link = ProductLink.parse("https://kream.co.kr/products/6963");

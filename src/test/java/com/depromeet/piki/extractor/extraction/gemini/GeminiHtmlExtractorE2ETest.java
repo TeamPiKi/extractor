@@ -20,12 +20,12 @@ import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * 실제 Gemini API 를 호출하는 생존성 테스트.
+ * 실제 Gemini API 를 호출하는 생존성 테스트 — 호출 경로(인증·스키마·직렬화·모델)가 살아 있는지만 본다.
  *
- * 비용·외부 의존성이 있으므로 기본은 @Disabled. 호출 경로(인증·스키마·직렬화·모델)가 살아 있는지
- * 확인이 필요할 때만 명시적으로 enable. GEMINI_API_KEY 가 환경에 있다고 가정한다.
+ * <p>비용·외부 의존성이 있으므로 기본은 비활성이고, 확인이 필요할 때만 수동으로 enable 한다.
+ * GEMINI_API_KEY 가 환경에 있다고 가정한다.
  *
- * 이 E2E 의 목적은 "Gemini 호출 자체의 생존성"이라, HTML fetch 는 관심사가 아니어서 표준 JDK HttpClient 로
+ * <p>목적이 "Gemini 호출 자체의 생존성"이라 HTML fetch 는 관심사가 아니어서 표준 JDK HttpClient 로
  * 간단히 가져온다. 정적 fetch 경로까지 함께 태우려면 HttpPageFetcher 를 쓰면 된다.
  */
 @Disabled("실제 Gemini API 호출. 검증 필요 시 수동으로 enable 후 실행.")
@@ -40,8 +40,7 @@ class GeminiHtmlExtractorE2ETest {
     @Timeout(value = 90, unit = TimeUnit.SECONDS)
     @DisplayName("Gemini end-to-end 호출이 살아 있고 응답을 구조화해 돌려준다")
     void geminiEndToEndIsAlive() throws Exception {
-        // 호출 경로(인증·스키마·직렬화·모델)가 살아 있는지 확인하는 생존성 테스트.
-        // 어떤 종류의 실패도 회귀 신호로 간주해 fail 시킨다.
+        // 생존성 테스트이므로 어떤 종류의 실패든(네트워크·스키마·모델) 회귀 신호로 간주해 fail 시킨다.
         ProductLink link = ProductLink.parse("https://www.apple.com/shop/buy-iphone");
 
         String html = fetchHtml(link);

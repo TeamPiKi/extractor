@@ -3,14 +3,18 @@ package com.depromeet.piki.extractor.support;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiClient;
 import java.util.function.Function;
 
-// 외부 LLM 호출 경계를 통합 테스트에서 격리하는 stub. build 람다로 응답을 교체하고,
-// invocations 카운터로 "구조화 우선 파싱이 성공하면 LLM 을 호출하지 않는다"를 단언한다.
-// default build 는 throw — 명시 세팅을 빠뜨리면 즉시 깨진다. 매 테스트가 본문에서 reset()+build 를 세팅한다.
+/**
+ * 외부 LLM 호출 경계를 통합 테스트에서 격리하는 stub. invocations 카운터로 "구조화 우선 파싱이 성공하면 LLM 을
+ * 호출하지 않는다"를 단언한다.
+ *
+ * <p>default build 는 throw — 명시 세팅을 빠뜨리면 즉시 깨진다. 매 테스트가 본문에서 {@code reset()}+build 를
+ * 세팅한다.
+ */
 public class StubGeminiClient implements GeminiClient {
 
     private int invocations = 0;
 
-    // 마지막 호출의 request 를 캡처한다. fallback 시 LLM 으로 보낸 입력(sanitize 결과)을 검증하는 데 쓴다.
+    /** fallback 시 LLM 으로 보낸 입력(sanitize 결과)을 검증하는 데 쓴다. */
     private Object lastRequest;
 
     public Function<Object, Object> build = request -> {

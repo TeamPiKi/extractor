@@ -16,20 +16,32 @@ import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
+import com.github.luben.zstd.ZstdOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.ObjectMapper;
 
-// POST /render 의 wire 계약(요청 필드·verdict 번역·SSRF 가드·final_url 폴백·html 상한)을 네트워크 없이 검증한다.
-// verdict → 계약 번역이 이 클래스의 단일 책임이라, 소비자(HeadlessProductLinkExtractor)는 여기서 못 가는
-// PageContent 를 절대 받지 않는다. DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다(HttpPageFetcher 테스트와 같은 방식).
+/**
+ * POST /render 의 wire 계약(요청 필드·verdict 번역·SSRF 가드·final_url 폴백·html 상한·zstd 해제)을 네트워크
+ * 없이 검증한다.
+ *
+ * <p>verdict 를 계약으로 번역하는 것이 렌더러의 단일 책임이라, 소비자(HeadlessProductLinkExtractor)는 여기서
+ * 통과하지 못한 PageContent 를 절대 받지 않는다. DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다
+ * (HttpPageFetcher 테스트와 같은 방식).
+ */
 class HttpHeadlessRendererTest {
 
     private static final String BASE_URL = "http://headless.test:8000";
@@ -42,30 +54,40 @@ class HttpHeadlessRendererTest {
     private HttpHeadlessRenderer rendererWith(
         HeadlessExtractionProperties properties,
         RequestScopedDnsResolver.HostResolver hostResolver,
+        ZstdDictionaries dictionaries,
         Consumer<MockRestServiceServer> configure
     ) {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         configure.accept(server);
-        return new HttpHeadlessRenderer(builder.build(), properties, new RequestScopedDnsResolver(hostResolver));
+        return new HttpHeadlessRenderer(
+            builder.build(),
+            properties,
+            new RequestScopedDnsResolver(hostResolver),
+            new ObjectMapper(),
+            dictionaries
+        );
     }
 
     private HttpHeadlessRenderer rendererWith(Consumer<MockRestServiceServer> configure) {
-        return rendererWith(HeadlessExtractionProperties.of(true), publicIp, configure);
+        return rendererWith(HeadlessExtractionProperties.of(true), publicIp, ZstdDictionaries.none(), configure);
     }
 
     @Test
-    @DisplayName("PASS 렌더는 url 과 include_html=true 로 요청하고, html 과 final_url 기준 PageContent 를 돌려준다")
-    void passRenderReturnsPageContent() {
+    @DisplayName("OK 렌더는 url·include_html=true·compress=true 로 요청하고, html 과 final_url 기준 PageContent 를 돌려준다")
+    void okRenderReturnsPageContent() {
         String html = "<html><body>rendered</body></html>";
+        // X-Encoding 헤더 없는 plain JSON 응답 — compress 필드를 모르는 구버전 renderer 호환 경로이기도 하다.
         HttpHeadlessRenderer renderer = rendererWith(server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.url").value(link.value().toString()))
             // 파싱(구조화/LLM)은 우리가 하므로 렌더된 HTML 을 항상 요구한다.
             .andExpect(jsonPath("$.include_html").value(true))
+            // 서버간 전송량 절감을 위해 응답 zstd 압축을 요청한다.
+            .andExpect(jsonPath("$.compress").value(true))
             .andRespond(withSuccess(
-                "{\"verdict\":\"PASS\",\"source\":\"response-body\",\"proxied\":true,\"status\":200,"
+                "{\"verdict\":\"OK\",\"proxied\":true,\"status\":200,"
                     + "\"final_url\":\"https://kream.co.kr/products/6963?after-redirect\",\"html\":\"" + html.replace("\"", "\\\"") + "\"}",
                 MediaType.APPLICATION_JSON
             )));
@@ -79,7 +101,7 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("PARTIAL·EMPTY·미지의 verdict 도 html 이 있으면 진행한다 — 렌더 서비스 파서의 실패가 우리 파이프라인의 실패는 아니다")
+    @DisplayName("BLOCK 아닌 어떤 verdict 든(구계약 잔재 PARTIAL·미지 포함) html 이 있으면 진행한다 — verdict 로 HTML 을 버리면 recall 을 잃는다")
     void anyNonBlockVerdictWithHtmlProceeds() {
         for (String verdict : List.of("PARTIAL", "EMPTY", "SOMETHING_NEW")) {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
@@ -107,11 +129,11 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("html 이 없으면(브라우저 오류 ERROR·빈 렌더) 일시 실패(HEADLESS_UPSTREAM)다")
+    @DisplayName("html 이 없으면(브라우저 오류 ERROR·빈 렌더 EMPTY) 일시 실패(HEADLESS_UPSTREAM)다")
     void missingHtmlIsTransient() {
         for (String body : List.of(
             "{\"verdict\":\"ERROR\",\"error\":\"TimeoutError: boom\"}",
-            "{\"verdict\":\"PASS\"}",
+            "{\"verdict\":\"OK\"}",
             "{\"verdict\":\"EMPTY\",\"html\":\"\"}"
         )) {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
@@ -126,13 +148,82 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
+    @DisplayName("zstd 압축 응답(X-Encoding: zstd, 사전 없음)은 해제해 plain JSON 과 같은 계약으로 처리한다")
+    void zstdResponseIsDecompressed() {
+        byte[] packed = zstdCompress("{\"verdict\":\"OK\",\"html\":\"<html>compressed dom</html>\"}", null);
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
+
+        assertEquals("<html>compressed dom</html>", renderer.render(link).html());
+    }
+
+    @Test
+    @DisplayName("사전 압축 응답(X-Zstd-Dict: 사전ID)은 보유한 같은 사전으로 해제한다")
+    void zstdDictResponseUsesSharedDictionary() {
+        byte[] dict = "<html><head><meta charset=\"utf-8\"><title>공용 boilerplate</title>".getBytes(StandardCharsets.UTF_8);
+        byte[] packed = zstdCompress("{\"verdict\":\"OK\",\"html\":\"<html>dict compressed</html>\"}", dict);
+        HttpHeadlessRenderer renderer = rendererWith(
+            HeadlessExtractionProperties.of(true),
+            publicIp,
+            ZstdDictionaries.of("mall-v1.dict", dict),
+            server -> server
+                .expect(requestTo(BASE_URL + "/render"))
+                .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("mall-v1.dict")))
+        );
+
+        assertEquals("<html>dict compressed</html>", renderer.render(link).html());
+    }
+
+    @Test
+    @DisplayName("미보유 사전ID 는 일시 실패(HEADLESS_UPSTREAM)다 — 사전은 extractor 에 먼저 배포하는 롤아웃 규약 위반 신호")
+    void unknownZstdDictIsTransient() {
+        byte[] packed = zstdCompress("{\"verdict\":\"OK\",\"html\":\"<html>x</html>\"}", null);
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("future-v2.dict"))));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("zstd 해제 실패(손상 바이트)는 일시 실패(HEADLESS_UPSTREAM)다")
+    void corruptZstdIsTransient() {
+        byte[] garbage = {1, 2, 3, 4, 5};
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(garbage, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("JSON 이 아닌 응답 body 는 일시 실패(HEADLESS_UPSTREAM)다")
+    void nonJsonBodyIsTransient() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess("not-json", MediaType.TEXT_PLAIN)));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
     @DisplayName("내부망으로 resolve 되는 host 는 렌더 서비스 호출 전에 SSRF 로 차단된다 — 직행 경로의 방어선")
     void internalHostIsBlockedBeforeRender() {
         RequestScopedDnsResolver.HostResolver internalIp =
             host -> new InetAddress[] {InetAddress.getByName("169.254.169.254")};
         // 서버에 expect 를 하나도 걸지 않는다 — 가드가 먼저 던지므로 렌더 서비스로 요청이 나가면 안 된다.
         HttpHeadlessRenderer renderer =
-            rendererWith(HeadlessExtractionProperties.of(true), internalIp, server -> { });
+            rendererWith(HeadlessExtractionProperties.of(true), internalIp, ZstdDictionaries.none(), server -> { });
 
         PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link));
 
@@ -147,7 +238,7 @@ class HttpHeadlessRendererTest {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
                 .expect(requestTo(BASE_URL + "/render"))
                 .andRespond(withSuccess(
-                    "{\"verdict\":\"PASS\",\"html\":\"<html>ok</html>\"" + finalUrlField + "}",
+                    "{\"verdict\":\"OK\",\"html\":\"<html>ok</html>\"" + finalUrlField + "}",
                     MediaType.APPLICATION_JSON
                 )));
 
@@ -172,12 +263,12 @@ class HttpHeadlessRendererTest {
     @DisplayName("렌더된 HTML 은 maxHtmlChars 안전 상한으로 절단한다")
     void htmlIsCappedAtMaxChars() {
         HeadlessExtractionProperties small = new HeadlessExtractionProperties(
-            true, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(20), 10
+            true, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(20), 10, true, ""
         );
-        HttpHeadlessRenderer renderer = rendererWith(small, publicIp, server -> server
+        HttpHeadlessRenderer renderer = rendererWith(small, publicIp, ZstdDictionaries.none(), server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(
-                "{\"verdict\":\"PASS\",\"html\":\"0123456789ABCDEF\"}",
+                "{\"verdict\":\"OK\",\"html\":\"0123456789ABCDEF\"}",
                 MediaType.APPLICATION_JSON
             )));
 
@@ -194,5 +285,26 @@ class HttpHeadlessRendererTest {
         assertFalse(masked.contains("token=secret123"));
         assertTrue(masked.contains("<url>"));
         assertEquals(null, HttpHeadlessRenderer.maskUrls(null));
+    }
+
+    /** renderer 의 compress.py 와 대칭인 압축 — 사전을 주면 사전 압축, null 이면 plain zstd. */
+    private static byte[] zstdCompress(String json, byte[] dict) {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZstdOutputStream zstd = new ZstdOutputStream(bytes)) {
+            if (dict != null) {
+                zstd.setDict(dict);
+            }
+            zstd.write(json.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static HttpHeaders zstdHeaders(String dictId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Encoding", "zstd");
+        headers.set("X-Zstd-Dict", dictId);
+        return headers;
     }
 }

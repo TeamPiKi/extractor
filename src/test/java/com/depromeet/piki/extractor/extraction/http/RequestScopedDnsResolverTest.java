@@ -11,9 +11,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-// 요청 스코프 DNS 캐시가 "한 fetch 동안 host 당 실제 조회 1회"를 보장하는지 검증한다.
-// 이게 IP pin 의 핵심 계약 — 가드와 연결이 같은 IP 를 보게 해 DNS rebinding(두 조회가 다른 IP)을 닫는다.
-// (Java 람다는 mutable 지역변수를 캡처하지 못하므로 AtomicInteger 로 호출 횟수를 센다.)
+/**
+ * 요청 스코프 DNS 캐시가 "한 fetch 동안 host 당 실제 조회 1회"를 보장하는지 검증한다.
+ *
+ * <p>이게 IP pin 의 핵심 계약 — 가드와 연결이 같은 IP 를 보게 해 DNS rebinding(두 조회가 다른 IP)을 닫는다.
+ */
 class RequestScopedDnsResolverTest {
 
     @Test
@@ -87,7 +89,7 @@ class RequestScopedDnsResolverTest {
                 try {
                     start.await();
                     resolver.resolve("zigzag.kr");
-                    resolver.resolve("zigzag.kr"); // 같은 스레드 캐시라 1회
+                    resolver.resolve("zigzag.kr");
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -95,12 +97,11 @@ class RequestScopedDnsResolverTest {
             });
         }
         ready.await();
-        start.countDown(); // 동시 출발 강제
+        start.countDown();
         done.await();
         executor.shutdown();
 
-        // ThreadLocal 이라 스레드(요청)별 캐시가 분리 → 각 스레드가 1회씩 실제 조회 = threads 회.
-        // 캐시가 스레드 간 공유되면 1회로 떨어져 IP pin 의 요청 격리 계약이 깨진다.
+        // ThreadLocal 이라 요청별 캐시가 분리된다 — 스레드 간 공유되면 조회가 1회로 떨어져 IP pin 의 요청 격리가 깨진다.
         assertEquals(threads, calls.get());
     }
 }

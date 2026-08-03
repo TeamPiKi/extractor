@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 /**
  * 기본 Gemini 모델이 "다른 모델로 바뀌는" 회귀를 빌드 단계에서 차단하는 가드.
  *
- * 기본값의 단일 진실 원천은 GeminiProperties.DEFAULT_MODEL 한 곳뿐이다 (application.yml 에는 리터럴을 두지 않는다).
- * 따라서 이 상수만 고정하면 운영·테스트 양쪽의 기본 모델이 함께 고정된다.
+ * <p>기본값 정책의 정본은 {@link GeminiProperties#DEFAULT_MODEL} 의 Javadoc 이다 — 리터럴이 그 한 곳뿐이라
+ * 이 상수만 고정하면 운영·테스트 양쪽의 기본 모델이 함께 고정된다.
  */
 class GeminiPropertiesTest {
 
@@ -31,7 +31,6 @@ class GeminiPropertiesTest {
     @Test
     @DisplayName("기본 모델은 preview 가 아닌 GA 모델이어야 한다")
     void defaultModelIsGa() {
-        // preview 모델은 2 주 사전공지 후 deprecate 정책이라 운영 안정성상 기본값으로 두지 않는다.
         assertFalse(GeminiProperties.DEFAULT_MODEL.contains("preview"));
     }
 }

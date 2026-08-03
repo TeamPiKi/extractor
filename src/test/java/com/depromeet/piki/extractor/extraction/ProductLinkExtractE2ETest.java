@@ -22,15 +22,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import tools.jackson.databind.ObjectMapper;
 
-// 실제 Gemini API + 외부 쇼핑몰 fetch 를 호출하는 E2E 측정 테스트.
-// 비용·외부 의존성·quota 가 발생하므로 기본은 @Disabled. 측정이 필요할 때만 명시적으로 enable.
-// GEMINI_API_KEY 가 OS env 에 있다고 가정한다.
+/**
+ * 실제 Gemini API + 외부 쇼핑몰 fetch 를 호출하는 E2E 측정 테스트 — 검증이 아니라 latency·추출 결과를 눈으로
+ * 보기 위한 것이라 단언 대신 콘솔 리포트를 남긴다.
+ *
+ * <p>비용·외부 의존성·quota 가 발생하므로 기본은 비활성이고, 측정이 필요할 때만 수동으로 enable 한다.
+ * GEMINI_API_KEY 가 OS env 에 있다고 가정한다.
+ */
 @Disabled("실제 Gemini API 호출 + 외부 쇼핑몰 fetch. 측정 필요 시 수동으로 enable 후 실행.")
 class ProductLinkExtractE2ETest {
 
     private static final int ITERATIONS = 3;
 
-    // SSR / CSR / JSON-LD 보유 / 보유 안 함 등 다양한 패턴으로 섞었음.
+    /** SSR / CSR / JSON-LD 보유 / 보유 안 함 등 다양한 패턴으로 섞었음. */
     private static final List<String> URLS = List.of(
         "https://www.musinsa.com/products/1551840",
         "https://www.musinsa.com/products/6029415",
@@ -53,7 +57,6 @@ class ProductLinkExtractE2ETest {
     );
     private final GeminiHttpClient httpClient = new GeminiHttpClient(properties, objectMapper, ObservationRegistry.NOOP);
 
-    // fetch → 구조화 우선 → Gemini fallback 전체 경로를 측정한다 (오케스트레이터 그대로).
     private final DefaultProductLinkExtractor extractor = new DefaultProductLinkExtractor(
         pageFetcher,
         new HtmlSnapshotPipeline(

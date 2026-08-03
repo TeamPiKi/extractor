@@ -13,9 +13,12 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.databind.ObjectMapper;
 
-// 구조화 파서는 순수 컴포넌트라 Spring·DB 없이 HTML 문자열을 직접 넣어 분기를 망라한다.
-// 성공 = name+currentPrice 가 검증을 통과한 Extracted(snapshot), 실패 = 사유를 담은 Miss(→오케스트레이터가 LLM fallback).
-// 실패 케이스는 reason(no_data/missing_field/invalid_value)까지 단언해 reason 분류 로직도 함께 검증한다.
+/**
+ * 구조화 파서는 순수 컴포넌트라 Spring 없이 HTML 문자열을 직접 넣어 분기를 망라한다.
+ *
+ * <p>성공 = name+currentPrice 가 검증을 통과한 Extracted(snapshot), 실패 = 사유를 담은 Miss(→오케스트레이터가 LLM fallback).
+ * 실패 케이스는 reason 까지 단언해 사유 분류 로직도 함께 고정한다.
+ */
 class StructuredDataExtractorTest {
 
     private static final String URL = "https://shop.example.com/products/42";
@@ -141,7 +144,6 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("앞 Product 가 검증 미달이면 같은 배열의 뒤 완전한 Product 를 쓴다")
     void skipsIncompleteProductInArray() {
-        // 첫 Product 는 name 만(price 없음), 둘째 Product 는 name+price.
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
             """
             [{"@type":"Product","name":"요약"},{"@type":"Product","name":"상세상품","offers":{"price":"45000"}}]"""))));
@@ -291,7 +293,6 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("og 에 title 만 있고 가격이 없으면 missing_field 로 fallback 한다")
     void openGraphTitleOnlyFallsBackToMissingField() {
-        // og 태그는 있으나(no_data 아님) 가격이 없어 필수 필드 미달.
         String html =
             """
             <html><head><meta property="og:title" content="이름만"/></head><body></body></html>""";
@@ -403,7 +404,6 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("여러 Product 가 모두 실패하면 더 근접한 사유를 reason 으로 보고한다")
     void reportsClosestReasonAcrossProducts() {
-        // 첫 노드: price 없음(missing_field), 둘째 노드: price 음수(invalid_value). 성공 노드 없음 → 더 근접한 invalid_value.
         String html = jsonLd(
             """
             [{"@type":"Product","name":"미달"},{"@type":"Product","name":"음수","offers":{"price":"-100"}}]""");
@@ -413,8 +413,6 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("JSON-LD 는 부재하고 OG 가격이 파싱 불가면 cross-source worse 로 invalid_value 를 보고한다")
     void crossSourceWorsePicksInvalidValue() {
-        // JSON-LD Product 없음(no_data) + OG 는 title·가격텍스트가 있으나 파싱 불가(invalid_value).
-        // extract() 가 두 소스를 worse 로 합쳐 더 근접한 invalid_value 를 골라야 한다.
         String html = """
             <html><head>
             <meta property="og:title" content="오지상품"/>
@@ -426,7 +424,7 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("og 에 통화만 있고 다른 태그가 없으면 no_data 가 아니라 missing_field 로 fallback 한다")
     void currencyOnlyIsMissingField() {
-        // product:price:currency 만 단독으로 있는 페이지 — OG 태그가 존재하므로 no_data 가 아니라 필수 필드 미달(missing_field).
+        // OG 태그가 하나라도 있으면 "구조화 데이터 없음"이 아니라 "필수 필드 미달"로 가른다.
         String html =
             """
             <html><head><meta property="product:price:currency" content="KRW"/></head><body></body></html>""";
@@ -468,7 +466,7 @@ class StructuredDataExtractorTest {
     @Test
     @DisplayName("og_title 끝의 사이트명 꼬리표는 정확히 일치할 때도 제거한다")
     void stripsExactSiteNameSuffix() {
-        // 회귀: 기존 동작(정확 일치 "상품명 | 무신사") 유지. product:price:amount 로 가격이 있어 Extracted.
+        // 회귀 방지: 사이트명이 꼬리표와 정확히 일치하는 경우도 계속 제거해야 한다(기존 동작).
         String html = """
             <html><head>
             <meta property="og:title" content="멋진 셔츠 | 무신사"/>

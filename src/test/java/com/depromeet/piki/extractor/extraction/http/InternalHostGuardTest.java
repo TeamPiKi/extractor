@@ -9,10 +9,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-// (구 HttpPageFetcherSsrfGuardTest — 가드가 fetch·헤드리스 두 경로 공용 InternalHostGuard 로 추출되며 따라왔다.)
-// SSRF 가드의 internal-address 판정을 검증한다. redirect 가 매 hop 새 host 를 허용하고 브라우저 직행 경로도
-// 이 판정을 거치므로, 이 판정이 보안의 최종 방어선이다.
-// 특히 IPv6 ULA(fc00::/7)는 Java 의 isSiteLocalAddress 가 못 잡아 별도로 막는다.
+/**
+ * SSRF 가드의 internal-address 판정을 검증한다.
+ *
+ * <p>redirect 가 매 hop 새 host 를 허용하고 헤드리스 직행 경로도 이 판정을 거치므로, 이 판정이 보안의 최종 방어선이다.
+ * 특히 IPv6 ULA(fc00::/7)는 Java 의 {@code isSiteLocalAddress} 가 못 잡아 별도로 막는다.
+ */
 class InternalHostGuardTest {
 
     private final InternalHostGuard guard = new InternalHostGuard(new RequestScopedDnsResolver());

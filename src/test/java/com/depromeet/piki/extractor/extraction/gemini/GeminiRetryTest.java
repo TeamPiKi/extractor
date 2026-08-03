@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 
 class GeminiRetryTest {
 
-    // initial delay 를 0 으로 둬 Thread.sleep(0) 로 실제 대기 없이 재시도 횟수·분류만 검증한다.
+    /** initial delay 를 0 으로 둬 실제 대기 없이 재시도 횟수·분류만 검증한다. */
     private GeminiRetry retryWith(int maxAttempts) {
         return new GeminiRetry(new GeminiProperties.Retry(maxAttempts, 0));
     }
