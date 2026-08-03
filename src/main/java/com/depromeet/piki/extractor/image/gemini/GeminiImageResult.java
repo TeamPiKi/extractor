@@ -1,6 +1,5 @@
 package com.depromeet.piki.extractor.image.gemini;
 
-import com.depromeet.piki.extractor.domain.CurrencyCode;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.image.ImageExtraction;
 import com.depromeet.piki.extractor.image.domain.BoundingBox;
@@ -35,10 +34,10 @@ public record GeminiImageResult(
      * link 는 URL 이 없어 null, imageUrl 은 추출 시점엔 없어 null(업로드 후 오케스트레이터가 채운다),
      * category 는 현재 item 모델에 없어 버린다.
      *
-     * <p>주의: link 경로({@code GeminiExtractionResult})와 달리 {@code ProductSnapshot.fromExtracted} 를
-     * 거치지 않고 직접 생성한다 — 그쪽 정규화를 여기서 태우지 않는다.
+     * <p>link 경로({@code GeminiExtractionResult})와 같은 {@code fromExtracted} 를 태운다 — 같은 LLM 이 만든
+     * 값인데 경로에 따라 검증이 갈리면, 음수 가격·공백 이름 같은 값이 이미지 경로로만 호출자에게 새어 나간다.
      */
     private ProductSnapshot toProductSnapshot() {
-        return new ProductSnapshot(null, name, null, price, CurrencyCode.normalizeOrNull(currency));
+        return ProductSnapshot.fromExtracted(null, name, null, price, currency);
     }
 }
