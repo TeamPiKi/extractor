@@ -70,6 +70,16 @@ public final class PageFetchException extends ExtractionException {
     }
 
     /**
+     * fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸이라 파싱이 no-data 로 끝난 경우(EmptyShellDetector 판정,
+     * cause 가 원래의 파싱 실패). 정적 fetch 는 몇 번을 받아도 같은 셸이라 확정 실패이되, 실제 브라우저는 JS 를
+     * 실행해 콘텐츠를 그리므로 escalatable=true — "200 이지만 빈 셸" 이 기존 에스컬레이션 축(fetch 예외)의
+     * 사각이던 것을 닫는다(카카오 톡딜 실측).
+     */
+    public static PageFetchException emptyShell(Throwable cause) {
+        return new PageFetchException("해당 링크에서 정보를 가져오지 못했어요.", ExtractionErrorCode.EMPTY_SHELL, true, cause, true);
+    }
+
+    /**
      * redirect 가 hop 상한을 넘어 무한·체인 의심. 대상 페이지의 고정된 비정상 상태라 확정 실패.
      * redirect 기반 차단(챌린지로 튕김)일 수 있고 헤드리스는 redirect 를 네이티브로 다루므로 escalatable=true.
      */
