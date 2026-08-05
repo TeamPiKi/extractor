@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.GeminiHtmlExtractor;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,7 +34,7 @@ class GeminiHtmlExtractorE2ETest {
 
     private final JsonMapper objectMapper = JsonMapper.builder().build();
     private final GeminiProperties properties = new GeminiProperties(System.getenv("GEMINI_API_KEY"));
-    private final GeminiHttpClient httpClient = new GeminiHttpClient(properties, objectMapper, ObservationRegistry.NOOP);
+    private final GeminiHttpClient httpClient = new GeminiHttpClient(properties, objectMapper, ObservationRegistry.NOOP, new SimpleMeterRegistry());
     private final GeminiHtmlExtractor extractor = new GeminiHtmlExtractor(httpClient);
 
     @Test
@@ -45,7 +46,7 @@ class GeminiHtmlExtractorE2ETest {
 
         String html = fetchHtml(link);
         Document document = Jsoup.parse(html, link.value().toString());
-        ProductSnapshot product = extractor.extract(document, link);
+        ProductSnapshot product = extractor.extract(document, link, null);
 
         assertNotNull(product.name(), "Gemini 가 상품명을 추출했어야 한다");
     }

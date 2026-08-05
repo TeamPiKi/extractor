@@ -17,11 +17,11 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
 
     @Override
-    public ProductSnapshot extract(ProductLink link) {
+    public ProductSnapshot extract(ProductLink link, String model) {
         long fetchStart = System.nanoTime();
         PageContent page = pageFetcher.fetch(link);
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;
 
-        return htmlSnapshotPipeline.extract(page, "fetch=" + fetchMs + "ms");
+        return htmlSnapshotPipeline.extract(page, "fetch=" + fetchMs + "ms", model);
     }
 }

@@ -1,5 +1,7 @@
 package com.depromeet.piki.extractor.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -193,5 +195,42 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
                 .content(body("not-a-url")))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("INVALID_URL"));
+    }
+
+    /**
+     * 요청에 실린 모델이 진입점부터 LLM 호출까지 흘러야 한다. 중간 층(전략·파이프라인) 어디서든 끊기면 호출자가
+     * 백오피스에서 모델을 바꿔도 조용히 기본 모델로 도는데, 그건 응답만 봐서는 드러나지 않는다.
+     */
+    @Test
+    @DisplayName("요청에 실린 model 이 LLM 호출까지 전달된다")
+    void passesModelHint() throws Exception {
+        stubGeminiClient.reset();
+        stubGeminiClient.build = request -> new GeminiExtractionResult(
+            true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
+        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/9\", \"model\": \"gemini-from-backoffice\"}"))
+            .andExpect(status().isOk());
+
+        assertEquals("gemini-from-backoffice", stubGeminiClient.lastModel());
+    }
+
+    /** 모델을 안 보내는 구버전 호출자의 요청이 깨지지 않아야 한다 (계약의 additive 규칙). */
+    @Test
+    @DisplayName("model 을 안 보내면 지정 없음으로 흘러간다")
+    void allowsMissingModel() throws Exception {
+        stubGeminiClient.reset();
+        stubGeminiClient.build = request -> new GeminiExtractionResult(
+            true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
+        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://shop.example.com/p/10")))
+            .andExpect(status().isOk());
+
+        assertNull(stubGeminiClient.lastModel());
     }
 }

@@ -32,13 +32,16 @@ public class ExtractionController {
     ) {
         // 정상 흐름이면 호출자가 등록 경계에서 이미 걸렀다 — 여기 parse 는 다층 방어다.
         ProductLink link = ProductLink.parse(request.url());
+        // model 은 호출자가 백오피스에서 지정한 값이라 원장에 남긴다 — 추출 품질이 흔들릴 때 "그때 어느 모델이었나"를
+        // 되짚는 유일한 근거다(자유 문자열이라 메트릭 라벨로는 못 쓴다).
         log.info(
-            "extract request correlationId={} headlessFirst={} url={}",
+            "extract request correlationId={} headlessFirst={} model={} url={}",
             correlationId,
             request.headlessFirst(),
+            request.model(),
             link.safeLogString()
         );
-        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.headlessFirst());
+        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.headlessFirst(), request.model());
         return ExtractionResponse.from(snapshot);
     }
 
@@ -48,8 +51,14 @@ public class ExtractionController {
         @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId
     ) {
         // bucket 은 내부 식별자라 URL 과 달리 마스킹 없이 로그에 남겨도 안전하다.
-        log.info("image extract request correlationId={} bucket={} key={}", correlationId, request.bucket(), request.key());
-        ProductSnapshot snapshot = imageExtractionService.extract(request.bucket(), request.key());
+        log.info(
+            "image extract request correlationId={} bucket={} key={} model={}",
+            correlationId,
+            request.bucket(),
+            request.key(),
+            request.model()
+        );
+        ProductSnapshot snapshot = imageExtractionService.extract(request.bucket(), request.key(), request.model());
         return ExtractionResponse.from(snapshot);
     }
 }

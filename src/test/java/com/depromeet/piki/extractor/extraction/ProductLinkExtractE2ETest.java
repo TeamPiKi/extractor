@@ -55,7 +55,7 @@ class ProductLinkExtractE2ETest {
         "gemini-3-flash-preview",
         new GeminiProperties.Retry()
     );
-    private final GeminiHttpClient httpClient = new GeminiHttpClient(properties, objectMapper, ObservationRegistry.NOOP);
+    private final GeminiHttpClient httpClient = new GeminiHttpClient(properties, objectMapper, ObservationRegistry.NOOP, new SimpleMeterRegistry());
 
     private final DefaultProductLinkExtractor extractor = new DefaultProductLinkExtractor(
         pageFetcher,
@@ -77,7 +77,7 @@ class ProductLinkExtractE2ETest {
                 long started = System.nanoTime();
                 Outcome outcome;
                 try {
-                    ProductSnapshot product = extractor.extract(link);
+                    ProductSnapshot product = extractor.extract(link, null);
                     long ms = (System.nanoTime() - started) / 1_000_000;
                     outcome = new Outcome(rawUrl, i + 1, "OK", product.name(), product.currentPrice(), ms, null);
                 } catch (Exception e) {

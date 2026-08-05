@@ -24,4 +24,10 @@ public enum ExtractionErrorCode {
     /** 실제 브라우저로도 차단(verdict=BLOCK). 일시 챌린지(429 등)가 섞이므로 fail-safe 로 일시 취급한다. */
     HEADLESS_BLOCKED,
     HEADLESS_UPSTREAM,
+
+    /** 모델 프로브 전용: 그런 모델이 없다(404). 오타이거나 폐기돼 사라진 모델이다. */
+    MODEL_NOT_FOUND,
+
+    /** 모델 프로브 전용: 모델은 있으나 그 경로의 요청을 처리하지 못한다(요청 스키마 비호환·결제 티어 제한 등). */
+    MODEL_INCOMPATIBLE,
 }

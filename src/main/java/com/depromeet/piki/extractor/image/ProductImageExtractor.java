@@ -8,5 +8,9 @@ import com.depromeet.piki.extractor.image.domain.ProductImage;
  */
 public interface ProductImageExtractor {
 
-    ImageExtraction extract(ProductImage image);
+    /**
+     * @param model 호출자가 지정한 LLM 모델(없으면 null). 링크 경로와 축이 갈려 있어 이미지 지정만 여기로 온다 —
+     *     이미지는 보는 능력이 필요해 링크에 맞는 모델이 여기서 맞지 않을 수 있다.
+     */
+    ImageExtraction extract(ProductImage image, String model);
 }

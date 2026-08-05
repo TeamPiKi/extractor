@@ -26,10 +26,11 @@ public class GeminiHtmlExtractor {
 
     private final GeminiClient geminiClient;
 
-    public ProductSnapshot extract(Document document, ProductLink link) {
+    /** @param model 호출자가 지정한 모델(없으면 null). 판정·대체는 클라이언트가 지므로 여기서는 그대로 넘긴다. */
+    public ProductSnapshot extract(Document document, ProductLink link, String model) {
         String html = sanitize(document);
         GeminiExtractionRequest request = GeminiExtractionRequest.forHtmlExtraction(link.value(), html);
-        GeminiExtractionResult result = geminiClient.generateContent(request, GeminiExtractionResult.class);
+        GeminiExtractionResult result = geminiClient.generateContent(request, GeminiExtractionResult.class, model);
         return result.toProductSnapshot(link);
     }
 

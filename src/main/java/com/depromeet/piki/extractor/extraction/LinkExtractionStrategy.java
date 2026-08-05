@@ -18,5 +18,6 @@ public interface LinkExtractionStrategy {
     String PLAIN = "plainLinkExtractionStrategy";
     String HEADLESS = "headlessLinkExtractionStrategy";
 
-    ProductSnapshot extract(ProductLink link);
+    /** @param model 호출자가 지정한 LLM 모델(없으면 null). 전략은 해석하지 않고 파이프라인까지 흘려보낸다. */
+    ProductSnapshot extract(ProductLink link, String model);
 }

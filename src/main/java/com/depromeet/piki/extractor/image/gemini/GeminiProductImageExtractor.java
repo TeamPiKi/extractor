@@ -15,9 +15,9 @@ public class GeminiProductImageExtractor implements ProductImageExtractor {
     private final GeminiClient geminiClient;
 
     @Override
-    public ImageExtraction extract(ProductImage image) {
+    public ImageExtraction extract(ProductImage image, String model) {
         String base64Image = Base64.getEncoder().encodeToString(image.bytes());
         GeminiImageRequest request = GeminiImageRequest.forImageAnalysis(base64Image, image.mimeType());
-        return geminiClient.generateContent(request, GeminiImageResult.class).toImageExtraction();
+        return geminiClient.generateContent(request, GeminiImageResult.class, model).toImageExtraction();
     }
 }

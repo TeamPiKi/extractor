@@ -25,14 +25,15 @@ public class ImageExtractionService {
     private final ImageCropper imageCropper;
     private final ImageStorage imageStorage;
 
-    public ProductSnapshot extract(String bucket, String key) {
+    /** @param model 호출자가 지정한 LLM 모델(없으면 null). 해석·대체는 Gemini 클라이언트가 지므로 그대로 넘긴다. */
+    public ProductSnapshot extract(String bucket, String key, String model) {
         StoredImage stored = imageStorage.download(bucket, key);
         // download 가 S3 content-type 메타를 못 주면(메타 유실 등) 등록 때 key 에 박은 확장자로 mimeType 을 복원한다 —
         // 멀쩡한 raw 가 메타 결함만으로 비복구 실패하는 것을 막는다(key 확장자가 우리가 박은 신뢰값, content-type 은 fallback).
         String mimeType = mimeTypeFromKeyOrStored(key, stored);
         ProductImage image = ProductImage.of(stored.bytes(), mimeType);
 
-        ImageExtraction extraction = productImageExtractor.extract(image);
+        ImageExtraction extraction = productImageExtractor.extract(image, model);
 
         // 크롭이 불가능해도 원본을 올린다 — 호출자의 READY 불변식이 imageUrl 을 요구한다.
         byte[] resultBytes = croppedOrOriginal(image, extraction);

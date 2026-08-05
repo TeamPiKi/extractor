@@ -39,10 +39,10 @@ class HtmlSnapshotPipelineMetricTest {
         String structuredHtml = "<html><head><script type=\"application/ld+json\">"
             + "{\"@type\":\"Product\",\"name\":\"직접파싱\",\"offers\":{\"price\":\"1000\"}}"
             + "</script></head><body></body></html>";
-        pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms");
+        pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms", null);
 
         stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠", 2_000, null, null);
-        pipeline.extract(PageContent.of(link, "<html><body>구조화 없음</body></html>"), "fetch=0ms");
+        pipeline.extract(PageContent.of(link, "<html><body>구조화 없음</body></html>"), "fetch=0ms", null);
 
         String scrape = registry.scrape();
         List<String> lines = scrape.lines().filter(l -> l.startsWith("product_extract_total{")).toList();
