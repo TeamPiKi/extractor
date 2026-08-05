@@ -35,6 +35,13 @@ class EmptyShellDetectorTest {
     }
 
     @Test
+    @DisplayName("가시 텍스트 299자는 빈 셸이고 300자는 아니다 (경계)")
+    void thresholdBoundary() {
+        assertTrue(EmptyShellDetector.isEmptyShell("<body>" + "a".repeat(299) + "</body>"));
+        assertFalse(EmptyShellDetector.isEmptyShell("<body>" + "a".repeat(300) + "</body>"));
+    }
+
+    @Test
     @DisplayName("본문 텍스트가 충분한 페이지는 빈 셸이 아니다")
     void contentRichPageIsNotEmptyShell() {
         // 상품이 아닌 콘텐츠 페이지(블로그·기사 등) — no-data 라도 셸이 아니므로 재분류 대상이 아니다.
