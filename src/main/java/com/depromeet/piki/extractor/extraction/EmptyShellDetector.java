@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import java.util.Objects;
 import org.jsoup.Jsoup;
 
 /**
@@ -23,6 +24,7 @@ final class EmptyShellDetector {
     }
 
     static boolean isEmptyShell(String html) {
+        Objects.requireNonNull(html, "html");
         return Jsoup.parse(html).body().text().length() < MIN_VISIBLE_TEXT_CHARS;
     }
 }
