@@ -13,6 +13,8 @@ public enum ExtractionErrorCode {
     TOO_MANY_REDIRECTS,
     MALFORMED_REDIRECT,
     PERMANENT_UPSTREAM,
+    /** fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸 — 파싱 no-data 를 escalatable 로 재분류한 것(EmptyShellDetector). */
+    EMPTY_SHELL,
     LLM_INVALID_RESPONSE,
     INVALID_URL,
     UPSTREAM_ERROR,

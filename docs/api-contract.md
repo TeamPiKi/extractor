@@ -69,6 +69,7 @@
 | `TOO_MANY_REDIRECTS` | `PageFetchException.tooManyRedirects` |
 | `MALFORMED_REDIRECT` | `PageFetchException.malformedRedirect` |
 | `PERMANENT_UPSTREAM` | `PageFetchException.permanentUpstreamError` — 대상 500/501 (봇 차단 추정) |
+| `EMPTY_SHELL` | `PageFetchException.emptyShell` — fetch 는 2xx 지만 본문이 데이터 없는 CSR 셸(파싱 no-data 를 재분류). 헤드리스 에스컬레이션 대상이라, 헤드리스가 켜진 구성에선 헤드리스 결과가 대신 응답된다 |
 | `LLM_INVALID_RESPONSE` | `GeminiApiException` clientError/parseError/noTextPart — 재시도 무의미한 LLM 실패 |
 | `INVALID_URL` | url 형식·스킴 위반. 정상 흐름에선 호출자가 동기 검증해 도달하지 않는다(방어) |
 

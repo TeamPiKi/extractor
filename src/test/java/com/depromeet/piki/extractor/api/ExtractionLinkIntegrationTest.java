@@ -133,7 +133,9 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     @DisplayName("LLM 이 상품 페이지가 아니라고 판정하면 422 NOT_PRODUCT_PAGE 를 반환한다")
     void notProductPage() throws Exception {
         stubGeminiClient.reset();
-        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>블로그 글</body></html>");
+        // 본문 텍스트가 충분한 진짜 콘텐츠 페이지 — CSR 셸 재분류(EMPTY_SHELL)에 걸리지 않고 no-data 원형이 나간다.
+        stubPageFetcher.build = link ->
+            PageContent.of(link, "<html><body><article>" + "상품이 아닌 블로그 글의 충분히 긴 본문. ".repeat(20) + "</article></body></html>");
         stubGeminiClient.build = request -> new GeminiExtractionResult(false, null, null, null, null);
 
         mockMvc().perform(post("/internal/extractions/link")
@@ -141,6 +143,23 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
                 .content(body("https://blog.example.com/post/3")))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("NOT_PRODUCT_PAGE"));
+    }
+
+    @Test
+    @DisplayName("파싱 no-data 인데 본문이 CSR 셸이면 422 EMPTY_SHELL 로 재분류된다 (헤드리스 꺼진 구성의 표면 계약)")
+    void emptyShellReclassified() throws Exception {
+        stubGeminiClient.reset();
+        // 카카오 톡딜 store.kakao.com 실측 축약형 — script 뿐인 SPA 셸. 헤드리스가 켜진 구성이면 escalatable 이라
+        // 헤드리스 결과가 대신 응답되고, 꺼진 기본 구성(이 컨텍스트)에선 EMPTY_SHELL 이 그대로 표면화된다.
+        stubPageFetcher.build = link ->
+            PageContent.of(link, "<html><head><script src=\"/app.js\"></script></head><body><div id=\"app\"></div></body></html>");
+        stubGeminiClient.build = request -> new GeminiExtractionResult(false, null, null, null, null);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://store.kakao.com/kgcmall/products/445653929")))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("EMPTY_SHELL"));
     }
 
     @Test

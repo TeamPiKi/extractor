@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction.http;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
+import java.util.Objects;
 
 /**
  * fetch 실패의 계약 예외. permanent(확정/일시) 축에 더해 escalatable(헤드리스 에스컬레이션 대상 여부, #657) 축을
@@ -67,6 +68,18 @@ public final class PageFetchException extends ExtractionException {
     /** 응답 body 가 빈 경우. 일시적일 수 있어 일시 실패이되, 봇이 빈 응답으로 막는 것일 수도 있어 escalatable=true. */
     public static PageFetchException emptyBody() {
         return new PageFetchException("해당 링크에서 정보를 가져오지 못했어요.", ExtractionErrorCode.UPSTREAM_ERROR, false, null, true);
+    }
+
+    /**
+     * fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸이라 파싱이 no-data 로 끝난 경우(EmptyShellDetector 판정,
+     * cause 가 원래의 파싱 실패). 정적 fetch 는 몇 번을 받아도 같은 셸이라 확정 실패이되, 실제 브라우저는 JS 를
+     * 실행해 콘텐츠를 그리므로 escalatable=true — "200 이지만 빈 셸" 이 기존 에스컬레이션 축(fetch 예외)의
+     * 사각이던 것을 닫는다(카카오 톡딜 실측).
+     */
+    public static PageFetchException emptyShell(Throwable cause) {
+        // 다른 팩토리와 달리 cause 가 필수다 — 재분류 예외라 원래의 파싱 실패 없이 만들어질 수 없다.
+        Objects.requireNonNull(cause, "cause");
+        return new PageFetchException("해당 링크에서 정보를 가져오지 못했어요.", ExtractionErrorCode.EMPTY_SHELL, true, cause, true);
     }
 
     /**
