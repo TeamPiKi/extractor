@@ -44,26 +44,26 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private final HeadlessExtractionProperties headlessProperties;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, boolean headlessFirst) {
+    public ProductSnapshot extract(ProductLink link, boolean headlessFirst, String model) {
         // 호출자 정책이 이 서비스의 스위치를 앞설 수는 없다 — 스위치가 꺼져 있으면 headlessFirst 힌트도 무시한다.
         if (!headlessProperties.enabled()) {
-            return plain.extract(link);
+            return plain.extract(link, model);
         }
 
         // 호출자(core)의 브라우저 직행 정책(DB, 백오피스에서 배포 없이 변경) — plain 이 항상 차단되는 host 의
         // 느린-실패(fetch 타임아웃을 다 기다린 뒤 에스컬레이트) 낭비를 없앤다. 직행 실패는 plain 으로 되돌리지
         // 않고 그대로 전파한다: 재시도는 호출자 outbox recover 축이, 정책 오지정은 백오피스 롤백이 진다.
         if (headlessFirst) {
-            return extractHeadlessFirst(link);
+            return extractHeadlessFirst(link, model);
         }
 
         try {
-            return plain.extract(link);
+            return plain.extract(link, model);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
             }
-            return escalateToHeadless(link, e);
+            return escalateToHeadless(link, e, model);
         }
     }
 
@@ -72,10 +72,10 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      * 커버해서, 직행 볼륨·성공률이 시계열에 없으면 호출자의 직행 정책 오지정(실제로는 plain 이 통하는 host)이
      * 로그 grep 전까지 조용히 지속된다(메트릭=추세, 로그=원장).
      */
-    private ProductSnapshot extractHeadlessFirst(ProductLink link) {
+    private ProductSnapshot extractHeadlessFirst(ProductLink link, String model) {
         log.info("extract route=headless_first url={}", link.safeLogString());
         try {
-            ProductSnapshot snapshot = headless.extract(link);
+            ProductSnapshot snapshot = headless.extract(link, model);
             headlessFirstCounter(OUTCOME_SUCCESS).increment();
             return snapshot;
         } catch (Throwable failure) {
@@ -102,11 +102,11 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      *
      * <p>라벨 키 집합 {@code outcome, category} 는 이 카운터의 모든 발행 경로에서 동일해야 한다.
      */
-    private ProductSnapshot escalateToHeadless(ProductLink link, RuntimeException plainFailure) {
+    private ProductSnapshot escalateToHeadless(ProductLink link, RuntimeException plainFailure, String model) {
         String category = categoryOf(plainFailure);
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
-            ProductSnapshot snapshot = headless.extract(link);
+            ProductSnapshot snapshot = headless.extract(link, model);
             escalationCounter(OUTCOME_SUCCESS, category).increment();
             return snapshot;
         } catch (Throwable headlessFailure) {

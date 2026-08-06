@@ -54,7 +54,7 @@ class DefaultProductLinkExtractorTest {
 
         PageFetchException e = assertThrows(
             PageFetchException.class,
-            () -> extractorFetching(SHELL_HTML).extract(link)
+            () -> extractorFetching(SHELL_HTML).extract(link, null)
         );
 
         assertEquals(ExtractionErrorCode.EMPTY_SHELL, e.code());
@@ -71,7 +71,7 @@ class DefaultProductLinkExtractorTest {
 
         ProductSnapshotException e = assertThrows(
             ProductSnapshotException.class,
-            () -> extractorFetching(CONTENT_HTML).extract(link)
+            () -> extractorFetching(CONTENT_HTML).extract(link, null)
         );
 
         assertEquals(ExtractionErrorCode.NOT_PRODUCT_PAGE, e.code());
@@ -84,6 +84,6 @@ class DefaultProductLinkExtractorTest {
             throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
         };
 
-        assertThrows(GeminiApiException.class, () -> extractorFetching(SHELL_HTML).extract(link));
+        assertThrows(GeminiApiException.class, () -> extractorFetching(SHELL_HTML).extract(link, null));
     }
 }

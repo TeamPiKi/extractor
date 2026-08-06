@@ -40,8 +40,10 @@ public class HtmlSnapshotPipeline {
      * @param timing 호출 전략이 채우는 로그 조각({@code "fetch=123ms"} / {@code "render=5534ms"}) — HTML 획득 비용을
      *     extract 원장 로그 한 줄에 함께 남긴다. 전략 무관 파이프라인이 유일하게 전략을 아는 지점이라 해석하지 않는
      *     문자열로만 받는다.
+     * @param model 호출자가 지정한 LLM 모델(없으면 null). 구조화 파싱으로 끝나면 쓰이지 않고, LLM fallback 으로
+     *     내려갈 때만 소비된다.
      */
-    public ProductSnapshot extract(PageContent page, String timing) {
+    public ProductSnapshot extract(PageContent page, String timing, String model) {
         // 한 번만 파싱해 구조화 파서와 Gemini fallback 이 같은 Document 를 공유한다(파싱·ld+json 식별 중복 제거).
         // baseUri 는 html 의 출처인 최종 URL 기준 — redirect 를 따라갔으면 원본 link 와 host 가 다를 수 있다.
         Document document = Jsoup.parse(page.html(), page.finalUrl().value().toString());
@@ -70,7 +72,7 @@ public class HtmlSnapshotPipeline {
             }
             case StructuredExtraction.Miss miss -> {
                 long llmStart = System.nanoTime();
-                ProductSnapshot snapshot = geminiHtmlExtractor.extract(document, page.link());
+                ProductSnapshot snapshot = geminiHtmlExtractor.extract(document, page.link(), model);
                 long llmMs = (System.nanoTime() - llmStart) / 1_000_000;
                 log.info(
                     "extract via=llm reason={} {} llm={}ms html={}chars url={}",

@@ -33,7 +33,7 @@ class FallbackProductLinkExtractorTest {
         }
 
         @Override
-        public ProductSnapshot extract(ProductLink link) {
+        public ProductSnapshot extract(ProductLink link, String model) {
             calls++;
             return fn.apply(link);
         }
@@ -65,7 +65,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, false);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -80,7 +80,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false));
+        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 
@@ -94,7 +94,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
@@ -114,7 +114,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false);
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -134,7 +134,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false));
+        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
         assertEquals(
             1.0,
             registry.counter("product.extract.escalation", "outcome", "failed", "category", "FETCH_CLIENT_ERROR").count()
@@ -154,7 +154,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false));
+        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
         assertEquals(1, plain.calls);
         assertEquals(1, headless.calls);
         assertEquals(
@@ -173,7 +173,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true, null);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(0, plain.calls);
@@ -192,7 +192,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, true));
+        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, true, null));
         assertEquals(0, plain.calls);
         assertEquals(1, headless.calls);
         assertEquals(1.0, registry.counter("product.extract.headless_first", "outcome", "failed").count());
@@ -207,7 +207,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, true);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, true, null);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -223,7 +223,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 }

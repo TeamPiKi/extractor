@@ -28,11 +28,13 @@
 요청:
 
 ```json
-{ "url": "https://www.musinsa.com/products/12345", "headlessFirst": false }
+{ "url": "https://www.musinsa.com/products/12345", "headlessFirst": false, "model": "gemini-3.1-flash-lite" }
 ```
 
 - `url` (필수): https 스킴의 상품 페이지 URL. 형식·스킴·미지원 플랫폼의 동기 검증은 호출자(core 등록 경계)가 이미 끝냈다는 전제이나, Extractor 도 자기 경계에서 방어 검증한다(다층 방어).
 - `headlessFirst` (선택, 기본 false — additive, 이관 7단계): 호출자의 플랫폼 라우팅 정책(`HEADLESS_FIRST`, DB·백오피스 동적 설정) 힌트. true 면 plain(정적 fetch)을 건너뛰고 처음부터 헤드리스 브라우저로 추출한다. 정책의 단일 진실은 호출자 DB 에 있고 무상태인 Extractor 는 요청 단위로만 받는다. Extractor 의 `product.extract.headless.enabled` 가 꺼져 있으면 무시된다(스위치가 힌트보다 우선).
+- `model` (선택, additive — core#875): 이 요청의 LLM 추출에 쓸 모델. headlessFirst 와 같은 성질이다 — 정책의 단일 진실은 호출자 DB(백오피스)에 있고 Extractor 는 요청 단위로만 받는다. **요청 단위로 받는 이유**: Extractor 박스 한 대를 여러 환경이 공유하므로, 모델을 Extractor 환경변수로 잡으면 dev 에서 바꾼 것이 prod 파싱까지 덮는다. 생략·null·빈 문자열이면 Extractor 의 기본 모델(`GeminiProperties.DEFAULT_MODEL`)을 쓴다 — 구버전 호출자의 요청이 그대로 동작하므로 배포 순서 무관.
+- **지정 모델이 404 면 기본 모델로 대체하고 추출을 이어간다.** 등록 당시 유효했던 모델이 폐기돼 사라지는 경우가 있고, 그때 파싱 전체가 죽는 것보다 기본 모델로 이어가는 편이 낫다(가용성 우선). 대체가 일어나도 응답 모양은 같으며, 발생 사실은 Extractor 의 warn 로그와 `gemini.model.fallback` 카운터에만 남는다. **400·5xx·timeout 은 대체하지 않는다** — 400 은 요청 body 쪽 결함일 수 있어 대체로 덮으면 버그가 묻히고, 나머지는 모델을 바꾼다고 풀리는 실패가 아니다.
 - 헤더 `X-Correlation-Id` (선택): 호출자의 item_snapshot id. 로그·trace 상관용이며 동작에 영향 없다.
 
 성공 200:
@@ -84,11 +86,12 @@
 요청:
 
 ```json
-{ "bucket": "dev-piki-images-996918499382", "key": "items/raw/0f3a....png" }
+{ "bucket": "dev-piki-images-996918499382", "key": "items/raw/0f3a....png", "model": "gemini-3.1-flash-lite" }
 ```
 
 - **`bucket` 을 요청이 준다** — Extractor 는 dev/staging/prod 세 환경 트래픽을 받고 각 환경의 이미지 버킷이 다르다(dev-piki-images-* · staging-piki-images-* · piki-images-*). 버킷을 고정 config 로 두지 않고 요청별로 받아 버킷 무관하게 동작한다. IAM 은 `*piki-images-996918499382/items/*` 와일드카드로 세 버킷을 덮는다.
 - `key`: raw 원본 object key(등록 시 본 서버가 `items/raw/{uuid}.{ext}` 로 durable 적재한 것).
+- `model` (선택, additive — core#875): link 와 같은 규약이되 **축이 갈린다** — 이미지 경로에는 이미지용 지정만 온다. 링크는 텍스트와 JSON 스키마를 다루고 이미지는 보는 능력이 필요해, 한쪽에 맞는 모델이 다른 쪽에 맞지 않을 수 있기 때문이다. 대체 규칙(404 만 기본 모델로)도 link 와 같다.
 
 성공 200 (link 경로와 **동일한 필드 모양**):
 
@@ -108,6 +111,41 @@
 
 422 code 추가분: `IMAGE_UNSUPPORTED`(빈 이미지·미지원 MIME). 이미지에서 상품 식별 실패는 link 와 같은 `UNTRUSTWORTHY_VALUE` 를 재사용한다.
 일시 실패 추가분: `STORAGE_ERROR` (S3 read/write 실패).
+
+### POST `/internal/models/probe` — 모델 유효성 프로브 (core#875)
+
+호출자가 백오피스에서 모델을 저장하기 전에 "이 모델이 이 경로에서 실제로 동작하는가"를 묻는다. 저장 게이트가 이 응답으로 갈린다.
+
+요청:
+
+```json
+{ "model": "gemini-3.1-flash-lite", "target": "LINK" }
+```
+
+- `model` (필수): 확인할 모델 이름. 아는 모델 목록을 Extractor 코드에 박지 않는 것이 이 엔드포인트의 존재 이유다 — allowlist 를 박으면 새 모델이 나올 때마다 Extractor 배포가 필요해져 "배포 없이 바꾼다"는 목적이 무너진다. 유효성은 런타임 실측이 판정한다.
+- `target` (필수): `LINK` 또는 `IMAGE`. 두 경로는 요청 wire 가 달라(link 는 `responseJsonSchema` 에 소문자 type, image 는 `responseSchema` 에 대문자 enum type 과 thinkingConfig) 한쪽에서 통과한 모델이 다른 쪽에서 400 일 수 있다.
+
+**판정은 메타 조회가 아니라 그 경로의 실제 generateContent 호출이다.** 모델 존재만 확인하면 요청 스키마 비호환(400)을 못 거르는데, 400 은 추출 경로에서 대체 대상이 아니라 곧 파싱 전건 실패다. 게이트가 정작 막아야 할 실패를 놓치게 된다. 최소 입력을 쓰되 wire 모양은 운영과 같다.
+
+**대체 없이 지정 모델만 친다.** 추출 경로처럼 대체하면 없는 모델을 넣어도 기본 모델이 대신 성공해 프로브가 통과하고, 저장 게이트가 무력화된다.
+
+응답:
+
+| status | 의미 | 호출자의 처리 |
+|---|---|---|
+| `200` (body 없음) | 이 경로에서 동작하는 모델 | 저장 허용 |
+| `422` + code | 확정 거절 | 저장 거부 + 사유 표시 |
+| `400` | 필수 필드 누락·모르는 target | 호출자 구현 버그. 재시도해도 같다 |
+| 그 외(502) | 외부 사정으로 확인 불가 | 저장 거부 + 재시도 안내 |
+
+422 code:
+
+| code | 의미 |
+|---|---|
+| `MODEL_NOT_FOUND` | 그런 모델이 없다(Gemini 404). 오타이거나 폐기돼 사라진 모델 |
+| `MODEL_INCOMPATIBLE` | 모델은 있으나 그 경로의 요청을 처리하지 못한다. 요청 스키마 비호환(400)·결제 티어 제한, 그리고 200 을 주면서 응답 스키마를 못 맞춘 경우까지 포함 |
+
+**일시 실패를 거절로 바꾸지 않는다.** 5xx·429·타임아웃을 422 로 내보내면 외부가 잠깐 흔들린 사이에 멀쩡한 모델이 "쓸 수 없는 모델"로 판정돼 저장이 막힌다.
 
 ## 3. 타임아웃 예산
 

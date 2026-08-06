@@ -19,13 +19,13 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
 
     @Override
-    public ProductSnapshot extract(ProductLink link) {
+    public ProductSnapshot extract(ProductLink link, String model) {
         long fetchStart = System.nanoTime();
         PageContent page = pageFetcher.fetch(link);
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;
 
         try {
-            return htmlSnapshotPipeline.extract(page, "fetch=" + fetchMs + "ms");
+            return htmlSnapshotPipeline.extract(page, "fetch=" + fetchMs + "ms", model);
         } catch (ProductSnapshotException e) {
             // 파싱 no-data 인데 본문이 CSR 셸이면 원인은 "정적 fetch 로는 콘텐츠를 얻을 수 없음"이다 — fetch 차단과
             // 같은 축으로 재분류해(escalatable) 헤드리스가 이어받게 한다. 본문 텍스트가 충분한 페이지의 no-data 는

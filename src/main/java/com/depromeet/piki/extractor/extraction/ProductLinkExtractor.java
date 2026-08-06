@@ -11,5 +11,10 @@ public interface ProductLinkExtractor {
      *     백오피스)에 있고, 무상태인 이 서비스는 요청 단위 힌트로만 받는다. true 면 plain(정적 fetch)을 건너뛰고
      *     처음부터 헤드리스로 추출한다 — 단 이 서비스의 헤드리스 스위치가 꺼져 있으면 무시된다.
      */
-    ProductSnapshot extract(ProductLink link, boolean headlessFirst);
+    /**
+     * @param model 호출자가 지정한 LLM 모델 힌트. headlessFirst 와 같은 성질이다 — 정책의 단일 진실은 호출자 쪽
+     *     동적 설정(DB, 백오피스)이고 무상태인 이 서비스는 요청 단위로만 받는다. null 이면 기본 모델을 쓰며,
+     *     지정 모델이 사라졌으면 기본 모델로 대체된다.
+     */
+    ProductSnapshot extract(ProductLink link, boolean headlessFirst, String model);
 }
