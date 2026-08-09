@@ -53,20 +53,20 @@ class LlmInputGateTest {
     }
 
     @Test
-    @DisplayName("가시 텍스트 49자는 발동하고 50자는 통과한다 (경계)")
+    @DisplayName("공백뿐인 body 는 발동하고 가시 텍스트 한 글자라도 있으면 통과한다 (경계 - 길이 임계 없음)")
     void thresholdBoundary() {
-        assertTrue(LlmInputGate.hasNothingForLlm(Jsoup.parse("<body>" + "a".repeat(49) + "</body>")));
-        assertFalse(LlmInputGate.hasNothingForLlm(Jsoup.parse("<body>" + "a".repeat(50) + "</body>")));
+        // jsoup text() 는 공백을 정규화하므로 공백만 있는 body 는 "전혀 없음"이다.
+        assertTrue(LlmInputGate.hasNothingForLlm(Jsoup.parse("<body>   </body>")));
+        assertFalse(LlmInputGate.hasNothingForLlm(Jsoup.parse("<body>a</body>")));
     }
 
     @Test
-    @DisplayName("가시 텍스트만으로 이뤄진 미니멀 상품 페이지는 통과한다 - 오탐이 확정 실패로 굳는 축이라 보수적으로")
+    @DisplayName("가시 텍스트만으로 이뤄진 미니멀 상품 페이지는 통과한다 - 오탐이 확정 실패로 굳는 축이라 사실 판정만")
     void minimalVisibleTextPagePassesGate() {
-        // 데이터가 script 가 아니라 가시 텍스트에 있는 미니멀 페이지(가시 텍스트 100자 안팎) —
-        // EmptyShellDetector(300자) 기준으로는 셸이지만, LLM 은 이 텍스트를 읽을 수 있으므로 게이트가 막으면 안 된다.
+        // 데이터가 script 가 아니라 가시 텍스트에 있는 미니멀 페이지 — EmptyShellDetector(300자) 기준으로는
+        // 셸이지만, LLM 은 이 텍스트를 읽을 수 있으므로 게이트가 막으면 안 된다.
         String minimal = "<html><body><h1>알레 여리핏 골지 살안타 라운드 가디건</h1>"
-            + "<p>부드러운 골지 원단으로 여리한 실루엣을 살린 라운드넥 가디건입니다. 4가지 컬러.</p>"
-            + "<p>15,410원</p><button>구매하기</button><footer>교환·환불 안내 | 배송 안내</footer></body></html>";
+            + "<p>15,410원</p><button>구매하기</button><footer>교환·환불 안내</footer></body></html>";
 
         assertFalse(LlmInputGate.hasNothingForLlm(Jsoup.parse(minimal)));
     }
