@@ -5,6 +5,7 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -126,6 +127,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      * {@link #outcomeOf(ProductSnapshot)} 참조.
      */
     private ProductSnapshot escalateToHeadless(ProductLink link, String category, String model) {
+        Objects.requireNonNull(category, "category");
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, model);
