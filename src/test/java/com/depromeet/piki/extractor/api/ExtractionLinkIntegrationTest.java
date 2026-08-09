@@ -36,6 +36,11 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         </script></head><body></body></html>
         """;
 
+    /** 구조화 데이터는 없지만 가시 텍스트가 충분한 페이지 — LLM 게이트(LlmInputGate)를 통과해 fallback 이 돈다. */
+    private static final String NO_STRUCTURED_HTML = "<html><body>"
+        + "구조화 데이터 없이 가시 텍스트로만 상품을 설명하는 상세 페이지 본문. ".repeat(3)
+        + "</body></html>";
+
     @Autowired
     private WebApplicationContext context;
 
@@ -81,7 +86,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     @DisplayName("구조화 데이터가 없으면 LLM fallback 으로 추출해 200 을 반환한다")
     void llmFallbackSuccess() throws Exception {
         stubGeminiClient.reset();
-        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+        stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
         stubGeminiClient.build = request ->
             new GeminiExtractionResult(true, "엘엘엠 상품", 12000, "KRW", "https://cdn.example.com/llm.png");
 
@@ -146,27 +151,30 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("파싱 no-data 인데 본문이 CSR 셸이면 422 EMPTY_SHELL 로 재분류된다 (헤드리스 꺼진 구성의 표면 계약)")
+    @DisplayName("CSR 셸은 LLM 호출 없이 422 EMPTY_SHELL 로 재분류된다 (헤드리스 꺼진 구성의 표면 계약)")
     void emptyShellReclassified() throws Exception {
         stubGeminiClient.reset();
-        // 카카오 톡딜 store.kakao.com 실측 축약형 — script 뿐인 SPA 셸. 헤드리스가 켜진 구성이면 escalatable 이라
-        // 헤드리스 결과가 대신 응답되고, 꺼진 기본 구성(이 컨텍스트)에선 EMPTY_SHELL 이 그대로 표면화된다.
+        // 카카오 톡딜 store.kakao.com 실측 축약형 — script 뿐인 SPA 셸. 게이트(LlmInputGate)가 LLM 호출 전에
+        // 끊고, plain 전략이 escalatable 로 재분류한다. 헤드리스가 켜진 구성이면 헤드리스 결과가 대신 응답되고,
+        // 꺼진 기본 구성(이 컨텍스트)에선 EMPTY_SHELL 이 그대로 표면화된다.
         stubPageFetcher.build = link ->
             PageContent.of(link, "<html><head><script src=\"/app.js\"></script></head><body><div id=\"app\"></div></body></html>");
-        stubGeminiClient.build = request -> new GeminiExtractionResult(false, null, null, null, null);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://store.kakao.com/kgcmall/products/445653929")))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("EMPTY_SHELL"));
+
+        // 빈 입력의 LLM 은 환각을 만든다 — 셸에서 LLM 이 불리지 않는 것 자체가 계약이다.
+        assertEquals(0, stubGeminiClient.invocations());
     }
 
     @Test
     @DisplayName("추출 결과가 READY 필수 필드(name·price·imageUrl)를 못 채우면 422 UNTRUSTWORTHY_VALUE 를 반환한다")
     void incompleteExtraction() throws Exception {
         stubGeminiClient.reset();
-        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+        stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
         stubGeminiClient.build = request -> new GeminiExtractionResult(true, "이미지 없는 상품", 5000, "KRW", null);
 
         mockMvc().perform(post("/internal/extractions/link")
@@ -226,7 +234,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         stubGeminiClient.reset();
         stubGeminiClient.build = request -> new GeminiExtractionResult(
             true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
-        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+        stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -243,7 +251,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         stubGeminiClient.reset();
         stubGeminiClient.build = request -> new GeminiExtractionResult(
             true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
-        stubPageFetcher.build = link -> PageContent.of(link, "<html><body>구조화 없음</body></html>");
+        stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -3,8 +3,10 @@ package com.depromeet.piki.extractor.extraction;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
@@ -60,12 +62,34 @@ class HeadlessProductLinkExtractorTest {
     @DisplayName("렌더된 HTML 에 구조화 데이터가 없으면 같은 HTML 로 LLM fallback 을 탄다")
     void llmFallbackOnRenderedHtml() {
         stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠 상품", 50_000, "KRW", "https://cdn.example.com/i.png");
-        HeadlessProductLinkExtractor extractor = extractorWith(l -> PageContent.of(l, "<html><body>구조화 없음</body></html>"));
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> PageContent.of(
+            l,
+            "<html><body>" + "구조화 데이터 없이 렌더된 상품 상세 설명 텍스트. ".repeat(3) + "</body></html>"
+        ));
 
         ProductSnapshot snapshot = extractor.extract(link, null);
 
         assertEquals("엘엘엠 상품", snapshot.name());
         assertEquals(1, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("렌더 결과까지 셸이면 LLM 호출 없이 NO_EXTRACTABLE_CONTENT 가 그대로 전파된다 — plain 과 달리 재분류가 없다")
+    void renderedShellFailsPermanentlyWithoutLlm() {
+        // 헤드리스는 마지막 수단이라 셸 재분류(escalation)가 없다 — 게이트의 확정 실패가 곧 최종 응답이 된다.
+        // 에이블리 mobile.* 환각 사고(렌더 후에도 가시 텍스트 0자)가 이 경로로 닫힌다.
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> PageContent.of(
+            l,
+            "<html><head><script src=\"/app.js\"></script></head><body><div id=\"root\"></div></body></html>"
+        ));
+
+        ProductSnapshotException e = assertThrows(
+            ProductSnapshotException.class,
+            () -> extractor.extract(link, null)
+        );
+
+        assertEquals(ExtractionErrorCode.NO_EXTRACTABLE_CONTENT, e.code());
+        assertEquals(0, stubGemini.invocations());
     }
 
     @Test

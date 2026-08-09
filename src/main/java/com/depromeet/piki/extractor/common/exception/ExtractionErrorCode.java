@@ -15,6 +15,12 @@ public enum ExtractionErrorCode {
     PERMANENT_UPSTREAM,
     /** fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸 — 파싱 no-data 를 escalatable 로 재분류한 것(EmptyShellDetector). */
     EMPTY_SHELL,
+    /**
+     * 본문에 가시 텍스트도 데이터 script 도 없어 LLM 을 부르지 않고 확정한 것(LlmInputGate) — 빈 입력의 LLM 은
+     * 실존하지 않는 상품을 지어낸다(환각). EMPTY_SHELL(일시, 에스컬레이션 대상)과 달리 확정이다 — plain 경로는
+     * 셸 재분류가 선행하므로, 이 code 는 사실상 헤드리스 렌더 결과까지 셸일 때 표면화된다.
+     */
+    NO_EXTRACTABLE_CONTENT,
     LLM_INVALID_RESPONSE,
     INVALID_URL,
     UPSTREAM_ERROR,

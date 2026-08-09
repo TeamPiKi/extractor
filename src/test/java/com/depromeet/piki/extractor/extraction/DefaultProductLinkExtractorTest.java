@@ -48,10 +48,9 @@ class DefaultProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("파싱 no-data 인데 본문이 CSR 셸이면 escalatable EMPTY_SHELL 로 재분류한다")
+    @DisplayName("CSR 셸은 LLM 호출 없이 escalatable EMPTY_SHELL 로 재분류한다")
     void reclassifiesNoDataOnEmptyShell() {
-        stubGemini.build = request -> new GeminiExtractionResult(false, null, null, null, null);
-
+        // 게이트(LlmInputGate)가 LLM 전에 끊으므로 stub 세팅이 없어야 정상 — LLM 이 불리면 default throw 로 드러난다.
         PageFetchException e = assertThrows(
             PageFetchException.class,
             () -> extractorFetching(SHELL_HTML).extract(link, null)
@@ -62,6 +61,7 @@ class DefaultProductLinkExtractorTest {
         assertTrue(e.permanent());
         // 원래의 파싱 실패를 cause 로 보존한다 — 에스컬레이션 후에도 최초 사유를 로그에서 추적할 수 있어야 한다.
         assertInstanceOf(ProductSnapshotException.class, e.getCause());
+        assertEquals(0, stubGemini.invocations());
     }
 
     @Test
@@ -78,12 +78,16 @@ class DefaultProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("LLM 일시 오류는 셸 페이지여도 재분류하지 않고 그대로 전파한다")
+    @DisplayName("LLM 일시 오류는 셸 수준 페이지여도 재분류하지 않고 그대로 전파한다")
     void propagatesLlmUpstreamFailureUntouched() {
+        // 데이터 script 가 있어 게이트는 통과하되(LLM 이 실제로 불린다) EmptyShellDetector 기준으로는 여전히
+        // 셸인 페이지 — 재분류 catch 가 GeminiApiException 을 EMPTY_SHELL 로 오염시키지 않는지가 관심사다.
+        String dataIslandShell = "<html><head><script type=\"application/json\">"
+            + "{\"product\":{\"name\":\"상품\"}}</script></head><body><div id=\"app\"></div></body></html>";
         stubGemini.build = request -> {
             throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
         };
 
-        assertThrows(GeminiApiException.class, () -> extractorFetching(SHELL_HTML).extract(link, null));
+        assertThrows(GeminiApiException.class, () -> extractorFetching(dataIslandShell).extract(link, null));
     }
 }
