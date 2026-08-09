@@ -5,18 +5,26 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
- * 상품 URL 추출의 공개 진입점. 두 전략을 "plain 먼저, 차단되면 headless" 로 엮는다 — headless 는 비싸고 느려
- * plain 이 차단으로 막힌 경우에만 탄다.
+ * 상품 URL 추출의 공개 진입점. 두 전략을 "plain 먼저, plain 으로 못 끝내면 headless" 로 엮는다 — headless 는
+ * 비싸고 느려 plain 으로 끝나지 않는 경우에만 탄다. "못 끝냄"은 두 축이다:
+ * <ul>
+ *   <li>fetch 가 막힘 — escalatable 차단({@code PageFetchException.escalatable} 이 단일 진실).</li>
+ *   <li>fetch 는 성공했지만 결과가 READY 필수 필드를 못 채움 — 부분 SSR SPA(이름·이미지 OG 만 SSR 에 싣고
+ *       가격은 JS 렌더 뒤에만 존재, 카카오 톡딜 실측)는 문서에 없는 값이라 LLM 도 못 뽑는다. 이 승격이 없으면
+ *       그런 host 는 HEADLESS_FIRST 정책이 유일한 성공 경로(정합성 조건)가 된다 — 정책은 느린-실패 낭비를 줄이는
+ *       최적화로만 남긴다는 설계를 이 승격이 지킨다.</li>
+ * </ul>
  *
- * <p>에스컬레이션 축(plain 차단 → headless)은 호출자 outbox 의 재시도 축(일시 오류 → 같은 plain 재시도)과
- * 직교한다. 차단은 재시도 축에서 이미 확정 실패(422)라 그 슬롯(attemptCount)에 얹을 수 없다. 그래서 여기서
- * 별도로 판정한다.
+ * <p>에스컬레이션 축(plain 확정 → headless)은 호출자 outbox 의 재시도 축(일시 오류 → 같은 plain 재시도)과
+ * 직교한다. 차단·불완전 결과는 재시도 축에서 이미 확정 실패(422)라 그 슬롯(attemptCount)에 얹을 수 없다. 그래서
+ * 여기서 별도로 판정한다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -34,6 +42,8 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_FAILED = "failed";
     private static final String CATEGORY_UNKNOWN = "unknown";
+    /** fetch 실패 코드가 아닌 유일한 category — plain 은 성공했지만 READY 필수 필드를 못 채워 승격된 경우. */
+    private static final String CATEGORY_INCOMPLETE_SNAPSHOT = "INCOMPLETE_SNAPSHOT";
 
     /** 필드의 {@code @Qualifier} 는 lombok.config 의 copyableAnnotations 가 생성자 파라미터로 복사한다. */
     @Qualifier(LinkExtractionStrategy.PLAIN)
@@ -57,26 +67,38 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             return extractHeadlessFirst(link, model);
         }
 
+        ProductSnapshot plainSnapshot;
         try {
-            return plain.extract(link, model);
+            plainSnapshot = plain.extract(link, model);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
             }
-            return escalateToHeadless(link, e, model);
+            return escalateToHeadless(link, categoryOf(e), model);
         }
+        if (plainSnapshot.missingReadyField()) {
+            // 이대로 반환하면 응답 경계(ExtractionResponse.from)가 확정 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
+            // 확정 전에 브라우저 렌더 DOM 으로 한 번 더 시도한다. 승격은 plain 의 try 바깥이라 headless 실패가
+            // 위 catch 로 새어 재승격되는 일이 없고, 승격 결과가 여전히 불완전하면 그때 경계가 같은 확정 실패로
+            // 닫는다(재승격 없음).
+            return escalateToHeadless(link, CATEGORY_INCOMPLETE_SNAPSHOT, model);
+        }
+        return plainSnapshot;
     }
 
     /**
      * 브라우저 직행(정책 힌트). outcome 을 별도 카운터로 집계한다 — escalation 카운터는 에스컬레이션 축만
      * 커버해서, 직행 볼륨·성공률이 시계열에 없으면 호출자의 직행 정책 오지정(실제로는 plain 이 통하는 host)이
      * 로그 grep 전까지 조용히 지속된다(메트릭=추세, 로그=원장).
+     *
+     * <p>outcome=success 는 "요청을 살렸다"(완전한 READY snapshot 확보)다 — 판정 규칙은
+     * {@link #outcomeOf(ProductSnapshot)} 참조.
      */
     private ProductSnapshot extractHeadlessFirst(ProductLink link, String model) {
         log.info("extract route=headless_first url={}", link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, model);
-            headlessFirstCounter(OUTCOME_SUCCESS).increment();
+            headlessFirstCounter(outcomeOf(snapshot)).increment();
             return snapshot;
         } catch (Throwable failure) {
             // escalateToHeadless 와 같은 이유로 Throwable — Error 실패도 집계에서 빠지지 않게 하고 그대로 rethrow.
@@ -95,19 +117,21 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     }
 
     /**
-     * plain 이 막혀 headless 로 넘긴다. 결과를 outcome 으로 집계하되 "어떤 실패가 escalate 됐나"를 category 로
-     * 쪼갠다 — 무조건 폴백이라 낭비(특히 일시 오류를 헤드리스로 보냈는데 실패)가 생기므로, 그 비율을 category
-     * 별로 봐서 후속 per-host 튜닝의 근거로 삼는다(메트릭=추세, host 로그=원장). headless 예외는 그대로 상위로
-     * 전파해 API 계층의 계약 매핑에 맡긴다.
+     * plain 으로 못 끝내(차단 또는 불완전 결과) headless 로 넘긴다. 결과를 outcome 으로 집계하되 "무엇이 escalate
+     * 됐나"를 category(fetch 실패 코드명 또는 INCOMPLETE_SNAPSHOT)로 쪼갠다 — 무조건 폴백이라 낭비(특히 일시
+     * 오류를 헤드리스로 보냈는데 실패)가 생기므로, 그 비율을 category 별로 봐서 후속 per-host 튜닝의 근거로
+     * 삼는다(메트릭=추세, host 로그=원장). headless 예외는 그대로 상위로 전파해 API 계층의 계약 매핑에 맡긴다.
      *
      * <p>라벨 키 집합 {@code outcome, category} 는 이 카운터의 모든 발행 경로에서 동일해야 한다.
+     * outcome=success 는 "요청을 살렸다"(완전한 READY snapshot 확보)다 — 판정 규칙은
+     * {@link #outcomeOf(ProductSnapshot)} 참조.
      */
-    private ProductSnapshot escalateToHeadless(ProductLink link, RuntimeException plainFailure, String model) {
-        String category = categoryOf(plainFailure);
+    private ProductSnapshot escalateToHeadless(ProductLink link, String category, String model) {
+        Objects.requireNonNull(category, "category");
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, model);
-            escalationCounter(OUTCOME_SUCCESS, category).increment();
+            escalationCounter(outcomeOf(snapshot), category).increment();
             return snapshot;
         } catch (Throwable headlessFailure) {
             // Exception 이 아니라 Throwable 을 잡는다: headless 구현이 미구현 오류나 OOM 등 Error 로 실패해도
@@ -125,6 +149,15 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
 
     private Counter escalationCounter(String outcome, String category) {
         return meterRegistry.counter(ESCALATION_METRIC, TAG_OUTCOME, outcome, TAG_CATEGORY, category);
+    }
+
+    /**
+     * headless 결과의 성공 판정. 예외 없이 반환됐어도 READY 필수 필드가 비면 응답 경계에서 확정 실패로 닫히는
+     * 결과다 — 그걸 success 로 세면 구제 성공률(escalation)·직행 성공률(headless_first)이 실제보다 부푼다.
+     * outcome 은 예외 여부가 아니라 "요청을 살렸는가"를 센다.
+     */
+    private String outcomeOf(ProductSnapshot snapshot) {
+        return snapshot.missingReadyField() ? OUTCOME_FAILED : OUTCOME_SUCCESS;
     }
 
     /**

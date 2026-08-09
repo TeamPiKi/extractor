@@ -1,8 +1,10 @@
 package com.depromeet.piki.extractor.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -102,5 +104,16 @@ class ProductSnapshotTest {
     @DisplayName("currentPrice 가 양수이면 그대로 통과한다")
     void positivePricePasses() {
         assertEquals(1_000, ProductSnapshot.fromExtracted(link, "상품", null, 1_000, "KRW").currentPrice());
+    }
+
+    @Test
+    @DisplayName("READY 필수 필드(name·imageUrl·currentPrice)가 하나라도 비면 missingReadyField 다")
+    void missingReadyFieldBranches() {
+        String image = "https://cdn.example.com/a.jpg";
+        assertTrue(new ProductSnapshot(link, null, image, 1_000, "KRW").missingReadyField());
+        assertTrue(new ProductSnapshot(link, "   ", image, 1_000, "KRW").missingReadyField());
+        assertTrue(new ProductSnapshot(link, "상품", null, 1_000, "KRW").missingReadyField());
+        assertTrue(new ProductSnapshot(link, "상품", image, null, "KRW").missingReadyField());
+        assertFalse(new ProductSnapshot(link, "상품", image, 1_000, null).missingReadyField());
     }
 }
