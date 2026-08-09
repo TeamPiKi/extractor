@@ -95,7 +95,8 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.clientError(new RuntimeException("403"));
         });
-        ProductSnapshot headlessSnapshot = new ProductSnapshot(null, "헤드리스 결과", null, 50_000, null);
+        ProductSnapshot headlessSnapshot =
+            new ProductSnapshot(null, "헤드리스 결과", "https://cdn.example.com/h.png", 50_000, null);
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
@@ -174,7 +175,8 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy plain = new FakeStrategy(l -> {
             throw new IllegalStateException("plain 은 호출되면 안 됨");
         });
-        ProductSnapshot headlessSnapshot = new ProductSnapshot(null, "헤드리스 결과", null, 50_000, null);
+        ProductSnapshot headlessSnapshot =
+            new ProductSnapshot(null, "헤드리스 결과", "https://cdn.example.com/h.png", 50_000, null);
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
@@ -256,16 +258,38 @@ class FallbackProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("불완전 승격의 headless 결과가 여전히 불완전해도 재승격 없이 그대로 반환한다")
+    @DisplayName("불완전 승격의 headless 결과가 여전히 불완전하면 재승격 없이 그대로 반환하고 failed 로 집계한다")
     void incompleteEscalationReturnsHeadlessResultAsIs() {
-        // 확정 실패 판정은 응답 경계 한 곳이 진다 — 여기서 또 승격하면 루프 축이 생긴다.
+        // 확정 실패 판정은 응답 경계 한 곳이 진다 — 여기서 또 승격하면 루프 축이 생긴다. 다만 outcome 은
+        // "요청을 살렸는가"라, 예외 없이 반환됐어도 불완전(경계에서 확정 실패 예정)이면 success 로 세지 않는다.
         FakeStrategy plain = new FakeStrategy(l -> incomplete);
         FakeStrategy headless = new FakeStrategy(l -> incomplete);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
 
         assertEquals(incomplete, result);
         assertEquals(1, headless.calls);
+        assertEquals(
+            1.0,
+            registry.counter("product.extract.escalation", "outcome", "failed", "category", "INCOMPLETE_SNAPSHOT").count()
+        );
+    }
+
+    @Test
+    @DisplayName("headlessFirst 직행 결과가 불완전하면 그대로 반환하되 failed 로 집계한다")
+    void headlessFirstIncompleteResultIsCountedFailed() {
+        // 직행 성공률은 정책 오지정(직행해도 못 살리는 host)의 추세 신호다 — 경계에서 확정 실패로 닫힐 결과를
+        // success 로 세면 그 신호가 실제보다 부푼다.
+        FakeStrategy plain = new FakeStrategy(l -> snapshot);
+        FakeStrategy headless = new FakeStrategy(l -> incomplete);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true, null);
+
+        assertEquals(incomplete, result);
+        assertEquals(0, plain.calls);
+        assertEquals(1.0, registry.counter("product.extract.headless_first", "outcome", "failed").count());
     }
 
     @Test

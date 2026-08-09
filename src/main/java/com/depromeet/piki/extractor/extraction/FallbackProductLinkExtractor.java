@@ -89,12 +89,15 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      * 브라우저 직행(정책 힌트). outcome 을 별도 카운터로 집계한다 — escalation 카운터는 에스컬레이션 축만
      * 커버해서, 직행 볼륨·성공률이 시계열에 없으면 호출자의 직행 정책 오지정(실제로는 plain 이 통하는 host)이
      * 로그 grep 전까지 조용히 지속된다(메트릭=추세, 로그=원장).
+     *
+     * <p>outcome=success 는 "요청을 살렸다"(완전한 READY snapshot 확보)다 — 판정 규칙은
+     * {@link #outcomeOf(ProductSnapshot)} 참조.
      */
     private ProductSnapshot extractHeadlessFirst(ProductLink link, String model) {
         log.info("extract route=headless_first url={}", link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, model);
-            headlessFirstCounter(OUTCOME_SUCCESS).increment();
+            headlessFirstCounter(outcomeOf(snapshot)).increment();
             return snapshot;
         } catch (Throwable failure) {
             // escalateToHeadless 와 같은 이유로 Throwable — Error 실패도 집계에서 빠지지 않게 하고 그대로 rethrow.
@@ -119,12 +122,14 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      * 삼는다(메트릭=추세, host 로그=원장). headless 예외는 그대로 상위로 전파해 API 계층의 계약 매핑에 맡긴다.
      *
      * <p>라벨 키 집합 {@code outcome, category} 는 이 카운터의 모든 발행 경로에서 동일해야 한다.
+     * outcome=success 는 "요청을 살렸다"(완전한 READY snapshot 확보)다 — 판정 규칙은
+     * {@link #outcomeOf(ProductSnapshot)} 참조.
      */
     private ProductSnapshot escalateToHeadless(ProductLink link, String category, String model) {
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, model);
-            escalationCounter(OUTCOME_SUCCESS, category).increment();
+            escalationCounter(outcomeOf(snapshot), category).increment();
             return snapshot;
         } catch (Throwable headlessFailure) {
             // Exception 이 아니라 Throwable 을 잡는다: headless 구현이 미구현 오류나 OOM 등 Error 로 실패해도
@@ -142,6 +147,15 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
 
     private Counter escalationCounter(String outcome, String category) {
         return meterRegistry.counter(ESCALATION_METRIC, TAG_OUTCOME, outcome, TAG_CATEGORY, category);
+    }
+
+    /**
+     * headless 결과의 성공 판정. 예외 없이 반환됐어도 READY 필수 필드가 비면 응답 경계에서 확정 실패로 닫히는
+     * 결과다 — 그걸 success 로 세면 구제 성공률(escalation)·직행 성공률(headless_first)이 실제보다 부푼다.
+     * outcome 은 예외 여부가 아니라 "요청을 살렸는가"를 센다.
+     */
+    private String outcomeOf(ProductSnapshot snapshot) {
+        return snapshot.missingReadyField() ? OUTCOME_FAILED : OUTCOME_SUCCESS;
     }
 
     /**
