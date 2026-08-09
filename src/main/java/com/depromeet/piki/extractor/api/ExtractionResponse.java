@@ -30,9 +30,7 @@ public record ExtractionResponse(
         if (snapshot.method() == null) {
             log.warn("extraction response without method - origin marking missed");
         }
-        if (snapshot.name() == null || snapshot.name().isBlank()
-            || snapshot.imageUrl() == null
-            || snapshot.currentPrice() == null) {
+        if (snapshot.missingReadyField()) {
             throw ProductSnapshotException.untrustworthyValue();
         }
         return new ExtractionResponse(

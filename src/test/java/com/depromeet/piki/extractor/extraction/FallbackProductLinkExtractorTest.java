@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -13,7 +14,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Fallback(진입점)이 "plain 먼저, 막히면 headless" 를 flag·escalatable 규칙대로 엮는지 Spring 없이 검증한다.
+ * Fallback(진입점)이 "plain 먼저, 못 끝내면(차단·불완전 결과) headless" 를 flag·escalatable·READY 필수 필드
+ * 규칙대로 엮는지 Spring 없이 검증한다.
  *
  * <p>통합 테스트는 외부 경계(PageFetcher·GeminiClient)만 stub 하고 이 라우팅을 실제로 타므로, 분기 망라는
  * 여기 단위에서 한다. 두 전략은 실제 빈이 네트워크/브라우저를 요구해 단위로 세울 수 없어,
@@ -22,7 +24,10 @@ import org.junit.jupiter.api.Test;
 class FallbackProductLinkExtractorTest {
 
     private final ProductLink link = ProductLink.parse("https://shop.example.com/p");
-    private final ProductSnapshot snapshot = new ProductSnapshot(null, "나이키", null, 99_000, null);
+    // plain "성공" 픽스처는 READY 필수 필드(name·imageUrl·currentPrice)를 다 채운다 — 비면 불완전 승격 분기로 빠진다.
+    private final ProductSnapshot snapshot =
+        new ProductSnapshot(null, "나이키", "https://cdn.example.com/nike.png", 99_000, null);
+    private final ProductSnapshot incomplete = new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", null, null);
 
     private static class FakeStrategy implements LinkExtractionStrategy {
         private final Function<ProductLink, ProductSnapshot> fn;
@@ -224,6 +229,89 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
         assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null));
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("plain 이 성공해도 READY 필수 필드가 비면 headless 로 에스컬레이트하고 INCOMPLETE_SNAPSHOT 으로 집계한다")
+    void escalatesToHeadlessOnIncompleteSnapshot() {
+        // 부분 SSR SPA(카카오 톡딜): fetch 는 성공하고 이름·이미지는 있지만 가격이 문서에 없다. 이대로 끝내면
+        // 응답 경계에서 확정 실패가 되므로, 확정 전에 브라우저 DOM 으로 한 번 더 시도해야 HEADLESS_FIRST 정책이
+        // 정합성 조건이 아니라 최적화로 남는다.
+        FakeStrategy plain = new FakeStrategy(l -> incomplete);
+        ProductSnapshot headlessSnapshot =
+            new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", 23_900, null);
+        FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
+
+        assertEquals(headlessSnapshot, result);
+        assertEquals(1, plain.calls);
+        assertEquals(1, headless.calls);
+        assertEquals(
+            1.0,
+            registry.counter("product.extract.escalation", "outcome", "success", "category", "INCOMPLETE_SNAPSHOT").count()
+        );
+    }
+
+    @Test
+    @DisplayName("불완전 승격의 headless 결과가 여전히 불완전해도 재승격 없이 그대로 반환한다")
+    void incompleteEscalationReturnsHeadlessResultAsIs() {
+        // 확정 실패 판정은 응답 경계 한 곳이 진다 — 여기서 또 승격하면 루프 축이 생긴다.
+        FakeStrategy plain = new FakeStrategy(l -> incomplete);
+        FakeStrategy headless = new FakeStrategy(l -> incomplete);
+
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null);
+
+        assertEquals(incomplete, result);
+        assertEquals(1, headless.calls);
+    }
+
+    @Test
+    @DisplayName("불완전 승격에서 headless 가 escalatable 실패를 던져도 재진입 없이 전파하고 failed 로 집계한다")
+    void incompleteEscalationFailurePropagatesWithoutReentry() {
+        // headless 실패가 plain 의 catch 로 새면 headless 를 두 번 때린다 — 승격은 시도 1회로 바운드된다.
+        FakeStrategy plain = new FakeStrategy(l -> incomplete);
+        FakeStrategy headless = new FakeStrategy(l -> {
+            throw PageFetchException.clientError(new RuntimeException("렌더 차단"));
+        });
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
+        assertEquals(1, headless.calls);
+        assertEquals(
+            1.0,
+            registry.counter("product.extract.escalation", "outcome", "failed", "category", "INCOMPLETE_SNAPSHOT").count()
+        );
+    }
+
+    @Test
+    @DisplayName("headless 가 꺼져 있으면 불완전 plain 결과도 그대로 반환한다 (응답 경계가 확정 실패로 닫는 기존 계약)")
+    void headlessOffReturnsIncompleteAsIs() {
+        FakeStrategy plain = new FakeStrategy(l -> incomplete);
+        FakeStrategy headless = new FakeStrategy(l -> {
+            throw new IllegalStateException("headless 는 호출되면 안 됨");
+        });
+
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null);
+
+        assertEquals(incomplete, result);
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("LLM 의 상품 아님 확정(ProductSnapshotException)은 에스컬레이트하지 않고 그대로 전파한다")
+    void productSnapshotFailureIsNotEscalated() {
+        // 상품이 아니라는 판정은 fetch 축 실패가 아니다 — CSR 셸의 no-data 는 plain 전략(DefaultProductLinkExtractor)이
+        // 이미 escalatable 로 재분류해 던지므로, 여기까지 온 ProductSnapshotException 은 브라우저로 다시 봐도 상품이
+        // 되지 않는다.
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw ProductSnapshotException.notProductPage();
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+
+        assertThrows(ProductSnapshotException.class, () -> fallback(true, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 }
