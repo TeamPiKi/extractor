@@ -1,8 +1,10 @@
 package com.depromeet.piki.extractor.extraction;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
@@ -14,10 +16,11 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * product.extract 카운터가 운영 레지스트리(Prometheus)에서 두 경로(structured/llm) 모두 scrape 되는지 검증한다.
+ * product.extract 카운터가 운영 레지스트리(Prometheus)에서 세 경로(structured/llm/skipped_shell) 모두 scrape
+ * 되는지 검증한다.
  *
  * <p>Prometheus(client 1.x)는 같은 메트릭 이름의 태그 키 집합이 다르면 뒤 시계열을 예외 없이 조용히 드롭하므로,
- * 두 경로의 태그 키가 {@code {via, reason}} 으로 일치해야 둘 다 남는다. 일반 통합 테스트는 이 제약이 없는
+ * 모든 경로의 태그 키가 {@code {via, reason}} 으로 일치해야 전부 남는다. 일반 통합 테스트는 이 제약이 없는
  * SimpleMeterRegistry 를 주입해 이 회귀를 못 잡으므로, 운영과 같은 PrometheusMeterRegistry 로 파이프라인을
  * 직접 구성하는 별도 분류로 둔다(외부 경계 GeminiClient 만 stub).
  */
@@ -26,8 +29,8 @@ class HtmlSnapshotPipelineMetricTest {
     private final ProductLink link = ProductLink.parse("https://shop.example.com/products/42");
 
     @Test
-    @DisplayName("structured 와 llm 두 경로의 product_extract 시계열이 Prometheus scrape 에 모두 남는다")
-    void bothPathsSurviveInPrometheusScrape() {
+    @DisplayName("structured·llm·skipped_shell 세 경로의 product_extract 시계열이 Prometheus scrape 에 모두 남는다")
+    void allPathsSurviveInPrometheusScrape() {
         PrometheusMeterRegistry registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
         StubGeminiClient stubGemini = new StubGeminiClient();
         HtmlSnapshotPipeline pipeline = new HtmlSnapshotPipeline(
@@ -42,7 +45,16 @@ class HtmlSnapshotPipelineMetricTest {
         pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms", null);
 
         stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠", 2_000, null, null);
-        pipeline.extract(PageContent.of(link, "<html><body>구조화 없음</body></html>"), "fetch=0ms", null);
+        String textOnlyHtml = "<html><body>"
+            + "구조화 데이터 없이 가시 텍스트로만 상품을 설명하는 본문. ".repeat(3)
+            + "</body></html>";
+        pipeline.extract(PageContent.of(link, textOnlyHtml), "fetch=0ms", null);
+
+        String shellHtml = "<html><head><script src=\"/app.js\"></script></head><body><div id=\"root\"></div></body></html>";
+        assertThrows(
+            ProductSnapshotException.class,
+            () -> pipeline.extract(PageContent.of(link, shellHtml), "fetch=0ms", null)
+        );
 
         String scrape = registry.scrape();
         List<String> lines = scrape.lines().filter(l -> l.startsWith("product_extract_total{")).toList();
@@ -54,6 +66,10 @@ class HtmlSnapshotPipelineMetricTest {
         assertTrue(
             lines.stream().anyMatch(l -> l.contains("via=\"llm\"")),
             "llm 시계열이 scrape 에 있어야 한다 — 태그 키 불일치로 드롭되면 안 된다:\n" + scrape
+        );
+        assertTrue(
+            lines.stream().anyMatch(l -> l.contains("via=\"skipped_shell\"")),
+            "skipped_shell 시계열이 scrape 에 있어야 한다 — 태그 키 불일치로 드롭되면 안 된다:\n" + scrape
         );
     }
 }
