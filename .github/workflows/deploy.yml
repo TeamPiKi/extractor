@@ -1,15 +1,19 @@
-# 배포: 수동 트리거(workflow_dispatch) 단일 잡. 빌드 → 이미지 push → SSH 배포까지 러너가 주관한다.
+# 배포: main push 자동 + 수동 트리거(workflow_dispatch) 단일 잡. 빌드 → 이미지 push → SSH 배포까지 러너가 주관한다.
 #
 # - transport 는 core 와 같은 "러너에서 SSH" 단일이다 (SSM Run Command 수동 배포를 대체 - 배포 블록 공통화 결정,
 #   SG 22 개방은 #5). 기동·헬스 판정은 TeamPiKi/infra 의 공용 블록(run_container·healthcheck)을 매 배포
 #   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
 # - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
-#   롤백은 이전 커밋을 골라 workflow_dispatch 로 재배포.
-# - 교체식 단일 컨테이너라 전환 사이 수초 다운타임이 있다. 소비자는 PIKI-Server 의 outbox 워커뿐이고
-#   실패 시 재시도로 흡수되므로 blue-green 은 두지 않는다 (현행 수동 배포와 같은 특성).
+#   롤백은 main 에 revert 를 머지하거나(push 트리거가 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
+# - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 :8090 은 박스 로컬 nginx 가 고정하고,
+#   슬롯 컨테이너(blue=18090 / green=18091, 127.0.0.1 바인딩)를 upstream 전환으로 바꾼다.
+#   초기의 "교체식 단일 컨테이너 + 수초 다운타임 허용" 결정은 renderer #15 미배포 사고(머지 후 수동
+#   트리거 누락으로 이틀 방치)를 계기로 "머지 = 무조건 배포 + 무중단" 으로 대체됐다 (2026-08-10 결정).
 name: Deploy
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -74,17 +78,19 @@ jobs:
           sparse-checkout: blocks
           persist-credentials: false
 
+      # nginx 사이트 conf(이 repo 의 infra/nginx/extractor.conf)도 함께 올린다 - strip 2 로
+      # shared-infra/blocks/·infra/nginx/ 가 똑같이 떨어져 /tmp/piki-blocks/ 평면에 안착한다.
       - name: Upload blocks
         uses: appleboy/scp-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh"
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,infra/nginx/extractor.conf"
           target: "/tmp/piki-blocks"
           strip_components: 2
 
-      - name: Deploy (SSM env pull + run_container + healthcheck)
+      - name: Deploy (SSM env pull + blue-green slot + nginx switch)
         uses: appleboy/ssh-action@v1
         env:
           IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ github.sha }}
@@ -142,16 +148,81 @@ jobs:
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh
 
+            # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8090) ──
+            # 설치·conf 반영은 매 배포 수행하되, (재)시작·reload 는 아래 전환 단계가 수행한다
+            # (레거시 단일 컨테이너가 :8090 을 점유한 이행 1회차엔 그 전까지 nginx 가 8090 을 못 문다).
+            command -v nginx >/dev/null || {
+              sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
+              sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+            }
+            sudo rm -f /etc/nginx/sites-enabled/default
+            sudo cp /tmp/piki-blocks/extractor.conf /etc/nginx/sites-available/piki-extractor
+            sudo ln -sf /etc/nginx/sites-available/piki-extractor /etc/nginx/sites-enabled/piki-extractor
+
+            # ── 슬롯 결정: upstream 상태 파일(server 127.0.0.1:1809X;)이 source of truth ──
+            UPSTREAM_CONF=/etc/nginx/piki-extractor-upstream.conf
+            ACTIVE_PORT=""
+            if [ -f "$UPSTREAM_CONF" ]; then
+              # 콜론 뒤 숫자만 추출한다 - 라인이 127.0.0.1 을 담고 있어 무차별 숫자 grep 은 "127" 을 먼저 문다.
+              ACTIVE_PORT=$(grep -oE ':[0-9]+' "$UPSTREAM_CONF" | head -1 | tr -d ':' || true)
+            fi
+            if [ "$ACTIVE_PORT" = "18090" ]; then
+              ACTIVE=blue INACTIVE=green INACTIVE_PORT=18091
+            else
+              # 18091 활성이거나, 상태 파일이 없는 부트스트랩(레거시 단일 컨테이너가 8090 서빙 중) - blue 로 간다.
+              ACTIVE=green INACTIVE=blue INACTIVE_PORT=18090
+            fi
+            echo "DEPLOY slot=$INACTIVE port=$INACTIVE_PORT (active=${ACTIVE_PORT:-legacy/none})"
+
+            # 직전 배포의 teardown 이 끊겼으면 이 슬롯 컨테이너가 남아있을 수 있다 - run 의 이름·포트 충돌 전에
+            # 정리하고, 데몬 지연에 대비해 timeout 상한을 건다 (core deploy 와 동일 가드).
+            timeout 40 docker stop -t 30 "piki-extractor-$INACTIVE" 2>/dev/null || true
+            timeout 30 docker rm -f "piki-extractor-$INACTIVE" 2>/dev/null || true
+
+            # ── 새 버전을 비활성 슬롯에 기동 ──
+            # --publish 127.0.0.1 바인딩: 슬롯은 nginx 경유로만 노출된다 (EIP 직접 접근 구조 차단 - conf 주석 참조).
+            # --memory/--memory-swap: 박스(t4g.small 1.8G)는 swap 0 이라 blue+green overlap 이 RAM 안에 들어야
+            #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙은 MaxRAMPercentage=70 이 cgroup 한도
+            #   기준으로 잡혀 약 448m. 기존 무제한(호스트 70%) 대비 좁아진 값이라 파싱 스파이크 OOM 이 관측되면
+            #   실측으로 재조정한다 (cgroup-OOM 은 슬롯 하나로 격리되고 --restart 가 재기동 - core 와 같은 설계).
             bash /tmp/piki-blocks/run_container.sh \
-              --name piki-extractor --image "$IMAGE" --restart unless-stopped \
-              --publish 8090:8090 --env-file "$ENV_FILE" --pull --replace \
+              --name "piki-extractor-$INACTIVE" --image "$IMAGE" --restart unless-stopped \
+              --publish "127.0.0.1:$INACTIVE_PORT:8090" --env-file "$ENV_FILE" --pull --replace \
+              --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \
               --label piki.observe=true --label piki.service=piki-extractor \
-              --label piki.metrics.port=8090 --label piki.metrics.path=/actuator/prometheus
+              --label "piki.metrics.port=$INACTIVE_PORT" --label piki.metrics.path=/actuator/prometheus
 
+            # 새 슬롯 직접 헬스 판정 (전환 전이라 실패해도 트래픽은 기존 경로가 그대로 서빙 - 정리 후 중단)
+            if ! bash /tmp/piki-blocks/healthcheck.sh \
+              --url "http://127.0.0.1:$INACTIVE_PORT/actuator/health" --interval 5 --attempts 36 \
+              --expect-body '"status":"UP"'; then
+              echo "::error::새 슬롯 헬스체크 실패 - 전환 없이 중단 (기존 슬롯이 계속 서빙)"
+              timeout 40 docker stop -t 30 "piki-extractor-$INACTIVE" 2>/dev/null || true
+              timeout 30 docker rm -f "piki-extractor-$INACTIVE" 2>/dev/null || true
+              exit 1
+            fi
+
+            # ── 전환: upstream 상태 파일 갱신 → nginx reload ──
+            echo "server 127.0.0.1:$INACTIVE_PORT;" | sudo tee "$UPSTREAM_CONF" >/dev/null
+            sudo nginx -t
+            if docker ps -a --format '{{.Names}}' | grep -qx piki-extractor; then
+              # 블루그린 이행 1회차: 레거시 단일 컨테이너가 :8090 을 점유해 nginx 가 그 포트를 못 문다.
+              # 제거→nginx 기동 사이 수초 공백은 소비자(core 워커) 재시도가 흡수한다. 이행 후엔 이 분기가 no-op.
+              timeout 40 docker stop -t 30 piki-extractor 2>/dev/null || true
+              timeout 30 docker rm -f piki-extractor 2>/dev/null || true
+            fi
+            sudo systemctl enable nginx >/dev/null 2>&1 || true
+            sudo systemctl reload nginx || sudo systemctl restart nginx
+
+            # 전환 검증: 소비자와 같은 경로(:8090 → nginx → 새 슬롯)로 최종 확인
             bash /tmp/piki-blocks/healthcheck.sh \
-              --url http://localhost:8090/actuator/health --interval 5 --attempts 24 \
+              --url http://localhost:8090/actuator/health --interval 2 --attempts 10 \
               --expect-body '"status":"UP"'
+
+            # 구 슬롯 종료 - 전환은 이미 끝났으므로 best-effort (데몬 지연이 성공한 배포를 못 막게 timeout 상한)
+            timeout 60 docker stop -t 30 "piki-extractor-$ACTIVE" 2>/dev/null || true
+            timeout 30 docker rm -f "piki-extractor-$ACTIVE" 2>/dev/null || true
 
             # 이전 이미지 정리 (dangling 만 - 직전 sha 태그는 남겨 수동 롤백 여지 유지)
             docker image prune -f >/dev/null
