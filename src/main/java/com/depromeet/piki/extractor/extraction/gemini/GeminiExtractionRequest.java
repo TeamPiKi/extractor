@@ -56,6 +56,13 @@ public record GeminiExtractionRequest(
             You are a product information extractor. Given the URL and the HTML of a product page,
             extract information for the MAIN product of the page.
 
+            **Grounding rule (highest priority, applies to every field)**:
+            Every value you output MUST be taken from the provided HTML. If a value is not present
+            in the HTML, return null for that field (or isProductPage=false if the page shows no
+            product at all). NEVER invent, guess, or recall values from memory or from similar
+            products you have seen elsewhere. A fabricated value is the worst possible outcome —
+            strictly worse than null.
+
             **Input**:
             - URL: the product page URL
             - HTML: raw HTML content of that page (may include <script type="application/ld+json"> JSON-LD,
@@ -79,6 +86,8 @@ public record GeminiExtractionRequest(
             4. currency (string): ISO 4217 code (KRW, USD, JPY, EUR, etc.). Infer from page language/locale if ambiguous.
             5. imageUrl (string): ABSOLUTE URL of the primary product image. Prefer og:image meta tag,
                fallback to the main product image. Resolve relative URLs against the page URL.
+               The URL (or the relative path you resolve) must appear in the HTML — do not construct
+               or abbreviate image URLs. If no product image URL appears in the HTML, return null.
 
             **Price rules**:
             - Single price, no discount indicator → that price is currentPrice.
