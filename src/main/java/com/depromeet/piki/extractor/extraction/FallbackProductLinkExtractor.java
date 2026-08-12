@@ -22,6 +22,10 @@ import org.springframework.stereotype.Component;
  *       최적화로만 남긴다는 설계를 이 승격이 지킨다.</li>
  * </ul>
  *
+ * <p>단 헤드리스 진입 3경로(직행·차단 승격·불완전 승격)는 전부 요청의 headlessAllowed 허가 뒤에 있다 — 허가가
+ * 없으면 "비싸고 느려서" 가 아니라 "써서는 안 되므로" 열리지 않는다. 이 서비스는 허가 대상을 알지 못하고 판정도
+ * 하지 않는다(무상태): 허가의 단일 진실은 호출자 쪽에 있고 여기서는 요청 단위 플래그로만 받는다.
+ *
  * <p>에스컬레이션 축(plain 확정 → headless)은 호출자 outbox 의 재시도 축(일시 오류 → 같은 plain 재시도)과
  * 직교한다. 차단·불완전 결과는 재시도 축에서 이미 확정 실패(422)라 그 슬롯(attemptCount)에 얹을 수 없다. 그래서
  * 여기서 별도로 판정한다.
@@ -54,9 +58,12 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private final HeadlessExtractionProperties headlessProperties;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, boolean headlessFirst, String model) {
-        // 호출자 정책이 이 서비스의 스위치를 앞설 수는 없다 — 스위치가 꺼져 있으면 headlessFirst 힌트도 무시한다.
-        if (!headlessProperties.enabled()) {
+    public ProductSnapshot extract(ProductLink link, boolean headlessFirst, boolean headlessAllowed, String model) {
+        // 두 조건이 모두 서 있어야 헤드리스가 열린다. enabled 는 이 서비스의 운영 비상 차단(호출자 정책이 앞설 수
+        // 없다), headlessAllowed 는 이 대상에 브라우저를 써도 되는지에 대한 호출자의 허가다. 둘 중 하나라도
+        // 없으면 plain 만 타고 헤드리스 진입 3경로(직행·차단 승격·불완전 승격)가 한꺼번에 닫힌다 — 아래 분기가
+        // 전부 이 가드 뒤에 있는 것이 그 보장이다. headlessFirst 는 허가가 선 뒤에만 의미를 갖는 라우팅 힌트다.
+        if (!headlessProperties.enabled() || !headlessAllowed) {
             return plain.extract(link, model);
         }
 

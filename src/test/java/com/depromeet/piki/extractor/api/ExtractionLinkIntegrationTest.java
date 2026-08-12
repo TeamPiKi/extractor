@@ -135,6 +135,21 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("headlessAllowed 를 실어 보내도 요청이 깨지지 않고 plain 경로로 정상 추출한다")
+    void headlessAllowedFieldIsAcceptedOnTheWire() throws Exception {
+        // 이 필드는 primitive 로 받으면 안 보낸 요청이 400 으로 깨지는 함정이 있어(headlessFirst 와 같은 이유)
+        // wire 수용 자체가 계약이다. 필드를 안 보내는 구버전 호출자 쪽은 이 클래스의 나머지 케이스가 상시 검증한다.
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/11\", \"headlessAllowed\": true}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("직접파싱 상품"));
+    }
+
+    @Test
     @DisplayName("LLM 이 상품 페이지가 아니라고 판정하면 422 NOT_PRODUCT_PAGE 를 반환한다")
     void notProductPage() throws Exception {
         stubGeminiClient.reset();

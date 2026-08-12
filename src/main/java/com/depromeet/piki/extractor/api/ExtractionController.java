@@ -34,14 +34,22 @@ public class ExtractionController {
         ProductLink link = ProductLink.parse(request.url());
         // model 은 호출자가 백오피스에서 지정한 값이라 원장에 남긴다 — 추출 품질이 흔들릴 때 "그때 어느 모델이었나"를
         // 되짚는 유일한 근거다(자유 문자열이라 메트릭 라벨로는 못 쓴다).
+        // headlessAllowed 도 원장에 남긴다 — 허가 없는 대상이 브라우저로 갔는지(또는 허가가 왜 안 왔는지)를
+        // 사후에 되짚을 수 있는 유일한 근거다.
         log.info(
-            "extract request correlationId={} headlessFirst={} model={} url={}",
+            "extract request correlationId={} headlessFirst={} headlessAllowed={} model={} url={}",
             correlationId,
             request.headlessFirst(),
+            request.headlessAllowed(),
             request.model(),
             link.safeLogString()
         );
-        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.headlessFirst(), request.model());
+        ProductSnapshot snapshot = productLinkExtractor.extract(
+            link,
+            request.headlessFirst(),
+            request.headlessAllowed(),
+            request.model()
+        );
         return ExtractionResponse.from(snapshot);
     }
 
