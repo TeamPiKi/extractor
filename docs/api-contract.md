@@ -9,6 +9,7 @@
 - Extractor 는 **무상태**다. DB 없음, 호출 간 상태 없음. 같은 요청이 중복 도착해도 상태 오염이 없다(중복의 대가는 LLM 비용 한 번뿐). Extractor 에 상태를 넣고 싶어지면 설계 경고 신호다.
 - 재시도·내구성·상태 전이는 전부 호출자(core 의 item_snapshots outbox)의 책임이다. Extractor 는 "단건 시도 1회"에만 답한다.
 - 에스컬레이션(plain fetch → headless 브라우저)은 Extractor 내부 관심사다. 응답 계약에 드러나지 않는다 — 호출자는 어떤 fetch 전략이 쓰였는지 모른다. 단 "어느 플랫폼을 처음부터 헤드리스로 보낼지"의 **정책**은 호출자(DB·백오피스)가 주인이라, 요청 필드 `headlessFirst` 로 힌트만 받는다(§2) — 무상태 불변식을 지키는 선에서의 유일한 정책 수용 지점이다.
+- **헤드리스는 허가받은 대상에만 쓴다.** 허가 여부의 주인도 호출자라, 요청 필드 `headlessAllowed` 로 받는다(§2). Extractor 는 허가 대상을 알지 못하고 판정도 하지 않으며(무상태), 허가가 없으면 헤드리스 진입 3경로(직행·차단 승격·불완전 승격)를 전부 닫고 plain 만 돈다. 이것은 성능 최적화가 아니라 계약이다.
 
 ## 1. 응답 3갈래 (전이 규약)
 
@@ -28,11 +29,12 @@
 요청:
 
 ```json
-{ "url": "https://www.musinsa.com/products/12345", "headlessFirst": false, "model": "gemini-3.1-flash-lite" }
+{ "url": "https://www.musinsa.com/products/12345", "headlessFirst": false, "headlessAllowed": false, "model": "gemini-3.1-flash-lite" }
 ```
 
 - `url` (필수): https 스킴의 상품 페이지 URL. 형식·스킴·미지원 플랫폼의 동기 검증은 호출자(core 등록 경계)가 이미 끝냈다는 전제이나, Extractor 도 자기 경계에서 방어 검증한다(다층 방어).
-- `headlessFirst` (선택, 기본 false — additive, 이관 7단계): 호출자의 플랫폼 라우팅 정책(`HEADLESS_FIRST`, DB·백오피스 동적 설정) 힌트. true 면 plain(정적 fetch)을 건너뛰고 처음부터 헤드리스 브라우저로 추출한다. 정책의 단일 진실은 호출자 DB 에 있고 무상태인 Extractor 는 요청 단위로만 받는다. Extractor 의 `product.extract.headless.enabled` 가 꺼져 있으면 무시된다(스위치가 힌트보다 우선).
+- `headlessFirst` (선택, 기본 false — additive, 이관 7단계): 호출자의 플랫폼 라우팅 정책(`HEADLESS_FIRST`, DB·백오피스 동적 설정) 힌트. true 면 plain(정적 fetch)을 건너뛰고 처음부터 헤드리스 브라우저로 추출한다. 정책의 단일 진실은 호출자 DB 에 있고 무상태인 Extractor 는 요청 단위로만 받는다. Extractor 의 `product.extract.headless.enabled` 가 꺼져 있으면 무시된다(스위치가 힌트보다 우선). `headlessAllowed` 가 false 여도 함께 무시된다 — 허가가 라우팅보다 앞선다.
+- `headlessAllowed` (선택, 기본 false — additive): 이 대상에 헤드리스 브라우저를 써도 되는지에 대한 호출자의 허가. false 면 Extractor 는 어떤 경로로도 헤드리스를 타지 않는다 — 직행(`headlessFirst`)·차단 승격·불완전 승격 셋 다 닫히고 plain 만 돈다. **누락·null 은 false(허가 없음)로 정규화되는 fail-safe** 라, 이 필드를 모르는 구버전 호출자의 요청은 헤드리스를 열지 않는다(배포 순서 무관, 안전한 쪽으로만 어긋난다). 허가 대상의 단일 진실은 호출자 쪽에 있고 Extractor 는 판정하지 않는다(무상태). `product.extract.headless.enabled` 는 그 위에 남는 Extractor 쪽 운영 비상 차단이다 — 둘 다 서야 헤드리스가 열린다.
 - `model` (선택, additive — core#875): 이 요청의 LLM 추출에 쓸 모델. headlessFirst 와 같은 성질이다 — 정책의 단일 진실은 호출자 DB(백오피스)에 있고 Extractor 는 요청 단위로만 받는다. **요청 단위로 받는 이유**: Extractor 박스 한 대를 여러 환경이 공유하므로, 모델을 Extractor 환경변수로 잡으면 dev 에서 바꾼 것이 prod 파싱까지 덮는다. 생략·null·빈 문자열이면 Extractor 의 기본 모델(`GeminiProperties.DEFAULT_MODEL`)을 쓴다 — 구버전 호출자의 요청이 그대로 동작하므로 배포 순서 무관.
 - **지정 모델이 404 면 기본 모델로 대체하고 추출을 이어간다.** 등록 당시 유효했던 모델이 폐기돼 사라지는 경우가 있고, 그때 파싱 전체가 죽는 것보다 기본 모델로 이어가는 편이 낫다(가용성 우선). 대체가 일어나도 응답 모양은 같으며, 발생 사실은 Extractor 의 warn 로그와 `gemini.model.fallback` 카운터에만 남는다. **400·5xx·timeout 은 대체하지 않는다** — 400 은 요청 body 쪽 결함일 수 있어 대체로 덮으면 버그가 묻히고, 나머지는 모델을 바꾼다고 풀리는 실패가 아니다.
 - 헤더 `X-Correlation-Id` (선택): 호출자의 item_snapshot id. 로그·trace 상관용이며 동작에 영향 없다.
@@ -69,7 +71,7 @@
 | `TOO_MANY_REDIRECTS` | `PageFetchException.tooManyRedirects` |
 | `MALFORMED_REDIRECT` | `PageFetchException.malformedRedirect` |
 | `PERMANENT_UPSTREAM` | `PageFetchException.permanentUpstreamError` — 대상 500/501 (봇 차단 추정) |
-| `EMPTY_SHELL` | `PageFetchException.emptyShell` — fetch 는 2xx 지만 본문이 데이터 없는 CSR 셸(파싱 no-data 를 재분류). 헤드리스 에스컬레이션 대상이라, 헤드리스가 켜진 구성에선 헤드리스 결과가 대신 응답된다 |
+| `EMPTY_SHELL` | `PageFetchException.emptyShell` — fetch 는 2xx 지만 본문이 데이터 없는 CSR 셸(파싱 no-data 를 재분류). 헤드리스 에스컬레이션 대상이라, 헤드리스가 켜지고 `headlessAllowed` 허가가 실린 요청에선 헤드리스 결과가 대신 응답된다 |
 | `NO_EXTRACTABLE_CONTENT` | `ProductSnapshotException.noExtractableContent` — 본문에 가시 텍스트도 데이터 script 도 없어 LLM 을 부르지 않고 확정(빈 셸 환각 차단). plain 경로는 EMPTY_SHELL 재분류가 선행하므로 사실상 헤드리스 렌더 결과까지 셸일 때 나온다 |
 | `LLM_INVALID_RESPONSE` | `GeminiApiException` clientError/parseError/noTextPart — 재시도 무의미한 LLM 실패 |
 | `INVALID_URL` | url 형식·스킴 위반. 정상 흐름에선 호출자가 동기 검증해 도달하지 않는다(방어) |
