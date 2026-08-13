@@ -13,9 +13,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param baseUrl 렌더 서비스 주소(사설망, 예: {@code http://<headless-private-ip>:8000}). 내부 주소라 코드·yml 에
  *     박지 않고 env 로만 주입한다.
  * @param readTimeout 렌더 서비스 내부 최악(goto + 렌더 정착 대기)을 다 기다리지는 않는다 — 호출자 read 예산 안에
- *     LLM fallback 몫을 남겨야 하기 때문이다. 층별 예산의 정본은 계약의 타임아웃 예산 절(docs/api-contract.md
- *     이 가리키는 곳). 상한을 넘긴 렌더는 일시
- *     실패로 떨어져 호출자 재시도가 진다.
+ *     LLM fallback 몫을 남겨야 하기 때문이다. 층별 예산의 정본은 TeamPiKi/infra 의 contracts/extraction-api.md
+ *     "타임아웃 예산" 절. 상한을 넘긴 렌더는 일시 실패로 떨어져 호출자 재시도가 진다.
  * @param compress 응답 zstd 압축 전송 요청(서버간 전송량 절감). 해제는 응답 헤더({@code X-Encoding}) 기준이라
  *     compress 필드를 모르는 구버전 renderer(무시하고 plain JSON 으로 답한다)와도 호환된다 — 켜 둔 채로 배포
  *     순서와 무관하게 안전하고, 이 스위치는 압축 경로에 문제가 생겼을 때 끄는 kill-switch 다.

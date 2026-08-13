@@ -35,7 +35,7 @@ public class GeminiHttpClient implements GeminiClient {
 
     /**
      * LLM 응답이 길어질 수 있어 넉넉히 두되, 호출자 read 예산 안에 들도록 상한을 둔다
-     * (층별 예산의 정본은 계약의 타임아웃 예산 절 — docs/api-contract.md 가 가리키는 곳).
+     * (층별 예산의 정본은 TeamPiKi/infra 의 contracts/extraction-api.md "타임아웃 예산" 절).
      */
     private static final int READ_TIMEOUT_MS = 30_000;
 
