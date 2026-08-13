@@ -8,6 +8,10 @@
 .claude/commands/
 .claude/rules/testing-principles.md
 
+# infra(TeamPiKi/infra) 정본 사본 - 로컬은 install.sh 가, CI 는 ci.yml 의 checkout 스텝이 여기에 놓는다.
+# 커밋하면 그 사본이 정본과 어긋난 채 굳으므로(메타 테스트가 잡으려는 것 자체) 무시한다.
+shared-infra/
+
 # IDE - 개인 설정 제외
 .idea/*
 !.idea/codeStyles/
