@@ -1,8 +1,10 @@
 package com.depromeet.piki.extractor.common.exception;
 
 /**
- * 실패 응답 body 의 code. docs/api-contract.md 의 code 표와 1:1 이어야 한다 — 추가는 자유(additive),
- * 제거·의미 변경 금지. 호출자(core)는 이 값을 전이 판정에 쓰지 않고(status 만 본다) 관측·디버깅에만 쓴다.
+ * 실패 응답 body 의 code. 정본 카탈로그(TeamPiKi/infra 의 contracts/extraction-error-codes.yaml)와 1:1 이어야
+ * 하고 ExtractionErrorCodeCatalogTest 가 그것을 강제한다 — 여기에 상수를 더하면 카탈로그도 함께 고친다.
+ * 추가는 자유(additive), 제거·의미 변경 금지. 호출자(core)는 이 값을 전이 판정에 쓰지 않고(status 만 본다)
+ * 관측·디버깅에만 쓴다.
  * <p>일시/확정 분류의 정본은 각 예외 팩토리의 permanent 플래그다 — 여기 복제하지 않는다.
  */
 public enum ExtractionErrorCode {
@@ -17,8 +19,10 @@ public enum ExtractionErrorCode {
     EMPTY_SHELL,
     /**
      * 본문에 가시 텍스트도 데이터 script 도 없어 LLM 을 부르지 않고 확정한 것(LlmInputGate) — 빈 입력의 LLM 은
-     * 실존하지 않는 상품을 지어낸다(환각). EMPTY_SHELL(일시, 에스컬레이션 대상)과 달리 확정이다 — plain 경로는
-     * 셸 재분류가 선행하므로, 이 code 는 사실상 헤드리스 렌더 결과까지 셸일 때 표면화된다.
+     * 실존하지 않는 상품을 지어낸다(환각). EMPTY_SHELL 과 확정/일시 축에서는 같고(둘 다 확정), 갈리는 축은
+     * 에스컬레이션이다 — EMPTY_SHELL 은 브라우저면 뚫릴 수 있어 승격되지만({@code PageFetchException.emptyShell}
+     * 의 escalatable 이 정본), 이 code 는 승격 대상이 아니다. plain 경로는 셸 재분류가 선행하므로, 이 code 는
+     * 사실상 헤드리스 렌더 결과까지 셸일 때 표면화된다.
      */
     NO_EXTRACTABLE_CONTENT,
     LLM_INVALID_RESPONSE,

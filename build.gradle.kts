@@ -75,6 +75,12 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // 에러 code 카탈로그(infra 정본의 로컬 사본)를 테스트 입력으로 선언한다 - 소스 트리 밖이라 기본 입력이 아니고,
+    // 선언하지 않으면 카탈로그만 바뀐 실행이 UP-TO-DATE 로 넘어가 어긋남이 다음 clean 까지 안 드러난다.
+    // fileTree 는 디렉터리가 없어도(설치 전) 빈 컬렉션이라 빌드를 깨지 않는다.
+    inputs.files(fileTree("shared-infra/contracts"))
+        .withPropertyName("extractionContractCatalog")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     // zstd-jni 의 JNI 네이티브 로드 허용 — Java 25 는 경고만 내지만 미래 JDK 는 차단한다(JEP 472).
     // 런타임은 Dockerfile ENTRYPOINT 가 같은 플래그를 준다.
     jvmArgs("--enable-native-access=ALL-UNNAMED")

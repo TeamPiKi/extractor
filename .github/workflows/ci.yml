@@ -20,6 +20,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 에러 code 카탈로그 정본을 받아 ExtractionErrorCodeCatalogTest 가 enum 과 대조한다.
+      # 경로 별칭 shared-infra 는 install.sh 가 로컬에 설치하는 경로와 같다 - 테스트가 경로 하나만 알면 된다.
+      - name: Checkout extraction contract
+        uses: actions/checkout@v4
+        with:
+          repository: TeamPiKi/infra
+          ref: main
+          path: shared-infra
+          sparse-checkout: contracts
+          persist-credentials: false
+
       - uses: actions/setup-java@v4
         with:
           java-version: '25'
