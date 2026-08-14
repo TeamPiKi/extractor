@@ -52,6 +52,7 @@ class ProductLinkExtractE2ETest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GeminiProperties properties = new GeminiProperties(
         System.getenv("GEMINI_API_KEY"),
+        null,
         "gemini-3-flash-preview",
         new GeminiProperties.Retry()
     );

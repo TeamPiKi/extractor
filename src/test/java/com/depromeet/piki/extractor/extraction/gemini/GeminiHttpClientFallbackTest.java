@@ -49,11 +49,14 @@ class GeminiHttpClientFallbackTest {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://gemini.test");
         server = MockRestServiceServer.bindTo(builder).build();
         expectations.accept(server);
+        // 무료 키 없는 구성이라 티어 순회는 유료 하나뿐이고, 두 인자에 같은 클라이언트가 들어가도 무해하다.
+        RestClient restClient = builder.build();
         return new GeminiHttpClient(
             new GeminiProperties("test-key"),
             new ObjectMapper(),
             new SimpleMeterRegistry(),
-            builder.build()
+            restClient,
+            restClient
         );
     }
 
