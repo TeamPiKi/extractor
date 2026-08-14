@@ -24,6 +24,14 @@ public class StubImageStorage implements ImageStorage {
      */
     public byte[] lastUploadedBytes;
 
+    /**
+     * 위장 업로드 회귀(#35)를 잡으려면 바이트만으로는 부족하다 — 크롭 불가 포맷(HEIC 등)의 원본을 {@code .png} ·
+     * {@code image/png} 로 올리던 버그는 key·content-type 을 봐야 드러난다. 같은 이유로 테스트 본문이 먼저 초기화한다.
+     */
+    public String lastUploadedKey;
+
+    public String lastUploadedContentType;
+
     @Override
     public StoredImage download(String bucket, String key) {
         return onDownload.apply(bucket, key);
@@ -32,6 +40,8 @@ public class StubImageStorage implements ImageStorage {
     @Override
     public String upload(String bucket, byte[] bytes, String key, String contentType) {
         lastUploadedBytes = bytes;
+        lastUploadedKey = key;
+        lastUploadedContentType = contentType;
         return UPLOADED_URL;
     }
 }

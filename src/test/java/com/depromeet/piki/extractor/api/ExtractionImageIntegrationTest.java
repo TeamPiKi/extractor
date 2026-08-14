@@ -1,7 +1,10 @@
 package com.depromeet.piki.extractor.api;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -114,6 +117,33 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
         BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));
         assertEquals(320, uploaded.getWidth());
         assertEquals(320, uploaded.getHeight());
+        // 크롭이 실제로 일어났을 때만 PNG 다 — 아래 HEIC 케이스와 짝을 이루는 대조군.
+        assertEquals("image/png", stubImageStorage.lastUploadedContentType);
+        assertTrue(stubImageStorage.lastUploadedKey.endsWith(".png"));
+    }
+
+    @Test
+    @DisplayName("크롭할 수 없는 포맷은 원본 확장자·content-type 으로 올린다 - png 로 위장하지 않는다")
+    void uploadsOriginalFormatWhenCropIsImpossible() throws Exception {
+        // HEIC 은 ImageIO 에 디코더가 없어 크롭이 건너뛰어진다(의도된 fallback). 그때 원본 바이트를 .png ·
+        // image/png 로 올리면 브라우저가 렌더링하지 못하는 파일이 저장된다 — prod 에서 실제로 그랬다(#35).
+        // 등록이 허용하는 5개 포맷 중 webp·heic·heif 셋이 이 경로를 탄다.
+        stubGeminiClient.reset();
+        stubImageStorage.lastUploadedKey = null;
+        stubImageStorage.lastUploadedContentType = null;
+        byte[] heicBytes = {1, 2, 3, 4};
+        stubImageStorage.onDownload = (bucket, key) -> new StoredImage(heicBytes, "image/heic");
+        stubGeminiClient.build = request ->
+            new GeminiImageResult("사진 상품", 30000, null, "KRW", new GeminiImageResult.BoundingBoxDto(100, 100, 500, 500));
+
+        mockMvc().perform(post("/internal/extractions/image")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("items/raw/photo.heic")))
+            .andExpect(status().isOk());
+
+        assertEquals("image/heic", stubImageStorage.lastUploadedContentType);
+        assertTrue(stubImageStorage.lastUploadedKey.endsWith(".heic"));
+        assertArrayEquals(heicBytes, stubImageStorage.lastUploadedBytes, "크롭이 불가능하면 원본 바이트가 그대로 올라간다");
     }
 
     @Test
@@ -146,7 +176,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("추출이 name 을 못 채우면 422 UNTRUSTWORTHY_VALUE 를 반환한다 (link 와 같은 non-null 규약)")
+    @DisplayName("추출이 name 을 못 채워도 200 으로 채운 값을 반환한다 - 호출자가 INCOMPLETE 로 받는다")
     void incompleteExtraction() throws Exception {
         stubGeminiClient.reset();
         stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, "image/png");
@@ -155,7 +185,26 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
         mockMvc().perform(post("/internal/extractions/image")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("items/raw/noname.png")))
-            .andExpect(status().isUnprocessableEntity())
-            .andExpect(jsonPath("$.code").value("UNTRUSTWORTHY_VALUE"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value(nullValue()))
+            .andExpect(jsonPath("$.currentPrice").value(1000))
+            // 이미지 경로는 추출 결과물을 올려 imageUrl 이 항상 채워진다 — 사용자가 채울 것은 이름뿐이다.
+            .andExpect(jsonPath("$.imageUrl").value(notNullValue()));
+    }
+
+    @Test
+    @DisplayName("이미지 경로는 추출값이 전부 비어도 업로드 결과가 있어 200 이다 - 사용자가 이름·가격을 채운다")
+    void noExtractedValue() throws Exception {
+        stubGeminiClient.reset();
+        stubImageStorage.onDownload = (bucket, key) -> new StoredImage(new byte[] {1, 2, 3}, "image/png");
+        // 가격·이름 모두 없음. imageUrl 은 업로드 결과라 채워지므로, 값 0개를 만들려면 업로드 자체가 없어야 하는데
+        // 이미지 경로에는 그 상태가 없다 — 그래서 이 판정은 link 경로에서 표면화된다(ExtractionLinkIntegrationTest).
+        stubGeminiClient.build = request -> new GeminiImageResult(null, null, null, null, null);
+
+        mockMvc().perform(post("/internal/extractions/image")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("items/raw/empty.png")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageUrl").value(notNullValue()));
     }
 }
