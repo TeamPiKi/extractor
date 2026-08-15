@@ -86,9 +86,28 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,infra/nginx/extractor.conf"
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
           target: "/tmp/piki-blocks"
           strip_components: 2
+
+      # 관측 수집기(Alloy)를 매 배포 갱신한다. 이 단계가 없던 동안 공용 config(TeamPiKi/infra
+      # blocks/alloy)를 고쳐도 이 박스에는 영영 반영되지 않았다 - 스크립트는 있었지만 사람이 박스에서
+      # 수동 실행할 때만 돌았기 때문이다(2026-08-13 실측: infra#44 감축 후에도 collector 41 그대로,
+      # 같은 변경이 적용된 core dev 박스는 12). core 가 provision-runtime.sh 로 하는 일과 같은 결이다.
+      #
+      # 앱 배포 앞에 둔다: 순서를 core 와 맞추고, 관측이 깨진 채 앱만 새로 올라가는 상태를 막는다.
+      # 스크립트는 자기 완결적이라(공용 블록을 raw.githubusercontent 에서 직접 fetch, 자격은 박스가
+      # SSM 공유 경로에서 직접 읽음) 러너가 넘길 인자·secret 이 없다.
+      - name: Provision observability (Alloy)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            chmod +x /tmp/piki-blocks/provision-observability.sh
+            /tmp/piki-blocks/provision-observability.sh
 
       - name: Deploy (SSM env pull + blue-green slot + nginx switch)
         uses: appleboy/ssh-action@v1
