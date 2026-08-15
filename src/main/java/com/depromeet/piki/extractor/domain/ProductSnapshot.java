@@ -1,5 +1,7 @@
 package com.depromeet.piki.extractor.domain;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -42,6 +44,35 @@ public record ProductSnapshot(
      */
     public boolean missingReadyField() {
         return name == null || name.isBlank() || imageUrl == null || currentPrice == null;
+    }
+
+    /**
+     * 추출값을 하나도 못 얻었는가 — 호출자에게 내려보낼 것도, 사용자에게 "무엇을 채우라" 할 근거도 없는 상태다.
+     *
+     * <p>부분값(일부만 채움)은 호출자가 INCOMPLETE 로 수용해 사용자가 나머지를 채우므로(TeamPiKi/core#944)
+     * 성공으로 내려보내고, 이 판정이 참일 때만 확정 실패로 닫는다. currency 는 READY 필수가 아니라 단독으로는
+     * "건졌다"의 근거가 되지 못하므로 세지 않는다.
+     */
+    public boolean hasNoExtractedValue() {
+        return (name == null || name.isBlank()) && imageUrl == null && currentPrice == null;
+    }
+
+    /**
+     * 못 채운 READY 필드 이름들("currentPrice" · "name+currentPrice") — 무엇을 사용자에게 물어야 하는지를
+     * 로그로 남기는 데 쓴다. 부분값을 성공으로 내려보내면 code 만으로는 어느 필드가 비었는지 사후 판별이 불가능하다.
+     */
+    public String missingFieldNames() {
+        List<String> missing = new ArrayList<>();
+        if (name == null || name.isBlank()) {
+            missing.add("name");
+        }
+        if (imageUrl == null) {
+            missing.add("imageUrl");
+        }
+        if (currentPrice == null) {
+            missing.add("currentPrice");
+        }
+        return String.join("+", missing);
     }
 
     /** 컬럼 길이 제약은 호출자(core items 테이블)의 계약이다. 값이 바뀌면 양쪽을 함께 갱신한다. */

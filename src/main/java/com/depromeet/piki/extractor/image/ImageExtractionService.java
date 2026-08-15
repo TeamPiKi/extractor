@@ -36,9 +36,14 @@ public class ImageExtractionService {
         ImageExtraction extraction = productImageExtractor.extract(image, model);
 
         // 크롭이 불가능해도 원본을 올린다 — 호출자의 READY 불변식이 imageUrl 을 요구한다.
-        byte[] resultBytes = croppedOrOriginal(image, extraction);
-        String imageUrl = imageStorage.upload(bucket, resultBytes, "items/" + UUID.randomUUID() + ".png", "image/png");
-        log.info("image extract bucket={} key={} croppedUrl={}", bucket, key, imageUrl);
+        UploadTarget target = croppedOrOriginal(image, extraction);
+        String objectKey = "items/" + UUID.randomUUID() + "." + target.extension();
+        String imageUrl = imageStorage.upload(bucket, target.bytes(), objectKey, target.mimeType());
+        // cropped 를 함께 남긴다 — croppedUrl 이라는 이름과 달리 크롭을 건너뛴 경우가 섞여 있어, 이 값 없이는
+        // "원본이 그대로 올라간 비율"을 사후에 알 수 없다.
+        log.info(
+            "image extract bucket={} key={} croppedUrl={} cropped={}",
+            bucket, key, imageUrl, target.cropped());
 
         // 이미지 경로는 원본 URL 이 없어 finalUrl 도 없고, 추출이 Gemini 라 method 는 항상 LLM 이다.
         ProductSnapshot s = extraction.snapshot();
@@ -52,11 +57,28 @@ public class ImageExtractionService {
         return fromKey != null ? fromKey : stored.contentType();
     }
 
-    private byte[] croppedOrOriginal(ProductImage image, ImageExtraction extraction) {
+    /**
+     * 업로드할 결과물. 크롭이 실제로 일어났으면 PNG 인코딩 결과이고, 크롭 불가 포맷(HEIC·WebP·HEIF 는 ImageIO 에
+     * 디코더가 없다)이면 원본 바이트 그대로다.
+     *
+     * <p>확장자·content-type 을 결과물과 함께 나르는 이유: 예전에는 둘 다 png 로 하드코딩돼 있어, 크롭을 건너뛴
+     * HEIC 바이트가 {@code .png} · {@code image/png} 로 위장돼 저장됐다. 브라우저 대부분이 그 파일을 렌더링하지
+     * 못한다. 등록이 허용하는 5개 포맷 중 셋이 이 경로를 탄다(#35).
+     */
+    private record UploadTarget(byte[] bytes, String extension, String mimeType, boolean cropped) {}
+
+    private UploadTarget croppedOrOriginal(ProductImage image, ImageExtraction extraction) {
         if (extraction.boundingBox() == null) {
-            return image.bytes();
+            return original(image);
         }
         byte[] cropped = imageCropper.crop(image.bytes(), extraction.boundingBox());
-        return cropped != null ? cropped : image.bytes();
+        if (cropped == null) {
+            return original(image);
+        }
+        return new UploadTarget(cropped, "png", "image/png", true);
+    }
+
+    private UploadTarget original(ProductImage image) {
+        return new UploadTarget(image.bytes(), image.extension(), image.mimeType(), false);
     }
 }

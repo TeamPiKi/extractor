@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.api;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -186,15 +187,34 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("추출 결과가 READY 필수 필드(name·price·imageUrl)를 못 채우면 422 UNTRUSTWORTHY_VALUE 를 반환한다")
+    @DisplayName("추출 결과가 READY 필수 필드를 다 못 채워도 200 으로 채운 값을 반환한다")
     void incompleteExtraction() throws Exception {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
         stubGeminiClient.build = request -> new GeminiExtractionResult(true, "이미지 없는 상품", 5000, "KRW", null);
 
+        // 예전에는 imageUrl 하나가 비었다고 422 로 닫아 이름·가격까지 버렸다. 이제는 채운 값을 내려보내고
+        // 호출자가 INCOMPLETE 로 받아 사용자가 나머지를 채운다(TeamPiKi/core#944).
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://shop.example.com/p/4")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("이미지 없는 상품"))
+            .andExpect(jsonPath("$.currentPrice").value(5000))
+            .andExpect(jsonPath("$.imageUrl").value(nullValue()));
+    }
+
+    @Test
+    @DisplayName("추출이 값을 하나도 못 채우면 422 UNTRUSTWORTHY_VALUE 를 반환한다")
+    void noExtractedValue() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
+        // 상품 페이지라고는 하는데 아무 값도 못 뽑은 경우 — 사용자에게 무엇을 채우라 할 근거조차 없어 확정 실패로 닫는다.
+        stubGeminiClient.build = request -> new GeminiExtractionResult(true, null, null, null, null);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://shop.example.com/p/empty")))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("UNTRUSTWORTHY_VALUE"));
     }
