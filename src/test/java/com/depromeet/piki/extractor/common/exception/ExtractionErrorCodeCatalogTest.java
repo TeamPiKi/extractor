@@ -152,6 +152,7 @@ class ExtractionErrorCodeCatalogTest {
         Throwable cause = new IllegalStateException("catalog contract test");
         return List.of(
             new FactoryCase("PageFetchException.upstreamError", PageFetchException.upstreamError(cause)),
+            new FactoryCase("PageFetchException.unresolvableHost", PageFetchException.unresolvableHost(cause)),
             new FactoryCase("PageFetchException.emptyBody", PageFetchException.emptyBody()),
             new FactoryCase("PageFetchException.permanentUpstreamError", PageFetchException.permanentUpstreamError(cause)),
             new FactoryCase("PageFetchException.clientError", PageFetchException.clientError(cause)),

@@ -36,7 +36,7 @@ public final class InternalHostGuard {
             addresses = dnsResolver.resolve(host);
         } catch (UnknownHostException e) {
             log.info("link fetch unknown host url={}", link.safeLogString());
-            throw PageFetchException.upstreamError(e);
+            throw PageFetchException.unresolvableHost(e);
         }
         for (InetAddress addr : addresses) {
             if (isInternalAddress(addr)) {
