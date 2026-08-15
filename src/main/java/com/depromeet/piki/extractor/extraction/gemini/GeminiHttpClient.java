@@ -145,7 +145,11 @@ public class GeminiHttpClient implements GeminiClient {
             Tier tier = tiers.get(i);
             boolean hasNext = i < tiers.size() - 1;
             try {
-                return withModelCandidates(request, resultType, requestedModel, tier);
+                Res result = withModelCandidates(request, resultType, requestedModel, tier);
+                // 어느 티어가 응답했는지를 성공 경로에서도 남긴다. 실패(에스컬레이션)만 찍으면 "무료가 성공했다" 와
+                // "무료가 아예 안 쓰였다" 가 로그상 똑같아, 무료 티어 도입 여부를 우리 쪽에서 확인할 수 없다.
+                log.info("Gemini 호출 성공 - tier={}", tier.label());
+                return result;
             } catch (GeminiApiException e) {
                 if (!hasNext || !escalates(e)) {
                     throw e;
