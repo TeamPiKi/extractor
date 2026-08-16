@@ -84,18 +84,18 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     }
 
     @Override
-    public PageContent render(ProductLink link) {
+    public PageContent render(ProductLink link, boolean authorized) {
         try {
             // 여기서 걸리면 PageFetchException.blockedHost 로 — plain 경로와 같은 계약 코드로 떨어진다.
             internalHostGuard.verify(link);
-            return renderVerified(link);
+            return renderVerified(link, authorized);
         } finally {
             dnsResolver.clear();
         }
     }
 
-    private PageContent renderVerified(ProductLink link) {
-        HeadlessRenderResponse response = requestRender(link);
+    private PageContent renderVerified(ProductLink link, boolean authorized) {
+        HeadlessRenderResponse response = requestRender(link, authorized);
 
         String verdict = response.verdict();
         if (VERDICT_BLOCK.equals(verdict)) {
@@ -127,13 +127,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         return new PageContent(link, capHtml(html), resolveFinalUrl(response.finalUrl(), link));
     }
 
-    private HeadlessRenderResponse requestRender(ProductLink link) {
+    private HeadlessRenderResponse requestRender(ProductLink link, boolean authorized) {
         ResponseEntity<byte[]> entity;
         try {
             entity = restClient.post()
                 .uri(RENDER_PATH)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new HeadlessRenderRequest(link.value().toString(), true, properties.compress()))
+                .body(new HeadlessRenderRequest(link.value().toString(), authorized, true, properties.compress()))
                 .retrieve()
                 .toEntity(byte[].class);
         } catch (RestClientResponseException e) {

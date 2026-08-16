@@ -31,7 +31,7 @@ class HeadlessProductLinkExtractorTest {
     private final StubGeminiClient stubGemini = new StubGeminiClient();
 
     private HeadlessProductLinkExtractor extractorWith(Function<ProductLink, PageContent> render) {
-        HeadlessRenderer renderer = render::apply;
+        HeadlessRenderer renderer = (target, authorized) -> render.apply(target);
         return new HeadlessProductLinkExtractor(
             renderer,
             new HtmlSnapshotPipeline(
@@ -51,7 +51,7 @@ class HeadlessProductLinkExtractorTest {
             + "</script></head><body></body></html>";
         HeadlessProductLinkExtractor extractor = extractorWith(l -> PageContent.of(l, html));
 
-        ProductSnapshot snapshot = extractor.extract(link, null);
+        ProductSnapshot snapshot = extractor.extract(link, false, null);
 
         assertEquals("렌더 상품", snapshot.name());
         assertEquals(209_000, snapshot.currentPrice());
@@ -67,7 +67,7 @@ class HeadlessProductLinkExtractorTest {
             "<html><body>" + "구조화 데이터 없이 렌더된 상품 상세 설명 텍스트. ".repeat(3) + "</body></html>"
         ));
 
-        ProductSnapshot snapshot = extractor.extract(link, null);
+        ProductSnapshot snapshot = extractor.extract(link, false, null);
 
         assertEquals("엘엘엠 상품", snapshot.name());
         assertEquals(1, stubGemini.invocations());
@@ -85,7 +85,7 @@ class HeadlessProductLinkExtractorTest {
 
         ProductSnapshotException e = assertThrows(
             ProductSnapshotException.class,
-            () -> extractor.extract(link, null)
+            () -> extractor.extract(link, false, null)
         );
 
         assertEquals(ExtractionErrorCode.NO_EXTRACTABLE_CONTENT, e.code());
@@ -99,6 +99,6 @@ class HeadlessProductLinkExtractorTest {
             throw HeadlessRenderException.blocked();
         });
 
-        assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, null));
+        assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null));
     }
 }

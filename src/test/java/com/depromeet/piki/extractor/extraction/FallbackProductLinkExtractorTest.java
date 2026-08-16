@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
  * 여기 단위에서 한다. 두 전략은 실제 빈이 네트워크/브라우저를 요구해 단위로 세울 수 없어,
  * LinkExtractionStrategy fake 로 "전략의 결과"만 주입한다.
  *
- * <p>헤드리스가 도는 케이스는 전부 headlessAllowed=true 를 넘긴다 — 허가가 헤드리스 진입의 전제 조건이기
- * 때문이다. 허가가 없을 때 3경로가 모두 닫히는지는 아래 headlessAllowed* 케이스가 따로 못박는다.
+ * <p>authorized 는 헤드리스 진입 조건이 아니다 — 승격 경로는 그 값과 무관하게 같고, 이 플래그는 렌더 경계로
+ * 전달만 된다. 전달이 끊기지 않는지는 아래 authorized* 케이스가 못박는다.
  */
 class FallbackProductLinkExtractorTest {
 
@@ -40,9 +40,12 @@ class FallbackProductLinkExtractorTest {
             this.fn = fn;
         }
 
+        Boolean lastAuthorized;
+
         @Override
-        public ProductSnapshot extract(ProductLink link, String model) {
+        public ProductSnapshot extract(ProductLink link, boolean authorized, String model) {
             calls++;
+            lastAuthorized = authorized;
             return fn.apply(link);
         }
     }
@@ -73,7 +76,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, true, null);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -88,7 +91,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false, true, null));
+        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 
@@ -103,7 +106,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, true, null);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
@@ -123,7 +126,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, true, null);
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -143,7 +146,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false, true, null));
+        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
         assertEquals(
             1.0,
             registry.counter("product.extract.escalation", "outcome", "failed", "category", "FETCH_CLIENT_ERROR").count()
@@ -163,7 +166,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false, true, null));
+        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
         assertEquals(1, plain.calls);
         assertEquals(1, headless.calls);
         assertEquals(
@@ -172,57 +175,8 @@ class FallbackProductLinkExtractorTest {
         );
     }
 
-    @Test
-    @DisplayName("headlessFirst 힌트가 오면 plain 을 건너뛰고 headless 로 직행하며 success 로 집계한다")
-    void headlessFirstSkipsPlain() {
-        FakeStrategy plain = new FakeStrategy(l -> {
-            throw new IllegalStateException("plain 은 호출되면 안 됨");
-        });
-        ProductSnapshot headlessSnapshot =
-            new ProductSnapshot(null, "헤드리스 결과", "https://cdn.example.com/h.png", 50_000, null);
-        FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true, true, null);
 
-        assertEquals(headlessSnapshot, result);
-        assertEquals(0, plain.calls);
-        assertEquals(1, headless.calls);
-        assertEquals(1.0, registry.counter("product.extract.headless_first", "outcome", "success").count());
-    }
-
-    @Test
-    @DisplayName("headlessFirst 직행이 실패하면 plain 으로 되돌리지 않고 failed 로 집계한 뒤 그대로 전파한다")
-    void headlessFirstFailurePropagatesWithoutPlainFallback() {
-        // 직행 정책은 "plain 이 항상 차단되는 host" 지정이라 실패해도 plain 재시도는 낭비다 — 재시도는 호출자
-        // outbox recover 축이, 정책 오지정은 백오피스 롤백이 진다. outcome=failed 시계열이 그 오지정의 추세 신호다.
-        FakeStrategy plain = new FakeStrategy(l -> snapshot);
-        FakeStrategy headless = new FakeStrategy(l -> {
-            throw new RuntimeException("headless 실패");
-        });
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, true, true, null));
-        assertEquals(0, plain.calls);
-        assertEquals(1, headless.calls);
-        assertEquals(1.0, registry.counter("product.extract.headless_first", "outcome", "failed").count());
-    }
-
-    @Test
-    @DisplayName("headless 가 꺼져 있으면 headlessFirst 힌트도 무시하고 plain 에 위임한다")
-    void headlessFirstIgnoredWhenDisabled() {
-        // 호출자(core)의 라우팅 정책이 이 서비스의 스위치보다 앞설 수 없다 — 스위치가 꺼진 동안은 zero-diff.
-        FakeStrategy plain = new FakeStrategy(l -> snapshot);
-        FakeStrategy headless = new FakeStrategy(l -> {
-            throw new IllegalStateException("headless 는 호출되면 안 됨");
-        });
-
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, true, true, null);
-
-        assertEquals(snapshot, result);
-        assertEquals(1, plain.calls);
-        assertEquals(0, headless.calls);
-    }
 
     @Test
     @DisplayName("headless 가 켜져 있어도 escalatable 이 아닌 실패는 전파하고 headless 를 호출하지 않는다")
@@ -233,7 +187,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, true, null));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 
@@ -249,7 +203,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, true, null);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
@@ -269,7 +223,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> incomplete);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, true, null);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null);
 
         assertEquals(incomplete, result);
         assertEquals(1, headless.calls);
@@ -279,21 +233,6 @@ class FallbackProductLinkExtractorTest {
         );
     }
 
-    @Test
-    @DisplayName("headlessFirst 직행 결과가 불완전하면 그대로 반환하되 failed 로 집계한다")
-    void headlessFirstIncompleteResultIsCountedFailed() {
-        // 직행 성공률은 정책 오지정(직행해도 못 살리는 host)의 추세 신호다 — 경계에서 확정 실패로 닫힐 결과를
-        // success 로 세면 그 신호가 실제보다 부푼다.
-        FakeStrategy plain = new FakeStrategy(l -> snapshot);
-        FakeStrategy headless = new FakeStrategy(l -> incomplete);
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true, true, null);
-
-        assertEquals(incomplete, result);
-        assertEquals(0, plain.calls);
-        assertEquals(1.0, registry.counter("product.extract.headless_first", "outcome", "failed").count());
-    }
 
     @Test
     @DisplayName("불완전 승격에서 headless 가 escalatable 실패를 던져도 재진입 없이 전파하고 failed 로 집계한다")
@@ -305,7 +244,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless, registry).extract(link, false, true, null));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null));
         assertEquals(1, headless.calls);
         assertEquals(
             1.0,
@@ -321,7 +260,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, true, null);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null);
 
         assertEquals(incomplete, result);
         assertEquals(0, headless.calls);
@@ -338,71 +277,16 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(ProductSnapshotException.class, () -> fallback(true, plain, headless).extract(link, false, true, null));
+        assertThrows(ProductSnapshotException.class, () -> fallback(true, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
     }
 
-    @Test
-    @DisplayName("허가가 없으면 plain 이 escalatable 차단으로 막혀도 headless 로 승격하지 않고 예외를 전파한다")
-    void headlessNotAllowedBlocksEscalation() {
-        // 허가는 "비싸니 아낀다"가 아니라 "써서는 안 된다"는 계약이라, 차단당했다는 사정이 허가를 대신하지 못한다.
-        FakeStrategy plain = new FakeStrategy(l -> {
-            throw PageFetchException.clientError(new RuntimeException("403"));
-        });
-        FakeStrategy headless = new FakeStrategy(l -> {
-            throw new IllegalStateException("headless 는 호출되면 안 됨");
-        });
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(
-            PageFetchException.class,
-            () -> fallback(true, plain, headless, registry).extract(link, false, false, null));
-        assertEquals(1, plain.calls);
-        assertEquals(0, headless.calls);
-        assertEquals(
-            0.0,
-            registry.counter("product.extract.escalation", "outcome", "success", "category", "FETCH_CLIENT_ERROR").count()
-        );
-    }
+
 
     @Test
-    @DisplayName("허가가 없으면 plain 결과가 불완전해도 headless 로 승격하지 않고 그대로 반환한다")
-    void headlessNotAllowedBlocksIncompleteEscalation() {
-        // 불완전 승격은 세 진입 경로 중 유일하게 plain 이 예외 없이 끝나는 경로다 — 여기로 허가가 새면
-        // 게이트가 반쪽이 된다. 반환값은 응답 경계가 확정 실패(UNTRUSTWORTHY_VALUE)로 닫는 기존 계약 그대로다.
-        FakeStrategy plain = new FakeStrategy(l -> incomplete);
-        FakeStrategy headless = new FakeStrategy(l -> {
-            throw new IllegalStateException("headless 는 호출되면 안 됨");
-        });
-
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, false, null);
-
-        assertEquals(incomplete, result);
-        assertEquals(1, plain.calls);
-        assertEquals(0, headless.calls);
-    }
-
-    @Test
-    @DisplayName("허가가 없으면 headlessFirst 직행 힌트가 와도 무시하고 plain 만 탄다")
-    void headlessNotAllowedBeatsHeadlessFirstHint() {
-        // 라우팅 힌트(어디로 보낼까)와 허가(써도 되나)는 다른 질문이다 — 힌트가 허가를 만들어내지 못한다.
-        FakeStrategy plain = new FakeStrategy(l -> snapshot);
-        FakeStrategy headless = new FakeStrategy(l -> {
-            throw new IllegalStateException("headless 는 호출되면 안 됨");
-        });
-        SimpleMeterRegistry registry = new SimpleMeterRegistry();
-
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, true, false, null);
-
-        assertEquals(snapshot, result);
-        assertEquals(1, plain.calls);
-        assertEquals(0, headless.calls);
-        assertEquals(0.0, registry.counter("product.extract.headless_first", "outcome", "success").count());
-    }
-
-    @Test
-    @DisplayName("허가가 없으면 escalatable 이 아닌 실패도 그대로 전파한다 (plain 단독 경로의 기존 계약)")
-    void headlessNotAllowedPropagatesNonEscalatableFailure() {
+    @DisplayName("허락 없는 요청도 escalatable 이 아닌 실패는 그대로 전파한다 (SSRF 차단은 승격 대상이 아니다)")
+    void unauthorizedPropagatesNonEscalatableFailure() {
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.blockedHost();
         });
@@ -410,7 +294,38 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, false, null));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null));
         assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("허락이 없어도 불완전 결과는 headless 로 승격한다 (허락은 승격 조건이 아니다)")
+    void unauthorizedStillEscalates() {
+        // 브라우저로 여는 것 자체는 신원을 밝히고 하는 일이라 허락을 전제하지 않는다. 허락이 여는 것은
+        // 렌더 서비스의 우회 수단뿐이고, 그 판단은 이 클래스가 아니라 렌더 경계 너머에 있다.
+        FakeStrategy plain = new FakeStrategy(l -> incomplete);
+        ProductSnapshot rescued =
+            new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", 23_900, null);
+        FakeStrategy headless = new FakeStrategy(l -> rescued);
+
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null);
+
+        assertEquals(rescued, result);
+        assertEquals(1, headless.calls);
+        assertEquals(Boolean.FALSE, headless.lastAuthorized);
+    }
+
+    @Test
+    @DisplayName("허락 플래그는 headless 전략까지 그대로 전달된다")
+    void authorizationReachesHeadlessStrategy() {
+        // 이 전달이 끊기면 허락받은 대상이 조용히 정직 모드로 가거나 그 반대가 된다 — 반환값으로는 안 드러난다.
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw PageFetchException.clientError(new RuntimeException("403"));
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+
+        fallback(true, plain, headless).extract(link, true, null);
+
+        assertEquals(Boolean.TRUE, headless.lastAuthorized);
     }
 }
