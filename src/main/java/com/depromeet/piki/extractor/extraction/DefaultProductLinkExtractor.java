@@ -8,6 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
+ * 정적 HTTP fetch 기반 추출 전략. authorized 는 쓰지 않는다 — 우리 IP 로 문서를 받아오는 것뿐이라
+ * 우회할 대상이 없다(그 개념은 렌더 서비스에만 있다).
+ *
  * 정적 HTTP fetch 기반 추출 전략. fetch 는 1회뿐이고, 이후 파싱(구조화 우선 → 미달이면 같은 HTML 로 LLM
  * fallback, 재fetch 없음)은 헤드리스 전략과 공유하는 {@link HtmlSnapshotPipeline} 이 맡는다.
  */
@@ -19,7 +22,7 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, String model) {
+    public ProductSnapshot extract(ProductLink link, boolean authorized, String model) {
         long fetchStart = System.nanoTime();
         PageContent page = pageFetcher.fetch(link);
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;

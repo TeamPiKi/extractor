@@ -9,6 +9,9 @@ import java.util.function.Function;
  * 헤드리스 렌더 외부 경계를 통합 테스트에서 격리하는 stub. 통합 컨텍스트는 헤드리스 스위치가 꺼진 기본 구성이라
  * 정상 흐름에선 호출되지 않는다 — 설정이 바뀌어도 통합 테스트가 실제 렌더 서비스로 나가지 않게 하는 안전망이자,
  * 켜서 검증할 때의 주입 지점이다. default build 는 throw(명시 세팅 강제).
+ *
+ * <p>lastAuthorized 를 기록하는 이유: 허락 플래그가 렌더 경계까지 그대로 도달하는지는 반환값으로 드러나지
+ * 않는다. 이 값이 끊기면 우회 수단이 열려야 할 요청이 조용히 정직 모드로 가거나 그 반대가 된다.
  */
 public class StubHeadlessRenderer implements HeadlessRenderer {
 
@@ -16,8 +19,11 @@ public class StubHeadlessRenderer implements HeadlessRenderer {
         throw new IllegalStateException("stub.build 를 테스트 본문에서 명시 세팅해야 한다. CLAUDE.md '테스트' 절 참고.");
     };
 
+    public Boolean lastAuthorized;
+
     @Override
-    public PageContent render(ProductLink link) {
+    public PageContent render(ProductLink link, boolean authorized) {
+        lastAuthorized = authorized;
         return build.apply(link);
     }
 }
