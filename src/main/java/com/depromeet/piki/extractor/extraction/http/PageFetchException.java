@@ -15,11 +15,15 @@ public final class PageFetchException extends ExtractionException {
 
     /**
      * 정적 fetch 실패를 실제 브라우저(헤드리스)로 재시도(escalate)할지 표시한다. FallbackProductLinkExtractor 가
-     * 이 값으로 정한다(에스컬레이션 축은 호출자의 outbox 재시도 축과 직교). 정책은 "무조건 폴백": SSRF(blockedHost,
-     * 보안)만 빼고 모든 fetch 실패가 escalatable 이다 — 봇 방어가 어떤 status 로도 위장해 status·body 로
-     * 차단/genuine 을 못 가른다.
+     * 이 값으로 정한다(에스컬레이션 축은 호출자의 outbox 재시도 축과 직교). 정책은 "무조건 폴백": 예외는 둘뿐이고
+     * 나머지 fetch 실패는 전부 escalatable 이다 — 봇 방어가 어떤 status 로도 위장해 status·body 로 차단/genuine 을
+     * 못 가른다.
      *
-     * <p>기본 false(fail-closed): 각 팩토리가 명시적으로 true 를 줘야 escalate 되고, SSRF 만 default false 를 유지한다.
+     * <p>false 인 둘은 서로 다른 이유로 그렇다. blockedHost 는 보안 판단(내부망에 브라우저를 겨누는 것 자체가 SSRF)이고,
+     * unresolvableHost 는 성립 불가 판단(주소가 없으면 브라우저도 갈 곳이 없다)이다. 앞은 recall 을 포기한 것이지만
+     * 뒤는 포기할 recall 자체가 없다.
+     *
+     * <p>기본 false(fail-closed): 각 팩토리가 명시적으로 true 를 줘야 escalate 된다.
      */
     private final boolean escalatable;
 
@@ -45,6 +49,23 @@ public final class PageFetchException extends ExtractionException {
      */
     public static PageFetchException upstreamError(Throwable cause) {
         return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.UPSTREAM_ERROR, false, cause, true);
+    }
+
+    /**
+     * host 를 IP 로 조회하지 못한 경우(InternalHostGuard 의 DNS 조회 실패). 없는 주소는 몇 번을 다시 물어도 없으므로
+     * 확정 실패로 둔다 — 일시로 두면 호출자가 재시도 예산을 다 태운 뒤 "외부가 불안정했다"로 종결해, 실제 사유(등록된
+     * 주소가 잘못됐다)를 운영 지표에서 가린다. code 는 형식 위반과 같은 INVALID_URL 이다: 두 경우 모두 결론이
+     * "이 주소로는 갈 수 없다"라 호출자가 달리 행동할 여지가 없다.
+     *
+     * <p>escalatable=false — resolve 되지 않는 host 는 헤드리스 브라우저도 같은 이유로 도달하지 못한다.
+     *
+     * <p>{@code UnknownHostException} 은 NXDOMAIN 과 리졸버 일시 장애(SERVFAIL·타임아웃)를 구분하지 않아 후자도
+     * 확정 실패가 된다. 그래도 확정으로 두는 이유: 리졸버 장애는 이 박스 전역의 문제라 개별 추출의 재시도가 아니라
+     * 호스트 관측이 다룰 일이고, 그 창에서 확정된 건은 사용자 재등록이 새 시도를 만든다. RCODE 로 정확히 가르려면
+     * SSRF 가드·IP pin 계약(RequestScopedDnsResolver)까지 바꿔야 해서 별건이다.
+     */
+    public static PageFetchException unresolvableHost(Throwable cause) {
+        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.INVALID_URL, true, cause, false);
     }
 
     /**
