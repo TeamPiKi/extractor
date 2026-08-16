@@ -12,8 +12,14 @@ import java.util.List;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record GeminiGenerateContentResponse(
-    List<Candidate> candidates
+    List<Candidate> candidates,
+    UsageMetadata usageMetadata
 ) {
+
+    /** 응답이 usage 를 안 실어 보내는 경우(구버전·부분 실패)를 호출부가 분기하지 않게 빈 값으로 좁힌다. */
+    public UsageMetadata usageOrEmpty() {
+        return usageMetadata != null ? usageMetadata : UsageMetadata.EMPTY;
+    }
 
     public String extractText() {
         if (candidates == null || candidates.isEmpty()) {
@@ -48,6 +54,39 @@ public record GeminiGenerateContentResponse(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Part(
         String text
+    ) {}
+
+    /**
+     * 호출당 토큰 사용량. 비용 추적과 {@code media_resolution} 같은 설정 변경의 근거로 쓴다 — 문서상 기본값이
+     * 무엇인지와 별개로, 실제로 이미지에 몇 토큰이 붙는지는 이 값으로만 확인된다.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record UsageMetadata(
+        Integer promptTokenCount,
+        Integer candidatesTokenCount,
+        Integer totalTokenCount,
+        List<ModalityTokenCount> promptTokensDetails
+    ) {
+
+        static final UsageMetadata EMPTY = new UsageMetadata(null, null, null, null);
+
+        /** 입력 토큰 중 이미지 몫. modality 별 내역이 없으면 null 이고, 로그에선 그대로 비워 둔다. */
+        public Integer imageTokenCount() {
+            if (promptTokensDetails == null) {
+                return null;
+            }
+            return promptTokensDetails.stream()
+                .filter(detail -> "IMAGE".equalsIgnoreCase(detail.modality()))
+                .map(ModalityTokenCount::tokenCount)
+                .findFirst()
+                .orElse(null);
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ModalityTokenCount(
+        String modality,
+        Integer tokenCount
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
