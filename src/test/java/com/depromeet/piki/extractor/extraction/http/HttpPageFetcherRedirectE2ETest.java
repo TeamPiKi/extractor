@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
@@ -30,7 +31,7 @@ class HttpPageFetcherRedirectE2ETest {
 
         PageContent page = fetcher.fetch(link);
 
-        assertTrue(page.html().length() > 1_000, "redirect 를 따라가 실제 본문을 받았어야 한다");
+        assertTrue(page.retainedChars() > 1_000, "redirect 를 따라가 실제 본문을 받았어야 한다");
     }
 
     @Test
@@ -49,6 +50,9 @@ class HttpPageFetcherRedirectE2ETest {
             host = "";
         }
         assertTrue(host.equals("musinsa.com") || host.endsWith(".musinsa.com"), "최종 호스트가 musinsa.com 계열이어야 한다");
-        assertTrue(page.html().contains("og:title"), "최종 무신사 상품 페이지(OG 메타태그)를 받았어야 한다");
+        assertNotNull(
+            page.document().selectFirst("meta[property=og:title]"),
+            "최종 무신사 상품 페이지(OG 메타태그)를 받았어야 한다"
+        );
     }
 }

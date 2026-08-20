@@ -1,7 +1,7 @@
 package com.depromeet.piki.extractor.extraction;
 
 import java.util.Objects;
-import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
 /**
  * "2xx 인데 데이터 없는 CSR 셸" 판정. 정적 fetch 가 성공해도 본문이 JS 부트스트랩뿐인 SPA 셸이면 파싱은
@@ -23,8 +23,8 @@ final class EmptyShellDetector {
     private EmptyShellDetector() {
     }
 
-    static boolean isEmptyShell(String html) {
-        Objects.requireNonNull(html, "html");
-        return Jsoup.parse(html).body().text().length() < MIN_VISIBLE_TEXT_CHARS;
+    static boolean isEmptyShell(Document document) {
+        Objects.requireNonNull(document, "document");
+        return document.body().text().length() < MIN_VISIBLE_TEXT_CHARS;
     }
 }

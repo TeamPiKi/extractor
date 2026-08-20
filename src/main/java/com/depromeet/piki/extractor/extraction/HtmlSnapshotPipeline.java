@@ -8,7 +8,6 @@ import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Component;
 
@@ -48,9 +47,9 @@ public class HtmlSnapshotPipeline {
      *     내려갈 때만 소비된다.
      */
     public ProductSnapshot extract(PageContent page, String timing, String model) {
-        // 한 번만 파싱해 구조화 파서·게이트·Gemini fallback 이 같은 Document 를 공유한다(파싱·ld+json 식별 중복 제거).
+        // 수신 단계가 이미 파싱해 둔 Document 를 구조화 파서·게이트·Gemini fallback 이 그대로 공유한다.
         // baseUri 는 html 의 출처인 최종 URL 기준 — redirect 를 따라갔으면 원본 link 와 host 가 다를 수 있다.
-        Document document = Jsoup.parse(page.html(), page.finalUrl().value().toString());
+        Document document = page.document();
 
         StructuredExtraction result = structuredDataExtractor.extract(document, page.link());
         // 게이트 판정은 sanitize(GeminiHtmlExtractor) 전이어야 한다 — sanitize 는 공유 Document 에서 script 를
@@ -85,7 +84,7 @@ public class HtmlSnapshotPipeline {
         log.info(
             "extract via=structured {} html={}chars url={}",
             timing,
-            page.html().length(),
+            page.retainedChars(),
             page.link().safeLogString()
         );
         // 출처 표기는 값 생산자(파서·LLM)가 아니라 여기서 — finalUrl 을 아는 유일한 층이고,
@@ -102,7 +101,7 @@ public class HtmlSnapshotPipeline {
             "extract via=skipped_shell reason={} {} html={}chars url={}",
             miss.reason(),
             timing,
-            page.html().length(),
+            page.retainedChars(),
             page.link().safeLogString()
         );
         return ProductSnapshotException.noExtractableContent();
@@ -123,7 +122,7 @@ public class HtmlSnapshotPipeline {
             miss.reason(),
             timing,
             llmMs,
-            page.html().length(),
+            page.retainedChars(),
             page.link().safeLogString()
         );
         return snapshot.withOrigin(page.finalUrl(), ExtractionMethod.LLM);
