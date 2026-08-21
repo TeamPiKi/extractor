@@ -50,7 +50,7 @@ class HttpPageFetcherRedirectTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"));
 
-        assertEquals("<html>product</html>", page.html());
+        assertEquals("product", page.document().text());
         // link 는 사용자 등록 원본, finalUrl 은 redirect 를 따라간 최종 URL(baseUri 용으로 구분).
         assertEquals("https://www.zigzag.kr/p", page.link().value().toString());
         assertEquals("https://zigzag.kr/p", page.finalUrl().value().toString());
@@ -71,7 +71,7 @@ class HttpPageFetcherRedirectTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://musinsa.onelink.me/x"));
 
-        assertEquals("<html>product</html>", page.html());
+        assertEquals("product", page.document().text());
         assertEquals("https://musinsa.com/p", page.finalUrl().value().toString());
     }
 
@@ -144,7 +144,7 @@ class HttpPageFetcherRedirectTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/old"));
 
-        assertEquals("<html>moved</html>", page.html());
+        assertEquals("moved", page.document().text());
     }
 
     @Test
@@ -157,7 +157,7 @@ class HttpPageFetcherRedirectTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"));
 
-        assertEquals("<html>direct</html>", page.html());
+        assertEquals("direct", page.document().text());
         assertEquals(page.link(), page.finalUrl());
     }
 }

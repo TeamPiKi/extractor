@@ -1,6 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -43,7 +43,11 @@ class HttpPageFetcherCharsetTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"));
 
-        assertTrue(page.html().contains("나이키 운동화"), "charset 없는 UTF-8 응답이 UTF-8 로 디코딩돼 한글이 보존돼야 한다");
+        assertEquals(
+            "나이키 운동화",
+            page.document().selectFirst("meta[property=og:title]").attr("content"),
+            "charset 없는 UTF-8 응답이 UTF-8 로 디코딩돼 한글이 보존돼야 한다"
+        );
     }
 
     @Test
@@ -55,7 +59,7 @@ class HttpPageFetcherCharsetTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"));
 
-        assertTrue(page.html().contains("운동화"), "응답 Content-Type 의 EUC-KR charset 으로 디코딩돼야 한다");
+        assertEquals("운동화", page.document().text(), "응답 Content-Type 의 EUC-KR charset 으로 디코딩돼야 한다");
     }
 
     @Test
@@ -67,7 +71,7 @@ class HttpPageFetcherCharsetTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"));
 
-        assertTrue(page.html().contains("장바구니"), "헤더 charset 이 없으면 HTML meta charset(euc-kr)으로 디코딩돼야 한다");
+        assertEquals("장바구니", page.document().text(), "헤더 charset 이 없으면 HTML meta charset(euc-kr)으로 디코딩돼야 한다");
     }
 
     @Test
@@ -80,6 +84,6 @@ class HttpPageFetcherCharsetTest {
 
         PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"));
 
-        assertTrue(page.html().contains("운동화"), "Content-Type charset(UTF-8)이 HTML meta charset(euc-kr)보다 우선해야 한다");
+        assertEquals("운동화", page.document().text(), "Content-Type charset(UTF-8)이 HTML meta charset(euc-kr)보다 우선해야 한다");
     }
 }

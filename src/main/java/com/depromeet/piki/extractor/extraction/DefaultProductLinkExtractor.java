@@ -34,7 +34,7 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
             // 같은 축으로 재분류해(escalatable) 헤드리스가 이어받게 한다. 본문 텍스트가 충분한 페이지의 no-data 는
             // 진짜 "상품 페이지가 아님"이므로 그대로 전파한다. LLM 일시 오류(GeminiApiException)는 페이지의 문제가
             // 아니라 재분류하지 않는다(호출자 재시도 축이 흡수).
-            if (EmptyShellDetector.isEmptyShell(page.html())) {
+            if (EmptyShellDetector.isEmptyShell(page.document())) {
                 throw PageFetchException.emptyShell(e);
             }
             throw e;

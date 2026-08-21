@@ -94,7 +94,7 @@ class HttpHeadlessRendererTest {
 
         PageContent page = renderer.render(link, false);
 
-        assertEquals(html, page.html());
+        assertEquals("rendered", page.document().text());
         // 정체성(원본 link)은 유지하고, baseUri 용 finalUrl 은 렌더가 따라간 최종 URL 을 쓴다.
         assertEquals(link, page.link());
         assertEquals("https://kream.co.kr/products/6963?after-redirect", page.finalUrl().value().toString());
@@ -111,7 +111,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-            assertEquals("<html>rendered dom</html>", renderer.render(link, false).html(), "verdict=" + verdict);
+            assertEquals("rendered dom", renderer.render(link, false).document().text(), "verdict=" + verdict);
         }
     }
 
@@ -155,7 +155,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
 
-        assertEquals("<html>compressed dom</html>", renderer.render(link, false).html());
+        assertEquals("compressed dom", renderer.render(link, false).document().text());
     }
 
     @Test
@@ -172,7 +172,7 @@ class HttpHeadlessRendererTest {
                 .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("mall-v1.dict")))
         );
 
-        assertEquals("<html>dict compressed</html>", renderer.render(link, false).html());
+        assertEquals("dict compressed", renderer.render(link, false).document().text());
     }
 
     @Test
@@ -283,19 +283,22 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("렌더된 HTML 은 maxHtmlChars 안전 상한으로 절단한다")
-    void htmlIsCappedAtMaxChars() {
+    @DisplayName("렌더된 HTML 도 보존분 상한을 넘으면 거기서 파싱을 멈춘다")
+    void renderedHtmlStopsAtRetainedCap() {
         HeadlessExtractionProperties small = new HeadlessExtractionProperties(
-            true, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(20), 10, true, ""
+            true, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(20), 12, true, ""
         );
         HttpHeadlessRenderer renderer = rendererWith(small, publicIp, ZstdDictionaries.none(), server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(
-                "{\"verdict\":\"OK\",\"html\":\"0123456789ABCDEF\"}",
+                "{\"verdict\":\"OK\",\"html\":\"<html><body><p>aaaaaaaaaa</p><p>bbbbbbbbbb</p><p>cccccccccc</p></body></html>\"}",
                 MediaType.APPLICATION_JSON
             )));
 
-        assertEquals("0123456789", renderer.render(link, false).html());
+        String text = renderer.render(link, false).document().text();
+
+        assertTrue(text.contains("aaaaaaaaaa"), "상한 전까지의 내용은 남아야 한다");
+        assertFalse(text.contains("cccccccccc"), "상한을 넘긴 뒤의 내용은 들어오지 않아야 한다");
     }
 
     @Test
