@@ -229,13 +229,24 @@ class StructuredDataExtractorTest {
     }
 
     @Test
-    @DisplayName("https 가 아닌 image 는 imageUrl 만 null 이고 나머지로 성공한다")
-    void nonHttpsImageBecomesNull() {
+    @DisplayName("http image 는 https 로 올려서 쓴다 — 버리면 멀쩡한 이미지를 잃는다")
+    void httpImageIsUpgradedToHttps() {
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
             """
-            {"@type":"Product","name":"비https이미지","image":"http://cdn.example.com/p.jpg","offers":{"price":"5000"}}"""))));
+            {"@type":"Product","name":"http이미지","image":"http://cdn.example.com/p.jpg","offers":{"price":"5000"}}"""))));
 
-        assertEquals("비https이미지", snapshot.name());
+        assertEquals("http이미지", snapshot.name());
+        assertEquals("https://cdn.example.com/p.jpg", snapshot.imageUrl());
+    }
+
+    @Test
+    @DisplayName("스킴을 살릴 수 없는 image 는 imageUrl 만 null 이고 나머지로 성공한다")
+    void unusableImageBecomesNull() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"Product","name":"데이터URI","image":"data:image/png;base64,xxx","offers":{"price":"5000"}}"""))));
+
+        assertEquals("데이터URI", snapshot.name());
         assertNull(snapshot.imageUrl());
     }
 
