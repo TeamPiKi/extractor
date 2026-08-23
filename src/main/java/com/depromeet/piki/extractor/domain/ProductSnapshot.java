@@ -81,7 +81,8 @@ public record ProductSnapshot(
 
     /**
      * 구조화 파싱과 LLM 추출이 함께 통과하는 정규화·범위검증의 단일 진실 원천.
-     * imageUrl 을 https 로만 좁히는 것은 클라이언트가 {@code <img src>} 로 쓸 때의 XSS 사다리를 끊기 위한 것이다.
+     * imageUrl 을 https 로 좁히는 것은 클라이언트가 {@code <img src>} 로 쓸 때의 XSS 사다리를 끊기 위한 것이다.
+     * 다만 좁히는 방식은 스킴에 따라 다르다 — 자세한 근거는 normalizeImageUrl 참조.
      * <p>범위를 벗어난 값은 {@link ProductSnapshotException#untrustworthyValue()} 로 막고, 그 뒤 처리는 호출부가 고른다:
      * 구조화 경로는 예외를 흡수해 Miss(LLM fallback)로, LLM 경로는 그대로 흘려 확정 실패로 떨어뜨린다.
      * 같은 검증, 실패 표현만 다르다.
@@ -121,9 +122,21 @@ public record ProductSnapshot(
         if (imageUrl == null || imageUrl.isBlank()) {
             return null;
         }
-        if (!imageUrl.regionMatches(true, 0, "https://", 0, "https://".length())) {
-            return null;
+        if (imageUrl.regionMatches(true, 0, "https://", 0, "https://".length())) {
+            return imageUrl;
         }
-        return imageUrl;
+        // http·프로토콜 상대(//host/path)는 버리지 않고 https 로 올린다. 스킴만 다를 뿐 같은 자원을 가리키고,
+        // 실제로 og:image 에 http 를 적어 둔 몰이 있다(실측: postarchivefaction, http 는 301→https).
+        // 올린 주소가 안 되면 이미지가 안 뜨는데, 버리면 애초에 이미지가 없으므로 더 나빠지지 않는다.
+        // 반대로 http 그대로 두는 선택지는 없다 — 클라이언트가 https 라 브라우저가 mixed content 로 막는다.
+        if (imageUrl.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            return "https://" + imageUrl.substring("http://".length());
+        }
+        if (imageUrl.startsWith("//")) {
+            return "https:" + imageUrl;
+        }
+        // 나머지 스킴(javascript:·data:·file: 등)은 그대로 거부한다 — 이쪽이 원래 막으려던 것이고,
+        // 스킴을 갈아끼워 살릴 수 있는 값도 아니다.
+        return null;
     }
 }
