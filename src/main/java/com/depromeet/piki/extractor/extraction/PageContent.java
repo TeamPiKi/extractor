@@ -21,18 +21,14 @@ public record PageContent(
     int retainedChars
 ) {
 
-    /**
-     * 이미 문자열로 들고 있는 HTML 로 조립하는 편의 팩토리(redirect 를 따라가지 않은 경우). 스트림이 아니라
-     * 바운드할 대상이 없으므로 상한을 두지 않는다 - 상한은 스트림을 쥔 수신 경계가 자기 설정으로 정한다.
-     */
+    /** 이미 문자열로 들고 있는 HTML 로 조립하는 편의 팩토리(redirect 를 따라가지 않은 경우). */
     public static PageContent of(ProductLink link, String html) {
         return of(link, html, link);
     }
 
     /** redirect 를 따라간 경우 — baseUri 는 html 의 출처인 finalUrl 을 쓴다. */
     public static PageContent of(ProductLink link, String html, ProductLink finalUrl) {
-        PruningHtmlParser.Pruned pruned =
-            PruningHtmlParser.parse(html, finalUrl.value().toString(), PruningHtmlParser.UNBOUNDED);
+        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(html, finalUrl.value().toString());
         return new PageContent(link, pruned.document(), finalUrl, pruned.retainedChars());
     }
 }

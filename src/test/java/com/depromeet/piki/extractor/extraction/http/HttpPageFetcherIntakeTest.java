@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -78,14 +77,18 @@ class HttpPageFetcherIntakeTest {
     @Test
     @DisplayName("바이트 상한을 넘으면 거기서 읽기를 끊는다 - 끝나지 않는 스트림은 read timeout 에 안 걸린다")
     void stopsReadingAtByteCap() {
-        String body = "<html><body><p>" + "a".repeat(400) + "</p><p>TAIL</p></body></html>";
+        // 상한이 상수라 주입할 수 없으므로 진짜로 상한을 넘기는 본문을 준다. 내용은 전부 가지치기 대상(JS)이라
+        // 상한이 없다면 끝의 TAIL 까지 읽혀 문서에 들어온다 - 그게 안 들어오는 것이 상한이 걸렸다는 증거다.
+        String body = "<html><body><script>var x = \"" + "x".repeat(17_000_000) + "\";</script><p>TAIL</p></body></html>";
         CountingInputStream stream = new CountingInputStream(html(body));
-        HttpPageFetcher fetcher = fetcherReturning(stream, MediaType.TEXT_HTML, propertiesWithMaxFetchBytes(100));
+        HttpPageFetcher fetcher = fetcherReturning(stream, MediaType.TEXT_HTML, FetchProperties.defaults());
 
         PageContent page = fetcher.fetch(ProductLink.parse(URL));
 
-        assertTrue(stream.getCount() <= 100, "상한을 넘겨 읽으면 안 된다 - 실제 " + stream.getCount());
+        // 정확히 상한에서 멈췄음을 본다. <= 로 두면 몇 바이트만 읽고 끝나도 통과해 상한이 걸렸다는 증거가 안 된다.
+        assertEquals(16 * 1024 * 1024, stream.getCount(), "상한 지점에서 정확히 끊겨야 한다");
         assertFalse(page.document().text().contains("TAIL"), "상한 뒤의 내용은 들어오지 않아야 한다");
+        assertTrue(page.retainedChars() < 1_000, "가지치기로 보존분은 작아야 한다 - 실제 " + page.retainedChars());
     }
 
     @Test
@@ -127,16 +130,4 @@ class HttpPageFetcherIntakeTest {
         return new HttpPageFetcher(restClient, new RequestScopedDnsResolver(publicIp), properties);
     }
 
-    private static FetchProperties propertiesWithMaxFetchBytes(int maxFetchBytes) {
-        FetchProperties defaults = FetchProperties.defaults();
-        return new FetchProperties(
-            defaults.userAgent(),
-            Duration.ofSeconds(5),
-            Duration.ofSeconds(15),
-            Duration.ofSeconds(2),
-            defaults.maxRedirects(),
-            maxFetchBytes,
-            defaults.maxRetainedChars()
-        );
-    }
 }

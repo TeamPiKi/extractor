@@ -55,6 +55,6 @@ class EmptyShellDetectorTest {
 
     /** 운영에서 판정에 닿는 문서는 항상 가지친 것이므로 같은 경로로 만든다. */
     private static Document document(String html) {
-        return PruningHtmlParser.parse(html, "https://shop.example.com/p", PruningHtmlParser.UNBOUNDED).document();
+        return PruningHtmlParser.parse(html, "https://shop.example.com/p").document();
     }
 }

@@ -58,7 +58,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private static final String ZSTD_ENCODING = "zstd";
     /**
      * 해제 결과(JSON = 렌더 HTML + 메타)의 안전 상한. 신뢰 경계 안(내부망 renderer)이라도 해제 폭탄·오배선을
-     * 바운드하려 둔다 — 정상 압축비로는 닿지 않을 만큼 넉넉하다. 가지친 뒤 보존분 상한(maxRetainedChars)은 별도다.
+     * 바운드하려 둔다 — 정상 압축비로는 닿지 않을 만큼 넉넉하다. 가지친 뒤 보존분 상한은 별도다(PruningHtmlParser).
      */
     private static final int MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 
@@ -128,8 +128,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         ProductLink finalUrl = resolveFinalUrl(response.finalUrl(), link);
         // 렌더된 DOM 은 정적 fetch 보다 커질 수 있어 같은 가지치기를 통과시킨다 — 하류가 보는 문서의 모양이
         // 두 전략 사이에서 갈리지 않게 하려는 것이기도 하다.
-        PruningHtmlParser.Pruned pruned =
-            PruningHtmlParser.parse(html, finalUrl.value().toString(), properties.maxRetainedChars());
+        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(html, finalUrl.value().toString());
         if (pruned.truncated()) {
             log.warn(
                 "headless render stopped at retained cap chars={} url={}",

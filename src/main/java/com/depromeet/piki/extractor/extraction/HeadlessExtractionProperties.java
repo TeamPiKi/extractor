@@ -18,8 +18,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param compress 응답 zstd 압축 전송 요청(서버간 전송량 절감). 해제는 응답 헤더({@code X-Encoding}) 기준이라
  *     compress 필드를 모르는 구버전 renderer(무시하고 plain JSON 으로 답한다)와도 호환된다 — 켜 둔 채로 배포
  *     순서와 무관하게 안전하고, 이 스위치는 압축 경로에 문제가 생겼을 때 끄는 kill-switch 다.
- * @param maxRetainedChars 가지친 뒤에도 남는 분량의 상한(백스톱). 렌더된 DOM 은 정적 fetch 보다 커질 수 있어
- *     정적 경로와 같은 성격의 상한을 둔다 - 정본 설명은 {@code FetchProperties.maxRetainedChars}.
  * @param zstdDictDir zstd 학습 사전 디렉토리(파일명 = 사전ID, renderer {@code compress.py} 의 DICT_ID 규약).
  *     빈값이면 사전 없음. 롤아웃 순서: 사전 파일을 여기 먼저 배포한 뒤 renderer 쪽 사전 경로를 켠다 — 순서가
  *     뒤집히면 미보유 사전ID 를 받아 해제 불가(일시 실패)가 된다.
@@ -30,7 +28,6 @@ public record HeadlessExtractionProperties(
     @DefaultValue("") String baseUrl,
     @DefaultValue("2s") Duration connectTimeout,
     @DefaultValue("20s") Duration readTimeout,
-    @DefaultValue("3000000") int maxRetainedChars,
     @DefaultValue("true") boolean compress,
     @DefaultValue("") String zstdDictDir
 ) {
@@ -71,7 +68,6 @@ public record HeadlessExtractionProperties(
             enabled ? "http://headless.test:8000" : "",
             Duration.ofSeconds(2),
             Duration.ofSeconds(20),
-            3_000_000,
             true,
             ""
         );

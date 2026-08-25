@@ -85,7 +85,7 @@ class PruningHtmlParserTest {
     @DisplayName("상한에 닿지 않은 문서는 truncated 가 아니다 - 정상 페이지가 조사 신호를 내지 않게")
     void normalDocumentIsNotTruncated() {
         PruningHtmlParser.Pruned pruned =
-            PruningHtmlParser.parse("<html><body><p>본문</p></body></html>", BASE_URI, PruningHtmlParser.UNBOUNDED);
+            PruningHtmlParser.parse("<html><body><p>본문</p></body></html>", BASE_URI);
 
         assertFalse(pruned.truncated());
         assertTrue(pruned.retainedChars() > 0);
@@ -97,7 +97,7 @@ class PruningHtmlParserTest {
         String huge = "var payload = \"" + "x".repeat(5_000_000) + "\";";
         String html = "<html><head><script>" + huge + "</script></head><body><p>운동화</p></body></html>";
 
-        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(html, BASE_URI, PruningHtmlParser.UNBOUNDED);
+        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(html, BASE_URI);
 
         assertFalse(pruned.truncated(), "상한이 아니라 가지치기로 줄어야 한다");
         assertTrue(pruned.retainedChars() < 1_000, "5MB script 가 보존분에 들어오면 안 된다 - 실제 " + pruned.retainedChars());
@@ -113,6 +113,6 @@ class PruningHtmlParserTest {
     }
 
     private static Document prune(String html) {
-        return PruningHtmlParser.parse(html, BASE_URI, PruningHtmlParser.UNBOUNDED).document();
+        return PruningHtmlParser.parse(html, BASE_URI).document();
     }
 }

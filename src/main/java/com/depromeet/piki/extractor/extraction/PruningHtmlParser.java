@@ -31,10 +31,18 @@ import org.jsoup.parser.StreamParser;
 public final class PruningHtmlParser {
 
     /**
-     * 상한 없음. 수신 경계(fetch · render)는 각자 자기 설정값을 넘기고, 이 값은 이미 메모리에 올라와 있는
-     * 문자열을 파싱하는 편의 경로가 쓴다 - 그 경로에는 바운드할 스트림이 없다.
+     * 가지친 뒤에도 남는 분량의 상한(백스톱). 가지치기가 걷어내지 못하는 병리적 문서(마크업만으로 부푼 응답)를
+     * 끊는다. 정상 페이지는 닿지 않는다.
+     *
+     * <p>설정이 아니라 상수인 이유: 이건 튜닝 손잡이가 아니라 안전장치다. 밖에서 바꿀 수 있게 두면 조절할 일도
+     * 없으면서 키 이름이 드리프트할 자리만 생긴다(실제로 이 값이 설정이던 동안 아무도 지정한 적이 없다). 같은
+     * 성격의 다른 상한들({@code GeminiHtmlExtractor.MAX_LLM_CHARS} · {@code HttpHeadlessRenderer} 의 해제 상한)도
+     * 상수라, 이쪽만 설정이면 같은 종류가 두 방식으로 갈린다.
+     *
+     * <p>상한은 Element 단위로 걸린다(닫힌 것부터 센다). 거대한 텍스트 노드 하나짜리 문서는 여기가 아니라
+     * 수신 바이트 상한이 잡는다.
      */
-    public static final int UNBOUNDED = Integer.MAX_VALUE;
+    static final int MAX_RETAINED_CHARS = 3_000_000;
 
     private static final String SCRIPT = "script";
     private static final String STYLE = "style";
@@ -42,11 +50,21 @@ public final class PruningHtmlParser {
     private PruningHtmlParser() {
     }
 
+    /** 수신 경계(fetch · render)가 쓰는 진입점. 상한은 {@link #MAX_RETAINED_CHARS} 로 고정이다. */
+    public static Pruned parse(Reader reader, String baseUri) throws IOException {
+        return parse(reader, baseUri, MAX_RETAINED_CHARS);
+    }
+
+    /** 이미 문자열로 들고 있는 HTML 용(렌더 응답 · 테스트). 스트림이 아니므로 메모리 이득은 없고 가지치기만 같다. */
+    public static Pruned parse(String html, String baseUri) {
+        return parse(html, baseUri, MAX_RETAINED_CHARS);
+    }
+
     /**
-     * @param maxRetainedChars 가지친 뒤에도 남는 분량의 상한(백스톱). 가지치기가 걷어내지 못하는 병리적 문서
-     *     (마크업만으로 부푼 응답)를 끊는다. 정상 페이지는 닿지 않는다.
+     * 상한을 명시하는 오버로드. 상한 동작 자체를 검증하려면 3백만 자 픽스처가 필요해 실용적이지 않아 열어 두되,
+     * 패키지 밖(수신 경계)에서는 안 보이게 해 안전장치를 우회할 수 없게 한다.
      */
-    public static Pruned parse(Reader reader, String baseUri, int maxRetainedChars) throws IOException {
+    static Pruned parse(Reader reader, String baseUri, int maxRetainedChars) throws IOException {
         try (StreamParser streamParser = new StreamParser(Parser.htmlParser())) {
             streamParser.parse(reader, baseUri);
             int retained = 0;
@@ -72,8 +90,7 @@ public final class PruningHtmlParser {
         }
     }
 
-    /** 이미 문자열로 들고 있는 HTML 용(렌더 응답 · 테스트). 스트림이 아니므로 메모리 이득은 없고 가지치기만 같다. */
-    public static Pruned parse(String html, String baseUri, int maxRetainedChars) {
+    static Pruned parse(String html, String baseUri, int maxRetainedChars) {
         try {
             return parse(new StringReader(html), baseUri, maxRetainedChars);
         } catch (IOException e) {

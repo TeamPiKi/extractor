@@ -68,6 +68,17 @@ public class HttpPageFetcher implements PageFetcher {
      * 없이 주는 몰이 실재해서(무헤더 UTF-8 페이지는 charset 폴백 근거이기도 하다) "HTML 계열만 통과"로 막으면
      * 정상 상품 페이지가 함께 잘린다. 그래서 명백한 것만 막고 미상은 통과시킨다.
      */
+    /**
+     * 응답 스트림에서 읽을 바이트 상한. 가지치기가 걷어내는 분량은 메모리에 남지 않지만, 끝나지 않는 스트림은
+     * read timeout 에도 안 걸리므로(데이터가 계속 도착한다) 읽기 자체를 여기서 끊는다. PageFetchHttpClientConfig 가
+     * HttpClient5 의 기본 content decompression 을 끄지 않으므로 이 상한은 <b>해제 후</b> 바이트에 걸린다 -
+     * 압축 폭탄이 노리는 지점이 바로 거기다.
+     *
+     * <p>설정이 아니라 상수인 이유는 {@code PruningHtmlParser.MAX_RETAINED_CHARS} 와 같다: 안전장치라 밖에서
+     * 조절할 대상이 아니다. 정상 상품 페이지는 실측 수 MB 라 닿지 않을 만큼 넉넉하다.
+     */
+    private static final int MAX_FETCH_BYTES = 16 * 1024 * 1024;
+
     private static final Set<String> BINARY_TYPES = Set.of("video", "audio", "image", "font");
     private static final Set<String> BINARY_APPLICATION_SUBTYPES =
         Set.of("octet-stream", "pdf", "zip", "gzip", "x-gzip", "x-tar", "x-7z-compressed", "x-rar-compressed");
@@ -76,8 +87,6 @@ public class HttpPageFetcher implements PageFetcher {
     private final RequestScopedDnsResolver dnsResolver;
     private final InternalHostGuard internalHostGuard;
     private final int maxRedirects;
-    private final int maxFetchBytes;
-    private final int maxRetainedChars;
 
     /**
      * RestClient 빈이 둘(pageFetch·headlessRender)이라 {@code @Qualifier} 로 어느 쪽인지 명시한다 — 없으면
@@ -93,8 +102,6 @@ public class HttpPageFetcher implements PageFetcher {
         // 가드와 연결이 같은 resolver 를 봐야 IP pin 이 성립한다 — 같은 인스턴스로 직접 조립해 그 계약을 코드로 박는다.
         this.internalHostGuard = new InternalHostGuard(dnsResolver);
         this.maxRedirects = properties.maxRedirects();
-        this.maxFetchBytes = properties.maxFetchBytes();
-        this.maxRetainedChars = properties.maxRetainedChars();
     }
 
     @Override
@@ -220,7 +227,7 @@ public class HttpPageFetcher implements PageFetcher {
     private PruningHtmlParser.Pruned readPruned(ProductLink current, MediaType contentType, InputStream body)
         throws IOException {
         CountingInputStream counting = new CountingInputStream(body);
-        BufferedInputStream buffered = new BufferedInputStream(ByteStreams.limit(counting, maxFetchBytes));
+        BufferedInputStream buffered = new BufferedInputStream(ByteStreams.limit(counting, MAX_FETCH_BYTES));
         buffered.mark(META_SCAN_BYTES);
         byte[] head = buffered.readNBytes(META_SCAN_BYTES);
         if (head.length == 0) {
@@ -230,9 +237,8 @@ public class HttpPageFetcher implements PageFetcher {
         buffered.reset();
 
         Reader reader = new InputStreamReader(buffered, charsetOf(contentType, head));
-        PruningHtmlParser.Pruned pruned =
-            PruningHtmlParser.parse(reader, current.value().toString(), maxRetainedChars);
-        if (counting.getCount() >= maxFetchBytes) {
+        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(reader, current.value().toString());
+        if (counting.getCount() >= MAX_FETCH_BYTES) {
             log.warn("link fetch stopped at byte cap bytes={} url={}", counting.getCount(), current.safeLogString());
         }
         return pruned;
