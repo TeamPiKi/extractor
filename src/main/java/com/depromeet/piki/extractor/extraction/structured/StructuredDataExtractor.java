@@ -257,11 +257,12 @@ public class StructuredDataExtractor {
     /**
      * OG 가 이름·이미지는 주지만 가격을 JS state(window.__PRELOADED_STATE__ 등)에만 둔 SPA(예: 유니클로)를
      * LLM 없이 추출하기 위한 특화 경로다 — 가격이 거대 state 깊숙이 있어 Gemini fallback 의 토큰 상한에
-     * 안 맞는 사이트를 파서가 직접 건진다. OG 표준 가격 태그가 있으면 불필요한 state 파싱을 하지 않는다.
+     * 안 맞는 사이트를 파서가 직접 건진다. OG 가격 태그가 있으면 불필요한 state 파싱을 하지 않는다.
      */
     private ResolvedPrice resolvePrice(Document document) {
-        String ogCurrency = metaContent(document, "product:price:currency");
-        String ogAmount = metaContent(document, "product:price:amount");
+        // 구형 OG product 네임스페이스(og:price:*)만 내보내는 몰(Shopify 계열)이 있어 표준 태그 뒤에 폴백으로 둔다.
+        String ogCurrency = firstMetaContent(document, "product:price:currency", "og:price:currency");
+        String ogAmount = firstMetaContent(document, "product:price:amount", "og:price:amount");
         if (ogAmount != null) {
             return new ResolvedPrice(ogAmount, ogCurrency);
         }
@@ -369,6 +370,16 @@ public class StructuredDataExtractor {
             JsonNode found = findPricesNode(child);
             if (found != null) {
                 return found;
+            }
+        }
+        return null;
+    }
+
+    private String firstMetaContent(Document document, String... properties) {
+        for (String property : properties) {
+            String content = metaContent(document, property);
+            if (content != null) {
+                return content;
             }
         }
         return null;

@@ -302,6 +302,42 @@ class StructuredDataExtractorTest {
     }
 
     @Test
+    @DisplayName("표준 가격 태그가 없고 구형 og_price 네임스페이스만 있으면 콤마 낀 가격을 뽑는다")
+    void extractsFromLegacyOgPriceNamespace() {
+        String html = """
+            <html><head>
+            <meta property="og:title" content="Stream Pants (Archive) - Charcoal"/>
+            <meta property="og:image" content="https://cdn.example.com/pants.jpg"/>
+            <meta property="og:price:amount" content="680,000"/>
+            <meta property="og:price:currency" content="KRW"/>
+            </head><body></body></html>""";
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals("Stream Pants (Archive) - Charcoal", snapshot.name());
+        assertEquals(680_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
+    @DisplayName("표준 product_price 태그와 구형 og_price 가 함께 있으면 표준을 쓴다")
+    void prefersStandardPriceTagOverLegacyNamespace() {
+        String html = """
+            <html><head>
+            <meta property="og:title" content="두네임스페이스"/>
+            <meta property="product:price:amount" content="45000"/>
+            <meta property="product:price:currency" content="KRW"/>
+            <meta property="og:price:amount" content="99999"/>
+            <meta property="og:price:currency" content="JPY"/>
+            </head><body></body></html>""";
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(45_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
     @DisplayName("og 에 title 만 있고 가격이 없으면 missing_field 로 fallback 한다")
     void openGraphTitleOnlyFallsBackToMissingField() {
         String html =
