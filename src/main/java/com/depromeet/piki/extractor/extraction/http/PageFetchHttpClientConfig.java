@@ -11,6 +11,7 @@ import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -58,6 +59,10 @@ public class PageFetchHttpClientConfig {
                 .setDefaultConnectionConfig(
                     ConnectionConfig.custom()
                         .setConnectTimeout(Timeout.ofMilliseconds(properties.connectTimeout().toMillis()))
+                        // 풀에 남은 연결은 유휴 2초가 지나면 재사용 전에 살아있는지 검증한다. 몰이 keep-alive 로 이미 닫은
+                        // 연결에 요청을 쓰는 경합을 여기서 1차로 예방한다. 2초는 httpclient5 5.5.2 의 암묵 기본값이지만,
+                        // 좁힌 재시도 정책(PreDeliveryRetryStrategy)이 이 예방을 전제하므로 기본값 변화에 흔들리지 않게 명시한다.
+                        .setValidateAfterInactivity(TimeValue.ofSeconds(2))
                         .build())
                 .build();
         CloseableHttpClient httpClient =
