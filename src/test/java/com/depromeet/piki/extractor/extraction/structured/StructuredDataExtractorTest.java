@@ -84,6 +84,39 @@ class StructuredDataExtractorTest {
     }
 
     @Test
+    @DisplayName("ProductGroup 은 그룹 이름을 쓰고 가격과 이미지는 첫 변형에서 가져온다")
+    void extractsFromProductGroupUsingFirstVariant() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"ProductGroup","name":"컷아웃 부츠","hasVariant":[{"@type":"Product","name":"컷아웃 부츠 - 250","image":"https://cdn.example.com/boots.jpg","offers":{"@type":"Offer","price":"800000","priceCurrency":"KRW"}},{"@type":"Product","name":"컷아웃 부츠 - 260","offers":{"price":"800000"}}]}"""))));
+
+        assertEquals("컷아웃 부츠", snapshot.name());
+        assertEquals(800_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+        assertEquals("https://cdn.example.com/boots.jpg", snapshot.imageUrl());
+    }
+
+    @Test
+    @DisplayName("ProductGroup 에 offers 가 있으면 변형보다 그것을 먼저 쓴다")
+    void prefersGroupOfferOverVariantOffer() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"ProductGroup","name":"그룹상품","offers":{"price":"10000","priceCurrency":"KRW"},"hasVariant":[{"@type":"Product","name":"그룹상품 - S","offers":{"price":"99999","priceCurrency":"JPY"}}]}"""))));
+
+        assertEquals(10_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
+    @DisplayName("ProductGroup 에 변형도 offers 도 없으면 missing_field 로 fallback 한다")
+    void productGroupWithoutVariantsFallsBackToMissingField() {
+        String html = jsonLd("""
+            {"@type":"ProductGroup","name":"가격없는그룹"}""");
+
+        assertEquals(StructuredExtraction.Miss.MISSING_FIELD, extractor.extract(pageOf(html)));
+    }
+
+    @Test
     @DisplayName("offers 가 배열이면 첫 유효 price 를 쓴다")
     void usesFirstOfferWhenArray() {
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
