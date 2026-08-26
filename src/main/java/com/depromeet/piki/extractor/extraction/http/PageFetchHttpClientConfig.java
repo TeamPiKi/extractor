@@ -59,7 +59,7 @@ public class PageFetchHttpClientConfig {
                 .setDefaultConnectionConfig(
                     ConnectionConfig.custom()
                         .setConnectTimeout(Timeout.ofMilliseconds(properties.connectTimeout().toMillis()))
-                        // 풀에 남은 연결은 유휴 2초가 지나면 재사용 전에 살아있는지 검증한다. 몰이 keep-alive 로 이미 닫은
+                        // 풀에 남은 연결은 유휴 2초가 지나면 재사용 전에 살아있는지 검증한다. 플랫폼 서버가 keep-alive 로 이미 닫은
                         // 연결에 요청을 쓰는 경합을 여기서 1차로 예방한다. 2초는 httpclient5 5.5.2 의 암묵 기본값이지만,
                         // 좁힌 재시도 정책(PreDeliveryRetryStrategy)이 이 예방을 전제하므로 기본값 변화에 흔들리지 않게 명시한다.
                         .setValidateAfterInactivity(TimeValue.ofSeconds(2))
@@ -72,7 +72,7 @@ public class PageFetchHttpClientConfig {
                 // 따라가므로(JDK 의 instanceFollowRedirects=false 등가물), 라이브러리 자동 추적을 끈다. 끄지 않으면
                 // HttpPageFetcher.nextRedirect 의 cross-domain·다운그레이드 차단이 우회된다.
                 .disableRedirectHandling()
-                // 재시도는 "대상 몰이 우리 요청을 봤는가" 로 층을 가른다 — 못 봤으면 여기서 한 번 복구하고,
+                // 재시도는 "플랫폼 서버가 우리 요청을 봤는가" 로 층을 가른다. 못 봤으면 여기서 한 번 복구하고,
                 // 봤으면(429·503·느림) 전부 호출자(core)의 작업 큐가 소유한다. 근거는 PreDeliveryRetryStrategy.
                 // HttpClient5 기본 전략은 그 둘을 섞어(429·503 까지 재시도) 우리 방침 밖에서 겹치므로 쓰지 않는다.
                 .setRetryStrategy(new PreDeliveryRetryStrategy())

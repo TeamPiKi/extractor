@@ -28,8 +28,8 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
- * 재시도 층 분리를 못 박는다. 경계는 <b>대상 몰이 우리 요청을 봤는가</b> 하나이고, 그것을 예외 이름만으로 판정할
- * 수 있는 NoHttpResponseException(응답 0바이트 종료)만 여기서 한 번 복구한다. 나머지는 전부 호출자(core)의
+ * 재시도 층 분리를 못 박는다. 경계는 <b>플랫폼 서버가 우리 요청을 봤는가</b> 하나이고, 재전송 안전이 예외
+ * 이름만으로 보증되는 NoHttpResponseException(응답 0바이트 종료)만 여기서 한 번 복구한다. 나머지는 전부 호출자(core)의
  * 작업 큐가 소유한다. 두 축이 조용히 뒤집혀도 컴파일·기동은 멀쩡하므로 값 자체를 고정한다. 실제로 HttpClient5
  * 기본값(429·503·리셋까지 재시도)이 살아 있는 걸 아무도 못 본 기간이 있었다.
  */
@@ -40,7 +40,7 @@ class PageFetchHttpClientRetryTest {
     // --- 닿기 전 끊김: 여기서 한 번 복구한다 -----------------------------------
 
     @Test
-    @DisplayName("응답 0바이트로 연결이 닫히면 한 번 다시 붙는다 - 몰이 못 봤다고 예외 이름으로 판정되는 유일한 경우")
+    @DisplayName("응답 0바이트로 연결이 닫히면 한 번 다시 붙는다 - 재전송 안전이 예외 이름만으로 보증되는 유일한 경우")
     void recoversWhenConnectionDiesBeforeDelivery() {
         NoHttpResponseException e = new NoHttpResponseException("target failed to respond");
 
@@ -48,7 +48,7 @@ class PageFetchHttpClientRetryTest {
         assertFalse(strategy.retryRequest(get(), e, 2, null), "복구는 한 번뿐");
     }
 
-    // --- 모호하거나 몰이 봤을 수 있는 실패: 전부 상위 큐 소관 ---------------------
+    // --- 모호하거나 플랫폼 서버가 봤을 수 있는 실패: 전부 core 작업 큐 소관 --------
 
     @Test
     @DisplayName("리셋은 복구하지 않는다 - 차단측이 능동적으로 보낸 RST 와 구분할 수 없다")
@@ -57,7 +57,7 @@ class PageFetchHttpClientRetryTest {
     }
 
     @Test
-    @DisplayName("응답 도중 끊김은 복구하지 않는다 - 몰이 일한 뒤일 수 있다")
+    @DisplayName("응답 도중 끊김은 복구하지 않는다 - 플랫폼 서버가 일한 뒤일 수 있다")
     void doesNotRecoverOnPrematureClose() {
         assertFalse(strategy.retryRequest(get(), new ConnectionClosedException("premature end"), 1, null));
     }
@@ -71,7 +71,7 @@ class PageFetchHttpClientRetryTest {
     }
 
     @Test
-    @DisplayName("읽기 타임아웃은 복구하지 않는다 - 몰이 이미 받아 처리 중일 수 있다")
+    @DisplayName("읽기 타임아웃은 복구하지 않는다 - 플랫폼 서버가 이미 받아 처리 중일 수 있다")
     void doesNotRecoverOnReadTimeout() {
         assertFalse(strategy.retryRequest(get(), new InterruptedIOException("read timed out"), 1, null));
     }
