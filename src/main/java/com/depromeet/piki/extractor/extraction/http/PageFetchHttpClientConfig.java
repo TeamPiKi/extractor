@@ -67,12 +67,10 @@ public class PageFetchHttpClientConfig {
                 // 따라가므로(JDK 의 instanceFollowRedirects=false 등가물), 라이브러리 자동 추적을 끈다. 끄지 않으면
                 // HttpPageFetcher.nextRedirect 의 cross-domain·다운그레이드 차단이 우회된다.
                 .disableRedirectHandling()
-                // HttpClient5 는 I/O 오류를 기본으로 한 번 더 실행한다(maxRetries=1, 대기 0ms). 그것도 끈다 —
-                // 파싱 재시도는 호출자(core)의 작업 큐 한 곳에만 두는 것이 이 서비스의 방침이고(application.yml
-                // 의 gemini.retry 주석), 여기 재시도는 그 방침 밖에서 조용히 겹친다. 겹치는 값이 아니라 성격이
-                // 다르다: 큐 재시도는 attempt 가 DB 에 남고 상한·관측이 붙는데, 이쪽은 기록도 간격도 없이
-                // 방금 우리를 끊어낸 호스트를 즉시 다시 두드려 fetch 최악 시간만 두 배로 만든다.
-                .disableAutomaticRetries()
+                // 재시도는 "대상 몰이 우리 요청을 봤는가" 로 층을 가른다 — 못 봤으면 여기서 한 번 복구하고,
+                // 봤으면(429·503·느림) 전부 호출자(core)의 작업 큐가 소유한다. 근거는 PreDeliveryRetryStrategy.
+                // HttpClient5 기본 전략은 그 둘을 섞어(429·503 까지 재시도) 우리 방침 밖에서 겹치므로 쓰지 않는다.
+                .setRetryStrategy(new PreDeliveryRetryStrategy())
                 .setDefaultRequestConfig(
                     RequestConfig.custom()
                         .setConnectionRequestTimeout(Timeout.ofMilliseconds(properties.connectionRequestTimeout().toMillis()))
