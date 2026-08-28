@@ -21,9 +21,9 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, String model) {
+    public ProductSnapshot extract(ProductLink link, boolean authorized, String model) {
         long renderStart = System.nanoTime();
-        PageContent page = headlessRenderer.render(link);
+        PageContent page = headlessRenderer.render(link, authorized);
         long renderMs = (System.nanoTime() - renderStart) / 1_000_000;
 
         return htmlSnapshotPipeline.extract(page, "render=" + renderMs + "ms", model);

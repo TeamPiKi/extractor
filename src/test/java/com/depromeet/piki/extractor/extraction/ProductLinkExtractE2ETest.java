@@ -78,7 +78,7 @@ class ProductLinkExtractE2ETest {
                 long started = System.nanoTime();
                 Outcome outcome;
                 try {
-                    ProductSnapshot product = extractor.extract(link, null);
+                    ProductSnapshot product = extractor.extract(link, false, null);
                     long ms = (System.nanoTime() - started) / 1_000_000;
                     outcome = new Outcome(rawUrl, i + 1, "OK", product.name(), product.currentPrice(), ms, null);
                 } catch (Exception e) {

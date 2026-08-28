@@ -11,5 +11,9 @@ import com.depromeet.piki.extractor.extraction.PageContent;
  */
 public interface HeadlessRenderer {
 
-    PageContent render(ProductLink link);
+    /**
+     * @param authorized 허락받은 대상인가. 렌더 서비스는 이 값이 true 일 때만 우회 수단(지문 보정·프록시)을
+     *     연다. 이 경계는 판정하지 않고 전달만 한다 — 원장은 호출자(core)에 있다.
+     */
+    PageContent render(ProductLink link, boolean authorized);
 }

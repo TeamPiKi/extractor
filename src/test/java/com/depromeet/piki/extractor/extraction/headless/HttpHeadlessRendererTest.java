@@ -92,7 +92,7 @@ class HttpHeadlessRendererTest {
                 MediaType.APPLICATION_JSON
             )));
 
-        PageContent page = renderer.render(link);
+        PageContent page = renderer.render(link, false);
 
         assertEquals(html, page.html());
         // 정체성(원본 link)은 유지하고, baseUri 용 finalUrl 은 렌더가 따라간 최종 URL 을 쓴다.
@@ -111,7 +111,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-            assertEquals("<html>rendered dom</html>", renderer.render(link).html(), "verdict=" + verdict);
+            assertEquals("<html>rendered dom</html>", renderer.render(link, false).html(), "verdict=" + verdict);
         }
     }
 
@@ -122,7 +122,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess("{\"verdict\":\"BLOCK\",\"status\":429}", MediaType.APPLICATION_JSON)));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, ex.code());
         assertFalse(ex.permanent());
@@ -140,7 +140,7 @@ class HttpHeadlessRendererTest {
                 .expect(requestTo(BASE_URL + "/render"))
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON)));
 
-            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
             assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
             assertFalse(ex.permanent());
@@ -155,7 +155,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
 
-        assertEquals("<html>compressed dom</html>", renderer.render(link).html());
+        assertEquals("<html>compressed dom</html>", renderer.render(link, false).html());
     }
 
     @Test
@@ -172,7 +172,7 @@ class HttpHeadlessRendererTest {
                 .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("mall-v1.dict")))
         );
 
-        assertEquals("<html>dict compressed</html>", renderer.render(link).html());
+        assertEquals("<html>dict compressed</html>", renderer.render(link, false).html());
     }
 
     @Test
@@ -183,7 +183,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("future-v2.dict"))));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -197,7 +197,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(garbage, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -210,7 +210,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess("not-json", MediaType.TEXT_PLAIN)));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -225,7 +225,7 @@ class HttpHeadlessRendererTest {
         HttpHeadlessRenderer renderer =
             rendererWith(HeadlessExtractionProperties.of(true), internalIp, ZstdDictionaries.none(), server -> { });
 
-        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link));
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
         assertTrue(ex.permanent());
@@ -242,7 +242,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-            assertEquals(link, renderer.render(link).finalUrl());
+            assertEquals(link, renderer.render(link, false).finalUrl());
         }
     }
 
@@ -264,7 +264,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link));
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
@@ -276,7 +276,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withServerError()));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -295,7 +295,7 @@ class HttpHeadlessRendererTest {
                 MediaType.APPLICATION_JSON
             )));
 
-        assertEquals("0123456789", renderer.render(link).html());
+        assertEquals("0123456789", renderer.render(link, false).html());
     }
 
     @Test

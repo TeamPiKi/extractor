@@ -270,6 +270,20 @@ public class GeminiHttpClient implements GeminiClient {
         return callWithRetry(request, resultType, model, paidTier());
     }
 
+    /**
+     * 호출당 토큰 사용량 원장. 메트릭이 아니라 로그인 이유는 지금 필요한 것이 추세가 아니라 "이 호출이 얼마였나"
+     * 이고, 라벨 축(모델 x modality)이 붙으면 카디널리티가 늘기 때문이다. imageTokens 는 이미지 경로에만 찍힌다.
+     */
+    private void logUsage(String model, GeminiGenerateContentResponse.UsageMetadata usage) {
+        log.info(
+            "gemini usage model={} promptTokens={} candidateTokens={} totalTokens={} imageTokens={}",
+            model,
+            usage.promptTokenCount(),
+            usage.candidatesTokenCount(),
+            usage.totalTokenCount(),
+            usage.imageTokenCount());
+    }
+
     private <Req, Res> Res callWithRetry(Req request, Class<Res> resultType, String model, Tier tier) {
         return geminiRetry.execute(() -> {
             GeminiGenerateContentResponse response;
@@ -296,6 +310,7 @@ public class GeminiHttpClient implements GeminiClient {
             if (response == null) {
                 throw GeminiApiException.emptyResponse();
             }
+            logUsage(model, response.usageOrEmpty());
 
             String text = response.extractText();
             try {

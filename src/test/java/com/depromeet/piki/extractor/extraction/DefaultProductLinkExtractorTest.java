@@ -53,7 +53,7 @@ class DefaultProductLinkExtractorTest {
         // 게이트(LlmInputGate)가 LLM 전에 끊으므로 stub 세팅이 없어야 정상 — LLM 이 불리면 default throw 로 드러난다.
         PageFetchException e = assertThrows(
             PageFetchException.class,
-            () -> extractorFetching(SHELL_HTML).extract(link, null)
+            () -> extractorFetching(SHELL_HTML).extract(link, false, null)
         );
 
         assertEquals(ExtractionErrorCode.EMPTY_SHELL, e.code());
@@ -71,7 +71,7 @@ class DefaultProductLinkExtractorTest {
 
         ProductSnapshotException e = assertThrows(
             ProductSnapshotException.class,
-            () -> extractorFetching(CONTENT_HTML).extract(link, null)
+            () -> extractorFetching(CONTENT_HTML).extract(link, false, null)
         );
 
         assertEquals(ExtractionErrorCode.NOT_PRODUCT_PAGE, e.code());
@@ -88,6 +88,6 @@ class DefaultProductLinkExtractorTest {
             throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
         };
 
-        assertThrows(GeminiApiException.class, () -> extractorFetching(dataIslandShell).extract(link, null));
+        assertThrows(GeminiApiException.class, () -> extractorFetching(dataIslandShell).extract(link, false, null));
     }
 }
