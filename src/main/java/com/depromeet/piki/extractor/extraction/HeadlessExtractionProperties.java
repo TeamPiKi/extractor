@@ -28,7 +28,6 @@ public record HeadlessExtractionProperties(
     @DefaultValue("") String baseUrl,
     @DefaultValue("2s") Duration connectTimeout,
     @DefaultValue("20s") Duration readTimeout,
-    @DefaultValue("3000000") int maxHtmlChars,
     @DefaultValue("true") boolean compress,
     @DefaultValue("") String zstdDictDir
 ) {
@@ -69,7 +68,6 @@ public record HeadlessExtractionProperties(
             enabled ? "http://headless.test:8000" : "",
             Duration.ofSeconds(2),
             Duration.ofSeconds(20),
-            3_000_000,
             true,
             ""
         );

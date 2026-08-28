@@ -108,7 +108,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     void finalUrlReflectsRedirectDestination() throws Exception {
         stubGeminiClient.reset();
         // 단축링크가 정식 상품 페이지로 리다이렉트된 상황 — fetcher 가 최종 URL 을 함께 돌려준다.
-        stubPageFetcher.build = link -> new PageContent(
+        stubPageFetcher.build = link -> PageContent.of(
             link,
             STRUCTURED_HTML,
             ProductLink.parse("https://real-shop.example.com/products/42")

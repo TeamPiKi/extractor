@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
-import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
@@ -30,6 +29,15 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 @Component
 public class StructuredDataExtractor {
+
+    /**
+     * Next.js 가 embedded state 를 싣는 script id. 수신 가지치기({@code PruningHtmlParser})가 이 script 를
+     * 남겨야 여기까지 닿으므로, 무엇을 찾는지 아는 이쪽이 상수를 소유하고 가지치기가 가져다 쓴다.
+     */
+    public static final String NEXT_DATA_ID = "__NEXT_DATA__";
+
+    /** {@code window.__PRELOADED_STATE__ = {...}} JS 할당의 표지. 위와 같은 이유로 공개한다. */
+    public static final String EMBEDDED_STATE_MARKER = "__PRELOADED_STATE__";
 
     /**
      * 통화기호·천단위 콤마·공백 등 숫자·소수점·부호 외 문자를 제거한다. 부호를 남기는 것은
@@ -60,11 +68,10 @@ public class StructuredDataExtractor {
 
     /**
      * 단독 호출·테스트 편의 오버로드(운영 경로는 오케스트레이터가 만든 Document 를 공유받는다).
-     * baseUri 는 html 의 출처인 최종 URL(finalUrl) 기준으로 두고, 정체성으로 넘기는 link 는 원본을 유지한다.
+     * baseUri 는 수신 단계에서 이미 최종 URL 기준으로 박혀 있고, 정체성으로 넘기는 link 는 원본을 유지한다.
      */
     public StructuredExtraction extract(PageContent page) {
-        Document document = Jsoup.parse(page.html(), page.finalUrl().value().toString());
-        return extract(document, page.link());
+        return extract(page.document(), page.link());
     }
 
     /** 이름과 달리 "데이터에 더 근접한(=정보량이 큰) 쪽"을 고른다 — 보강 여지를 알려주는 사유가 남아야 하기 때문이다. */
@@ -322,7 +329,7 @@ public class StructuredDataExtractor {
      * 균형 중괄호로 객체만 떼낸다.
      */
     private JsonNode embeddedStateJson(Document document) {
-        Element nextData = document.selectFirst("script#__NEXT_DATA__");
+        Element nextData = document.selectFirst("script#" + NEXT_DATA_ID);
         if (nextData != null) {
             JsonNode parsed = readTreeOrNull(nextData.data());
             if (parsed != null) {
@@ -331,7 +338,7 @@ public class StructuredDataExtractor {
         }
         Element script = null;
         for (Element candidate : document.select("script")) {
-            if (candidate.data().contains("__PRELOADED_STATE__")) {
+            if (candidate.data().contains(EMBEDDED_STATE_MARKER)) {
                 script = candidate;
                 break;
             }
@@ -340,7 +347,7 @@ public class StructuredDataExtractor {
             return null;
         }
         String raw = script.data();
-        int start = raw.indexOf('{', raw.indexOf("__PRELOADED_STATE__"));
+        int start = raw.indexOf('{', raw.indexOf(EMBEDDED_STATE_MARKER));
         if (start < 0) {
             return null;
         }

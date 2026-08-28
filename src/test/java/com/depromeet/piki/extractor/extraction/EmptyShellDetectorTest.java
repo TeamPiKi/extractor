@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,7 @@ class EmptyShellDetectorTest {
             + "</head><body><a href=\"#content\">본문 바로가기</a><a href=\"#menu\">메뉴 바로가기</a>"
             + "<div id=\"app\"></div></body></html>";
 
-        assertTrue(EmptyShellDetector.isEmptyShell(shell));
+        assertTrue(EmptyShellDetector.isEmptyShell(document(shell)));
     }
 
     @Test
@@ -31,14 +32,14 @@ class EmptyShellDetectorTest {
             + "<script>location.href = \"https://store.kakao.com/kgcmall/products/445653929\";</script>"
             + "</body></html>";
 
-        assertTrue(EmptyShellDetector.isEmptyShell(bridge));
+        assertTrue(EmptyShellDetector.isEmptyShell(document(bridge)));
     }
 
     @Test
     @DisplayName("가시 텍스트 299자는 빈 셸이고 300자는 아니다 (경계)")
     void thresholdBoundary() {
-        assertTrue(EmptyShellDetector.isEmptyShell("<body>" + "a".repeat(299) + "</body>"));
-        assertFalse(EmptyShellDetector.isEmptyShell("<body>" + "a".repeat(300) + "</body>"));
+        assertTrue(EmptyShellDetector.isEmptyShell(document("<body>" + "a".repeat(299) + "</body>")));
+        assertFalse(EmptyShellDetector.isEmptyShell(document("<body>" + "a".repeat(300) + "</body>")));
     }
 
     @Test
@@ -49,6 +50,11 @@ class EmptyShellDetectorTest {
             + "오늘은 카카오 쇼핑의 추천 상품을 소개하는 긴 글입니다. ".repeat(20)
             + "</article></body></html>";
 
-        assertFalse(EmptyShellDetector.isEmptyShell(article));
+        assertFalse(EmptyShellDetector.isEmptyShell(document(article)));
+    }
+
+    /** 운영에서 판정에 닿는 문서는 항상 가지친 것이므로 같은 경로로 만든다. */
+    private static Document document(String html) {
+        return PruningHtmlParser.parse(html, "https://shop.example.com/p").document();
     }
 }

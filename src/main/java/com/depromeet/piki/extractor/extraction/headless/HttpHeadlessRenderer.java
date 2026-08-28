@@ -5,6 +5,7 @@ import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.PageContent;
+import com.depromeet.piki.extractor.extraction.PruningHtmlParser;
 import com.depromeet.piki.extractor.extraction.http.InternalHostGuard;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
@@ -57,7 +58,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private static final String ZSTD_ENCODING = "zstd";
     /**
      * 해제 결과(JSON = 렌더 HTML + 메타)의 안전 상한. 신뢰 경계 안(내부망 renderer)이라도 해제 폭탄·오배선을
-     * 바운드하려 둔다 — 정상 압축비로는 닿지 않을 만큼 넉넉하다. 파싱 전 HTML 상한(maxHtmlChars)은 별도다.
+     * 바운드하려 둔다 — 정상 압축비로는 닿지 않을 만큼 넉넉하다. 가지친 뒤 보존분 상한은 별도다(PruningHtmlParser).
      */
     private static final int MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
 
@@ -124,7 +125,18 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             link.safeLogString()
         );
 
-        return new PageContent(link, capHtml(html), resolveFinalUrl(response.finalUrl(), link));
+        ProductLink finalUrl = resolveFinalUrl(response.finalUrl(), link);
+        // 렌더된 DOM 은 정적 fetch 보다 커질 수 있어 같은 가지치기를 통과시킨다 — 하류가 보는 문서의 모양이
+        // 두 전략 사이에서 갈리지 않게 하려는 것이기도 하다.
+        PruningHtmlParser.Pruned pruned = PruningHtmlParser.parse(html, finalUrl.value().toString());
+        if (pruned.truncated()) {
+            log.warn(
+                "headless render stopped at retained cap chars={} url={}",
+                pruned.retainedChars(),
+                link.safeLogString()
+            );
+        }
+        return new PageContent(link, pruned.document(), finalUrl, pruned.retainedChars());
     }
 
     private HeadlessRenderResponse requestRender(ProductLink link, boolean authorized) {
@@ -190,12 +202,6 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             "미보유 zstd 사전 [" + dictId + "] — 롤아웃 규약(사전은 extractor 먼저 배포) 위반이거나 사전ID 가 어긋났다",
             null
         ));
-    }
-
-    /** 렌더된 DOM 은 정적 fetch 보다 커질 수 있어 같은 안전 상한(파싱 비용·동시 메모리 바운드)을 적용한다. */
-    private String capHtml(String html) {
-        int max = properties.maxHtmlChars();
-        return html.length() > max ? html.substring(0, max) : html;
     }
 
     /**

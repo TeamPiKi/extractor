@@ -1,6 +1,7 @@
 package com.depromeet.piki.extractor.extraction.headless;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Consumer;
+import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -94,7 +96,7 @@ class HttpHeadlessRendererTest {
 
         PageContent page = renderer.render(link, false);
 
-        assertEquals(html, page.html());
+        assertEquals("rendered", page.document().text());
         // 정체성(원본 link)은 유지하고, baseUri 용 finalUrl 은 렌더가 따라간 최종 URL 을 쓴다.
         assertEquals(link, page.link());
         assertEquals("https://kream.co.kr/products/6963?after-redirect", page.finalUrl().value().toString());
@@ -111,7 +113,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-            assertEquals("<html>rendered dom</html>", renderer.render(link, false).html(), "verdict=" + verdict);
+            assertEquals("rendered dom", renderer.render(link, false).document().text(), "verdict=" + verdict);
         }
     }
 
@@ -155,7 +157,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders(""))));
 
-        assertEquals("<html>compressed dom</html>", renderer.render(link, false).html());
+        assertEquals("compressed dom", renderer.render(link, false).document().text());
     }
 
     @Test
@@ -172,7 +174,7 @@ class HttpHeadlessRendererTest {
                 .andRespond(withSuccess(packed, MediaType.APPLICATION_OCTET_STREAM).headers(zstdHeaders("mall-v1.dict")))
         );
 
-        assertEquals("<html>dict compressed</html>", renderer.render(link, false).html());
+        assertEquals("dict compressed", renderer.render(link, false).document().text());
     }
 
     @Test
@@ -283,19 +285,21 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("렌더된 HTML 은 maxHtmlChars 안전 상한으로 절단한다")
-    void htmlIsCappedAtMaxChars() {
-        HeadlessExtractionProperties small = new HeadlessExtractionProperties(
-            true, BASE_URL, Duration.ofSeconds(2), Duration.ofSeconds(20), 10, true, ""
-        );
-        HttpHeadlessRenderer renderer = rendererWith(small, publicIp, ZstdDictionaries.none(), server -> server
+    @DisplayName("렌더된 HTML 도 정적 fetch 와 같은 가지치기를 통과한다 - 두 전략이 하류에 넘기는 문서 모양이 갈리면 안 된다")
+    void renderedHtmlIsPruned() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(
-                "{\"verdict\":\"OK\",\"html\":\"0123456789ABCDEF\"}",
+                "{\"verdict\":\"OK\",\"html\":\"<html><head><style>.a{color:red}</style>"
+                    + "<script>var x = 1;</script></head><body><p>운동화</p></body></html>\"}",
                 MediaType.APPLICATION_JSON
             )));
 
-        assertEquals("0123456789", renderer.render(link, false).html());
+        Document document = renderer.render(link, false).document();
+
+        assertNull(document.selectFirst("style"), "style 은 버려져야 한다");
+        assertNull(document.selectFirst("script"), "데이터 아닌 script 는 버려져야 한다");
+        assertEquals("운동화", document.text(), "본문은 남아야 한다");
     }
 
     @Test
