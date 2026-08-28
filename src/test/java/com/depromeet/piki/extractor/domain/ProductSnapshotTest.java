@@ -21,13 +21,12 @@ class ProductSnapshotTest {
     }
 
     @Test
-    @DisplayName("imageUrl 은 https 가 아니면 null 로 정규화된다")
-    void nonHttpsImageUrlToNull() {
+    @DisplayName("스킴을 갈아끼워 살릴 수 없는 imageUrl 만 null 로 정규화된다")
+    void unusableImageUrlToNull() {
         List<String> cases = List.of(
-            "http://cdn.example.com/a.jpg",
-            "//cdn.example.com/a.jpg",
             "data:image/png;base64,xxx",
             "javascript:alert(1)",
+            "file:///etc/passwd",
             "");
         for (String raw : cases) {
             assertNull(
@@ -42,6 +41,27 @@ class ProductSnapshotTest {
         assertEquals(
             "https://cdn.example.com/a.jpg",
             ProductSnapshot.fromExtracted(link, "상품", "https://cdn.example.com/a.jpg", 1_000, "KRW").imageUrl());
+    }
+
+    @Test
+    @DisplayName("http·프로토콜 상대 imageUrl 은 버리지 않고 https 로 올린다")
+    void schemelessImageUrlUpgradedToHttps() {
+        // og:image 에 http 를 적어 둔 몰이 실재한다. 버리면 이름·가격만 채운 INCOMPLETE 로 떨어지는데,
+        // 그 값은 스킴만 올리면 그대로 쓸 수 있다(실측: 같은 주소가 http 301 -> https 200).
+        assertEquals(
+            "https://cdn.example.com/a.jpg",
+            ProductSnapshot.fromExtracted(link, "상품", "http://cdn.example.com/a.jpg", 1_000, "KRW").imageUrl());
+        assertEquals(
+            "https://cdn.example.com/a.jpg",
+            ProductSnapshot.fromExtracted(link, "상품", "//cdn.example.com/a.jpg", 1_000, "KRW").imageUrl());
+    }
+
+    @Test
+    @DisplayName("스킴 대문자·혼합 표기도 https 로 올린다")
+    void schemeUpgradeIsCaseInsensitive() {
+        assertEquals(
+            "https://cdn.example.com/a.jpg",
+            ProductSnapshot.fromExtracted(link, "상품", "HTTP://cdn.example.com/a.jpg", 1_000, "KRW").imageUrl());
     }
 
     @Test

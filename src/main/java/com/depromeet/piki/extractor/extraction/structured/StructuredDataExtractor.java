@@ -124,7 +124,7 @@ public class StructuredDataExtractor {
 
     /**
      * 최상위 배열 · {@code @graph} 래핑 · {@code ItemList.itemListElement[].item} 중첩을 재귀로 평탄화해
-     * 모든 Product 노드를 모은다 — 사이트마다 Product 를 감싸는 형태가 달라 한 형태만 보면 놓친다.
+     * 모든 상품 노드(Product · ProductGroup)를 모은다 — 사이트마다 감싸는 형태가 달라 한 형태만 보면 놓친다.
      */
     private List<JsonNode> collectProductNodes(JsonNode node) {
         List<JsonNode> products = new ArrayList<>();
@@ -173,16 +173,21 @@ public class StructuredDataExtractor {
         return isProductTypeValue(type);
     }
 
+    /** ProductGroup 은 구매 가능한 변형들을 묶은 상품 노드라 Product 와 같이 상품으로 본다. */
     private boolean isProductTypeValue(JsonNode node) {
         String text = textOf(node);
-        return text != null && text.equalsIgnoreCase("Product");
+        return text != null && (text.equalsIgnoreCase("Product") || text.equalsIgnoreCase("ProductGroup"));
     }
 
-    /** offers 는 객체 또는 배열(AggregateOffer 의 offers 배열 등)로 오므로 둘 다 받는다. */
+    /**
+     * offers 는 객체 또는 배열(AggregateOffer 의 offers 배열 등)로 오므로 둘 다 받는다.
+     * 자기 노드에 없으면 첫 변형에서 찾는다.
+     */
     private JsonNode firstOffer(JsonNode product) {
         JsonNode offers = product.get("offers");
         if (offers == null) {
-            return null;
+            JsonNode variant = firstVariant(product);
+            return variant == null ? null : firstOffer(variant);
         }
         if (offers.isArray()) {
             return offers.size() > 0 ? offers.get(0) : null;
@@ -212,10 +217,24 @@ public class StructuredDataExtractor {
         return null;
     }
 
+    /**
+     * ProductGroup 은 이름만 자기 노드에 두고 가격·이미지는 hasVariant 안의 변형에만 두는 경우가 있어
+     * (Shopify 계열) 그 두 필드를 첫 변형에서 보강한다. 변형 자체를 상품 노드로 수집하지는 않는다 —
+     * 변형 이름에는 사이즈 같은 옵션이 붙어 상품명으로 쓸 수 없다.
+     */
+    private JsonNode firstVariant(JsonNode product) {
+        JsonNode variants = product.get("hasVariant");
+        if (variants == null || !variants.isArray() || variants.size() == 0) {
+            return null;
+        }
+        return variants.get(0);
+    }
+
     private String imageUrlOf(JsonNode product) {
         JsonNode image = product.get("image");
         if (image == null) {
-            return null;
+            JsonNode variant = firstVariant(product);
+            return variant == null ? null : imageUrlOf(variant);
         }
         return firstImageUrl(image);
     }

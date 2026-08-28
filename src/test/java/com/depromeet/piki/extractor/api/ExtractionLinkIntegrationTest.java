@@ -14,6 +14,7 @@ import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.support.IntegrationTestSupport;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import com.depromeet.piki.extractor.support.StubPageFetcher;
+import java.net.UnknownHostException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -247,6 +248,21 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
                 .content(body("https://busy.example.com/p/6")))
             .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.code").value("UPSTREAM_ERROR"));
+    }
+
+    @Test
+    @DisplayName("host 를 조회하지 못하면 422 INVALID_URL 을 반환한다 (호출자가 재시도하지 않게)")
+    void unresolvableHost() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> {
+            throw PageFetchException.unresolvableHost(new UnknownHostException("no-such-host.example"));
+        };
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://no-such-host.example/p/7")))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("INVALID_URL"));
     }
 
     @Test

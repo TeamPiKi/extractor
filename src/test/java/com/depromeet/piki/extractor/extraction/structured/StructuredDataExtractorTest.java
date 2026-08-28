@@ -84,6 +84,39 @@ class StructuredDataExtractorTest {
     }
 
     @Test
+    @DisplayName("ProductGroup 은 그룹 이름을 쓰고 가격과 이미지는 첫 변형에서 가져온다")
+    void extractsFromProductGroupUsingFirstVariant() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"ProductGroup","name":"컷아웃 부츠","hasVariant":[{"@type":"Product","name":"컷아웃 부츠 - 250","image":"https://cdn.example.com/boots.jpg","offers":{"@type":"Offer","price":"800000","priceCurrency":"KRW"}},{"@type":"Product","name":"컷아웃 부츠 - 260","offers":{"price":"800000"}}]}"""))));
+
+        assertEquals("컷아웃 부츠", snapshot.name());
+        assertEquals(800_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+        assertEquals("https://cdn.example.com/boots.jpg", snapshot.imageUrl());
+    }
+
+    @Test
+    @DisplayName("ProductGroup 에 offers 가 있으면 변형보다 그것을 먼저 쓴다")
+    void prefersGroupOfferOverVariantOffer() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"ProductGroup","name":"그룹상품","offers":{"price":"10000","priceCurrency":"KRW"},"hasVariant":[{"@type":"Product","name":"그룹상품 - S","offers":{"price":"99999","priceCurrency":"JPY"}}]}"""))));
+
+        assertEquals(10_000, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
+    @DisplayName("ProductGroup 에 변형도 offers 도 없으면 missing_field 로 fallback 한다")
+    void productGroupWithoutVariantsFallsBackToMissingField() {
+        String html = jsonLd("""
+            {"@type":"ProductGroup","name":"가격없는그룹"}""");
+
+        assertEquals(StructuredExtraction.Miss.MISSING_FIELD, extractor.extract(pageOf(html)));
+    }
+
+    @Test
     @DisplayName("offers 가 배열이면 첫 유효 price 를 쓴다")
     void usesFirstOfferWhenArray() {
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
@@ -229,13 +262,24 @@ class StructuredDataExtractorTest {
     }
 
     @Test
-    @DisplayName("https 가 아닌 image 는 imageUrl 만 null 이고 나머지로 성공한다")
-    void nonHttpsImageBecomesNull() {
+    @DisplayName("http image 는 https 로 올려서 쓴다 — 버리면 멀쩡한 이미지를 잃는다")
+    void httpImageIsUpgradedToHttps() {
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
             """
-            {"@type":"Product","name":"비https이미지","image":"http://cdn.example.com/p.jpg","offers":{"price":"5000"}}"""))));
+            {"@type":"Product","name":"http이미지","image":"http://cdn.example.com/p.jpg","offers":{"price":"5000"}}"""))));
 
-        assertEquals("비https이미지", snapshot.name());
+        assertEquals("http이미지", snapshot.name());
+        assertEquals("https://cdn.example.com/p.jpg", snapshot.imageUrl());
+    }
+
+    @Test
+    @DisplayName("스킴을 살릴 수 없는 image 는 imageUrl 만 null 이고 나머지로 성공한다")
+    void unusableImageBecomesNull() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"Product","name":"데이터URI","image":"data:image/png;base64,xxx","offers":{"price":"5000"}}"""))));
+
+        assertEquals("데이터URI", snapshot.name());
         assertNull(snapshot.imageUrl());
     }
 
