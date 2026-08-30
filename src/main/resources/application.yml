@@ -18,9 +18,6 @@ spring:
 
 gemini:
   api-key: ${GEMINI_API_KEY:}
-  # 무료 티어 우선 호출용 키(opt-in). 비워 두면 무료 시도 없이 api-key 만 쓰는 기존 동작이다.
-  # 무료 등급은 계정이 아니라 GCP 프로젝트 단위라, 결제가 연결되지 않은 별도 프로젝트의 키여야 한다.
-  free-api-key: ${GEMINI_FREE_API_KEY:}
   # 기본 모델은 GeminiProperties.DEFAULT_MODEL 한 곳에서만 정의한다 (drift 방지). 여기엔 리터럴을 두지 않는다.
   # 운영에서 모델을 바꾸려면 GEMINI_MODEL 환경변수로 override (relaxed binding: GEMINI_MODEL -> gemini.model).
   retry:

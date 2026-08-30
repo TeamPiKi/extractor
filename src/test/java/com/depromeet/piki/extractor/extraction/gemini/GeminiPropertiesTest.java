@@ -2,7 +2,6 @@ package com.depromeet.piki.extractor.extraction.gemini;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,34 +32,5 @@ class GeminiPropertiesTest {
     @DisplayName("기본 모델은 preview 가 아닌 GA 모델이어야 한다")
     void defaultModelIsGa() {
         assertFalse(GeminiProperties.DEFAULT_MODEL.contains("preview"));
-    }
-
-    @Test
-    @DisplayName("toString 은 유료·무료 키를 모두 가린다")
-    void toStringMasksBothKeys() {
-        GeminiProperties props = new GeminiProperties(
-            "paid-secret",
-            "free-secret",
-            GeminiProperties.DEFAULT_MODEL,
-            new GeminiProperties.Retry()
-        );
-
-        String printed = props.toString();
-
-        assertFalse(printed.contains("paid-secret"));
-        assertFalse(printed.contains("free-secret"));
-    }
-
-    @Test
-    @DisplayName("빈 무료 키는 미설정으로 정규화된다 - 환경변수 미지정이 빈 문자열로 바인딩되기 때문")
-    void blankFreeKeyBecomesAbsent() {
-        GeminiProperties props = new GeminiProperties(
-            "dummy",
-            "  ",
-            GeminiProperties.DEFAULT_MODEL,
-            new GeminiProperties.Retry()
-        );
-
-        assertNull(props.freeApiKey());
     }
 }

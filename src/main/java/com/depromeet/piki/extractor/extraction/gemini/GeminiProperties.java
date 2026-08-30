@@ -4,18 +4,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/**
- * Gemini 호출 설정. 키가 둘인 것은 무료 티어를 먼저 태우기 위해서다 — 무료 등급은 계정이 아니라 GCP
- * 프로젝트 단위로 정해지므로(결제가 연결된 프로젝트에는 무료 등급이 없다), 무료로 부르려면 결제가 붙지
- * 않은 별도 프로젝트의 키가 따로 있어야 한다.
- *
- * <p>{@code freeApiKey} 는 opt-in 이다. 비어 있으면 무료 시도 없이 {@code apiKey} 만 쓰던 기존 동작이
- * 그대로 유지되므로, 무료가 말썽이면 환경변수 값을 지우는 것이 곧 롤백이다.
- */
 @ConfigurationProperties(prefix = "gemini")
 public record GeminiProperties(
     String apiKey,
-    String freeApiKey,
     String model,
     Retry retry
 ) {
@@ -40,11 +31,6 @@ public record GeminiProperties(
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalArgumentException("GEMINI_API_KEY 가 비어 있습니다.");
         }
-        // application.yml 이 미설정 환경변수를 빈 문자열로 바인딩하므로(${GEMINI_FREE_API_KEY:}), "없음" 의
-        // 표현을 null 하나로 모은다 — 아니면 소비자마다 blank 검사를 따로 들고 다녀야 한다.
-        if (freeApiKey != null && freeApiKey.isBlank()) {
-            freeApiKey = null;
-        }
         if (model == null) {
             model = DEFAULT_MODEL;
         }
@@ -56,16 +42,15 @@ public record GeminiProperties(
         }
     }
 
-    /** 테스트·직접 생성용 편의 생성자. 무료 키 없이 유료 단독으로 도는 구성이다. */
+    /** 테스트·직접 생성용 편의 생성자. */
     public GeminiProperties(String apiKey) {
-        this(apiKey, null, DEFAULT_MODEL, new Retry());
+        this(apiKey, DEFAULT_MODEL, new Retry());
     }
 
-    /** record 기본 toString 은 키를 그대로 노출하므로, 로그 유출 방지를 위해 둘 다 마스킹한다. */
+    /** record 기본 toString 은 apiKey 를 그대로 노출하므로, 로그 유출 방지를 위해 마스킹한다. */
     @Override
     public String toString() {
-        return "GeminiProperties(apiKey=*secret*, freeApiKey=" + (freeApiKey == null ? "none" : "*secret*")
-            + ", model=" + model + ", retry=" + retry + ")";
+        return "GeminiProperties(apiKey=*secret*, model=" + model + ", retry=" + retry + ")";
     }
 
     /**
