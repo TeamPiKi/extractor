@@ -53,6 +53,12 @@ public class GeminiHttpClient implements GeminiClient {
     private static final int FREE_READ_TIMEOUT_MS = 10_000;
 
     /**
+     * 오류 body 로그의 길이 상한. Gemini 오류 JSON 은 details 를 포함해도 1KB 를 넘지 않는 것이 보통이라
+     * 사유가 잘리지 않으면서, 비정상적으로 큰 body 가 로그를 밀어내는 것을 막는다.
+     */
+    private static final int ERROR_BODY_LOG_MAX_CHARS = 1_000;
+
+    /**
      * API 키는 access log 에 남지 않도록 쿼리 대신 헤더로 전달한다.
      *
      * @see <a href="https://ai.google.dev/gemini-api/docs/api-key#provide-api-key-explicitly">Gemini API key</a>
@@ -284,6 +290,18 @@ public class GeminiHttpClient implements GeminiClient {
             usage.imageTokenCount());
     }
 
+    /**
+     * Google 오류 JSON 은 pretty-print 개행으로 오므로, 줄 단위 로그 수집에서 레코드가 쪼개지지 않게
+     * 한 줄로 접고 길이를 제한한다.
+     */
+    private static String compactErrorBody(String body) {
+        String compact = body.replaceAll("\\s+", " ").trim();
+        if (compact.length() <= ERROR_BODY_LOG_MAX_CHARS) {
+            return compact;
+        }
+        return compact.substring(0, ERROR_BODY_LOG_MAX_CHARS) + "...(truncated)";
+    }
+
     private <Req, Res> Res callWithRetry(Req request, Class<Res> resultType, String model, Tier tier) {
         return geminiRetry.execute(() -> {
             GeminiGenerateContentResponse response;
@@ -298,6 +316,15 @@ public class GeminiHttpClient implements GeminiClient {
                     .retrieve()
                     .body(GeminiGenerateContentResponse.class);
             } catch (RestClientResponseException e) {
+                // 오류 body 는 Google 이 밝힌 실패 사유(키 정지·API 비활성·쿼터 종류)가 실리는 유일한 자리다.
+                // 예외 code 분류로는 사유가 뭉개지고 확정 실패는 상위에서 스택 없이 로깅되므로, body 가 있는 여기서 남긴다.
+                log.warn(
+                    "Gemini 응답 오류 - tier={} model={} status={} body={}",
+                    tier.label(),
+                    model,
+                    e.getStatusCode().value(),
+                    compactErrorBody(e.getResponseBodyAsString())
+                );
                 throw GeminiApiException.fromResponseError(e);
             } catch (ResourceAccessException e) {
                 throw GeminiApiException.upstreamError(e);
