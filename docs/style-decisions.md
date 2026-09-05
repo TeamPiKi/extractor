@@ -1,7 +1,7 @@
 # 스타일 결정 기록 — 우아한테크코스 스타일 검토 (2026-07-20)
 
 참고 기준: [woowacourse-teams/2025-estime `be/dev`](https://github.com/woowacourse-teams/2025-estime/tree/be/dev) 백엔드.
-목표: 우테코식 객체지향 스타일을 참고하되, 이 서비스의 정체(무상태·단일 소비자·포팅 파리티 — CLAUDE.md 참조)에 맞는 형태로 취사선택한다. 아래 결정이 이 repo 스타일의 기준선이며, CLAUDE.md 와 충돌하면 CLAUDE.md 가 우선한다.
+목표: 우테코식 객체지향 스타일을 참고하되, 이 서비스의 정체(무상태·단일 소비자 — CLAUDE.md 참조. 작성 당시엔 포팅 파리티 기간이기도 했다)에 맞는 형태로 취사선택한다. 아래 결정이 이 repo 스타일의 기준선이며, CLAUDE.md 와 충돌하면 CLAUDE.md 가 우선한다.
 
 ## 1. estime 대비 채택 / 기각 결정
 
