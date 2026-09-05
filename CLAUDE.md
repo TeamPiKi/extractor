@@ -60,13 +60,15 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 ## 로깅
 
 - 클래스에 `@Slf4j` 를 붙여 쓴다(필드명 `log`). 명시적 `LoggerFactory.getLogger` 선언은 쓰지 않는다.
-- URL 은 마스킹해서 찍는다(`safeLogString`: host+path만, 쿼리스트링 제외). 토큰·원문 HTML·LLM 응답 원문을 로그에 남기지 않는다.
+- URL 은 마스킹해서 찍는다(`safeLogString`: host+path만, 쿼리스트링 제외). 쿼리스트링에 토큰이 실릴 수 있어서다. 토큰·원문 HTML·LLM 응답 원문도 로그에 남기지 않는다.
 - 레벨: info=정상 흐름·지표·호출자 계약 위반 / warn=외부(몰·Gemini·S3) 실패·에스컬레이션 실패·SSRF 차단 / error=서버 버그(스택 포함).
 - SLF4J `{}` placeholder 사용, 문자열 연결 금지.
 
 ## 설정값
 
-- 운영 상수(fetch 크기 cap·UA·타임아웃·LLM 입력 cap)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등). 기본값은 코드가 정본이라 문서에 숫자를 박지 않는다.
+- 운영 튜닝 손잡이(UA·타임아웃·재시도)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등).
+- 크기 안전 상한은 손잡이가 아니라 안전장치라 클래스 상수로 둔다(`HttpPageFetcher.MAX_FETCH_BYTES`·`PruningHtmlParser.MAX_RETAINED_CHARS`·`GeminiHtmlExtractor.MAX_LLM_CHARS`). 설정으로 열어 둔 동안 아무도 지정하지 않았고 키 이름만 드리프트할 자리가 생겨 상수로 되돌린 이력이 각 상수의 Javadoc 에 있다.
+- 기본값은 코드가 정본이라 문서에 숫자를 박지 않는다.
 
 ## 테스트
 
