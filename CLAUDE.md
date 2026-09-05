@@ -12,7 +12,7 @@ core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또�
 ## 언어: Java 25
 
 - 모던 idiom 을 기본으로: `record`(값 객체·DTO), `sealed`(닫힌 분기), pattern matching `switch`. 로컬 변수 `var` 는 우변에서 타입이 자명할 때만.
-- **이 repo 는 사람이 직접 읽고 이해하는 것을 우선한다.** 영리한 축약보다 평이하고 읽히는 코드. 포팅 시 Kotlin 원본의 의도를 보존하되 Java 다운 표현으로 옮긴다.
+- **이 repo 는 사람이 직접 읽고 이해하는 것을 우선한다.** 영리한 축약보다 평이하고 읽히는 코드.
 
 ### Lombok
 
@@ -33,7 +33,7 @@ core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또�
 - **선언부**(클래스·인터페이스·record·enum·상수·필드·메서드·생성자) 주석은 Javadoc(`/** */`). 메서드 본문 안에서만 `//`.
 - **지운다**: 코드가 이미 말하는 "무엇", 시그니처 재진술 `@param`(`@param region S3 리전`), 클래스 Javadoc 과 같은 말의 반복, 흐름 나레이션(`// 1) fetch 한다`), 자명한 분기 설명, 테스트에서 `@DisplayName`·단언이 이미 말하는 라벨.
 - **남긴다**: 설계 근거(왜 이 대안을 버렸나), 코드로 안 보이는 외부 제약·함정, 계약·보안 판단의 이유, 도달 불가 분기의 불변식, 외부 명세 링크. 이 "왜" 주석이 이 repo 의 자산이다.
-- **SSOT 위반 주석 금지.** 정본이 딴 곳에 있는 수치·목록·동작 — 다른 repo(renderer·PIKI-Server)의 구현 상세, `docs/api-contract.md` 의 계약 서술·타임아웃 예산, **코드의 기본값·상수값**, 다른 클래스가 정본인 분류 — 을 복제하지 않는다(조용히 낡는다). 정본을 가리키는 참조 한 줄로 대신한다.
+- **SSOT 위반 주석 금지.** 정본이 딴 곳에 있는 수치·목록·동작 — 다른 repo(renderer·core)의 구현 상세, `docs/api-contract.md` 의 계약 서술·타임아웃 예산, **코드의 기본값·상수값**, 다른 클래스가 정본인 분류 — 을 복제하지 않는다(조용히 낡는다). 정본을 가리키는 참조 한 줄로 대신한다.
 - **Javadoc 문법 게이트: `./gradlew javadoc` 이 error 0 이어야 한다.** raw `<...>` 는 `{@code <script>}` 로 감싸고, 본문 줄머리에 `@` 로 시작하는 애노테이션 이름을 두지 않는다(`{@code @DefaultValue}`) — 둘 다 error 를 낸다. `>`·`&` 단독은 `&gt;`·`&amp;`, 목록은 `<ul><li>`, 문단은 `<p>`.
 
 ### Null 처리
@@ -60,15 +60,13 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 ## 로깅
 
 - 클래스에 `@Slf4j` 를 붙여 쓴다(필드명 `log`). 명시적 `LoggerFactory.getLogger` 선언은 쓰지 않는다.
-- URL 은 반드시 마스킹(`safeLogString` 포팅본: host+path만, 쿼리스트링 제외). 토큰·원문 HTML·LLM 응답 원문을 로그에 남기지 않는다.
+- URL 은 마스킹해서 찍는다(`safeLogString`: host+path만, 쿼리스트링 제외). 토큰·원문 HTML·LLM 응답 원문을 로그에 남기지 않는다.
 - 레벨: info=정상 흐름·지표·호출자 계약 위반 / warn=외부(몰·Gemini·S3) 실패·에스컬레이션 실패·SSRF 차단 / error=서버 버그(스택 포함).
 - SLF4J `{}` placeholder 사용, 문자열 연결 금지.
 
-## 포팅 규율 (이관 기간 한정)
+## 설정값
 
-- **동작 등가(파리티)가 목표다.** Kotlin 원본의 분기·상수·메시지를 그대로 옮기고, 개선·리팩터링은 이관 완료 후 별도 작업으로 뺀다.
-- 포팅한 클래스의 Javadoc 에 원본 경로를 남긴다: `core: product/service/http/HttpPageFetcher.kt 포팅`.
-- 하드코딩이던 상수(fetch 3MB cap·UA·타임아웃·LLM 200K char cap)는 `@ConfigurationProperties` 로 외부화하되 **기본값은 원본과 동일**하게 둔다.
+- 운영 상수(fetch 크기 cap·UA·타임아웃·LLM 입력 cap)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등). 기본값은 코드가 정본이라 문서에 숫자를 박지 않는다.
 
 ## 테스트
 
@@ -80,7 +78,7 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 - **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
 - **DB 가 없다** — Testcontainers·Docker 불필요. `./gradlew test` 가 그냥 돈다. 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
 - **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(GeminiClient·PageFetcher·S3)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
-- **메타 테스트**: `TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)는 파싱 포팅(3단계)과 함께 이식한다. 그 전까지 원칙 준수는 사람 리뷰가 책임진다.
+- **메타 테스트**: `support/TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)가 `./gradlew test` 에 포함된다. 규칙을 바꿀 땐 산문을 먼저 고치고 메타 테스트를 따라 고친다.
 
 ## 의존성
 
