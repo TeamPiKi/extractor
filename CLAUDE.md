@@ -66,8 +66,8 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 설정값
 
-- 운영 튜닝 손잡이(UA·타임아웃·재시도)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등).
-- 크기 안전 상한은 손잡이가 아니라 안전장치라 클래스 상수로 둔다(`HttpPageFetcher.MAX_FETCH_BYTES`·`PruningHtmlParser.MAX_RETAINED_CHARS`·`GeminiHtmlExtractor.MAX_LLM_CHARS`). 설정으로 열어 둔 동안 아무도 지정하지 않았고 키 이름만 드리프트할 자리가 생겨 상수로 되돌린 이력이 각 상수의 Javadoc 에 있다.
+- 운영 튜닝 손잡이(UA·타임아웃·리다이렉트 횟수)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등).
+- 크기 안전 상한은 손잡이가 아니라 안전장치라 클래스 상수로 둔다(`HttpPageFetcher.MAX_FETCH_BYTES`·`PruningHtmlParser.MAX_RETAINED_CHARS`·`GeminiHtmlExtractor.MAX_LLM_CHARS`). 설정으로 열어 둔 동안 아무도 지정하지 않았고 키 이름만 드리프트할 자리가 생겨 상수로 되돌린 이력이 `HttpPageFetcher`·`PruningHtmlParser` 의 상수 주석에 있다.
 - 기본값은 코드가 정본이라 문서에 숫자를 박지 않는다.
 
 ## 테스트
