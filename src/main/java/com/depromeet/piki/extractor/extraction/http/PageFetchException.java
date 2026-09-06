@@ -15,7 +15,7 @@ public final class PageFetchException extends ExtractionException {
 
     /**
      * 정적 fetch 실패를 실제 브라우저(헤드리스)로 재시도(escalate)할지 표시한다. FallbackProductLinkExtractor 가
-     * 이 값으로 정한다(에스컬레이션 축은 호출자의 outbox 재시도 축과 직교). 정책은 "무조건 폴백": 예외는 둘뿐이고
+     * 이 값으로 정한다(에스컬레이션 축은 호출자의 파싱 작업 큐 재시도 축과 직교). 정책은 "무조건 폴백": 예외는 둘뿐이고
      * 나머지 fetch 실패는 전부 escalatable 이다 — 봇 방어가 어떤 status 로도 위장해 status·body 로 차단/genuine 을
      * 못 가른다.
      *

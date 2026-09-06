@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  * 일이라 허락을 전제하지 않는다. authorized 가 여는 것은 렌더 서비스의 우회 수단(지문 보정·프록시)뿐이고,
  * 이 클래스는 그 값을 판단 없이 전략에 넘기기만 한다(무상태 — 원장은 호출자에 있다).
  *
- * <p>에스컬레이션 축(plain 확정 → headless)은 호출자 outbox 의 재시도 축(일시 오류 → 같은 plain 재시도)과
+ * <p>에스컬레이션 축(plain 확정 → headless)은 호출자 파싱 작업 큐의 재시도 축(일시 오류 → 같은 plain 재시도)과
  * 직교한다. 차단·불완전 결과는 재시도 축에서 이미 확정 실패(422)라 그 슬롯(attemptCount)에 얹을 수 없다. 그래서
  * 여기서 별도로 판정한다.
  */

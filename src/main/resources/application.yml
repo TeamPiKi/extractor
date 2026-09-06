@@ -1,5 +1,5 @@
 server:
-  # 8080=PIKI-Server, 8000=piki-hb(헤드리스) 와 겹치지 않는 포트. dev 는 본 서버 박스에 컨테이너로 동거한다.
+  # 8080=core, 8000=piki-hb(헤드리스) 와 겹치지 않는 포트. dev 는 본 서버 박스에 컨테이너로 동거한다.
   port: 8090
 
 spring:
@@ -21,28 +21,28 @@ gemini:
   # 기본 모델은 GeminiProperties.DEFAULT_MODEL 한 곳에서만 정의한다 (drift 방지). 여기엔 리터럴을 두지 않는다.
   # 운영에서 모델을 바꾸려면 GEMINI_MODEL 환경변수로 override (relaxed binding: GEMINI_MODEL -> gemini.model).
   retry:
-    # max-attempts 는 총 시도 횟수(초기 호출 + 재시도). 기본 1 = 재시도 없음 — URL 파싱 재시도는 호출자(PIKI-Server)의
-    # outbox recover 한 곳으로 모여 있다. 여기서 내부 재시도를 켜면 재시도가 이중으로 겹친다.
+    # max-attempts 는 총 시도 횟수(초기 호출 + 재시도). 기본 1 = 재시도 없음 — URL 파싱 재시도는 호출자(core)의
+    # 파싱 작업 큐 회수 한 곳으로 모여 있다. 여기서 내부 재시도를 켜면 재시도가 이중으로 겹친다.
     max-attempts: ${GEMINI_RETRY_MAX_ATTEMPTS:1}
 
 management:
   endpoints:
     web:
       exposure:
-        # PIKI-Server 와 동일한 2층 구조 전제: 외부 노출 없음(보안그룹) + 박스 내부 Alloy 만 scrape.
+        # core 와 동일한 2층 구조 전제: 외부 노출 없음(보안그룹) + 박스 내부 Alloy 만 scrape.
         include: health, prometheus
   metrics:
     tags:
-      # Grafana Cloud 에서 서비스 단위 구분용 공통 라벨. PIKI-Server(application=PIKI)와 별개 시계열.
+      # Grafana Cloud 에서 서비스 단위 구분용 공통 라벨. core(application=piki-core)와 별개 시계열.
       application: ${spring.application.name}
   tracing:
     sampling:
-      # PIKI-Server 와 동일하게 전수 추적. 볼륨이 부담되면 그때 하향.
+      # core 와 동일하게 전수 추적. 볼륨이 부담되면 그때 하향.
       probability: 1.0
     export:
       otlp:
         # 로컬엔 수집기(Alloy)가 없어 기본 off. 운영 컨테이너에만 TRACING_OTLP_ENABLED=true 를 준다.
-        # off 여도 trace 생성·전파(traceparent 수용, PIKI-Server item.parse span 아래 연결)는 그대로다.
+        # off 여도 trace 생성·전파(traceparent 수용, core 의 item.parse span 아래 연결)는 그대로다.
         enabled: ${TRACING_OTLP_ENABLED:false}
   opentelemetry:
     tracing:
