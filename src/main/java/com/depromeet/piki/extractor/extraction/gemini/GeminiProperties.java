@@ -60,7 +60,7 @@ public record GeminiProperties(
      * <p>{@code @DefaultValue} 는 부분 바인딩(예: max-attempts 만 지정)에서도 나머지 필드의 기본값을 유지시킨다
      * — 아래 no-arg 생성자와 값이 어긋나면 바인딩 경로와 직접 생성 경로의 기본값이 갈린다.
      *
-     * @param maxAttempts 총 시도 횟수(초기 호출 + 재시도). URL 파싱 재시도를 호출자(PIKI-Server) outbox recover 로
+     * @param maxAttempts 총 시도 횟수(초기 호출 + 재시도). URL 파싱 재시도를 호출자(core)의 파싱 작업 큐 회수로
      *     일원화했으므로 기본값은 Gemini 내부 재시도를 끄는 쪽이다.
      */
     public record Retry(
