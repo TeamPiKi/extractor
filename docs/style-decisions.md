@@ -1,24 +1,23 @@
-# 스타일 결정 기록 — 우아한테크코스 스타일 검토 (2026-07-20)
+# 스타일 결정 기록 (2026-07-20)
 
-참고 기준: [woowacourse-teams/2025-estime `be/dev`](https://github.com/woowacourse-teams/2025-estime/tree/be/dev) 백엔드.
-목표: 우테코식 객체지향 스타일을 참고하되, 이 서비스의 정체(무상태·단일 소비자 — CLAUDE.md 참조. 작성 당시엔 포팅 파리티 기간이기도 했다)에 맞는 형태로 취사선택한다. 아래 결정이 이 repo 스타일의 기준선이며, CLAUDE.md 와 충돌하면 CLAUDE.md 가 우선한다.
+목표: 외부 백엔드 코드베이스의 객체지향 관례를 검토하되, 이 서비스의 정체(무상태·단일 소비자 — CLAUDE.md 참조. 작성 당시엔 포팅 파리티 기간이기도 했다)에 맞는 형태로 취사선택한다. 아래 결정이 이 repo 스타일의 기준선이며, CLAUDE.md 와 충돌하면 CLAUDE.md 가 우선한다.
 
-## 1. estime 대비 채택 / 기각 결정
+## 1. 검토한 관례의 채택 / 기각 결정
 
-| # | 관례 (estime) | 결정 | 근거 |
+| # | 검토한 관례 | 결정 | 근거 |
 |---|---|---|---|
 | 1 | 4모듈 헥사고날(core/application/infrastructure/api) | **기각** | 무상태·DB 없음·소비자 1개 서비스에 모듈 분리는 과설계. 대신 포트-어댑터의 핵심(인터페이스 경계: `PageFetcher`·`HeadlessRenderer`·`GeminiClient`·`ImageStorage`)은 이미 단일 모듈 안에서 성립해 있다 — 이 경계를 유지·강화하는 것으로 같은 효과를 얻는다. |
 | 2 | rich domain + 정적 팩토리(`withoutId`/`from`/`of`) + 생성 시점 검증, public 생성자 금지 | **이미 부합 — 유지** | `ProductLink.parse`·`ProductImage.of`·`ProductSnapshot.fromExtracted` 가 같은 철학. 팩토리 명명은 현행(`parse`=문자열 해석, `of`=성분 조립, `from~`=다른 표현 변환)을 유지한다. |
-| 3 | 값 객체를 Lombok 클래스로 | **기각 — record 유지** | estime 의 클래스 VO 는 JPA 제약(no-arg 생성자) 대응이 크다. JPA 없는 이 repo 에선 `record` 가 더 정확한 도구다. |
+| 3 | 값 객체를 Lombok 클래스로 | **기각 — record 유지** | 검토한 코드의 클래스 VO 는 JPA 제약(no-arg 생성자) 대응이 크다. JPA 없는 이 repo 에선 `record` 가 더 정확한 도구다. |
 | 4 | Lombok 전면(@Getter·@RequiredArgsConstructor·@Slf4j…) | **보일러플레이트 표적 채택** (2026-07-23 재결정) | 사용자 피드백("생성자 직접 작성을 극도로 꺼림", "로거도 전부 애노테이션으로")으로 전면 기각 → 두 애노테이션만 채택. **`@RequiredArgsConstructor`**: 순수 필드-대입 생성자 12개 클래스 전환(@Qualifier 는 필드 + lombok.config copyableAnnotations), 조립 로직 생성자 4개는 손 유지(HttpPageFetcher·HttpHeadlessRenderer·GeminiHttpClient — 파생 필드/클라이언트 빌드, RequestScopedDnsResolver — 편의 생성자 2개). **`@Slf4j`**: 명시적 Logger 선언 11개 전환 — 생성 결과가 `private static final Logger log = LoggerFactory.getLogger(자기클래스.class)` 와 바이트코드 동일(javap 로 확인)이라 로거 이름·로그 출력 변화 없음. 값 객체는 여전히 record, @Builder·@Setter·@Data·@Value·@Getter 는 미채택. 애노테이션 순서는 Lombok → Spring. |
 | 5 | jakarta.validation 미사용, 검증은 100% 도메인 책임 | **이미 부합 — 유지** | url 형식 검증을 Bean Validation 이 아니라 `ProductLink.parse` 가 맡는 현행 구조가 정확히 같은 철학. |
-| 6 | 사유별 예외 클래스 + 이중 메시지(log 영어/user 한국어) + HTTP 200 고정 `CustomApiResponse` 봉투 | **기각** | 소비자가 사람이 아니라 PIKI-Server 워커다. HTTP status 가 계약의 전이 신호(2xx/422/기타)라 200 고정 봉투는 계약 파괴. userMessage 도 무의미. 단 estime 의 "사유별 예외" 의도는 우리 "사유 하나 = 정적 팩토리 하나" 규칙이 이미 담고 있다. |
+| 6 | 사유별 예외 클래스 + 이중 메시지(log 영어/user 한국어) + HTTP 200 고정 `CustomApiResponse` 봉투 | **기각** | 소비자가 사람이 아니라 core 워커다. HTTP status 가 계약의 전이 신호(2xx/422/기타)라 200 고정 봉투는 계약 파괴. userMessage 도 무의미. 단 "사유별 예외" 의 의도는 우리 "사유 하나 = 정적 팩토리 하나" 규칙이 이미 담고 있다. |
 | 7 | 초박형 컨트롤러 + Swagger 스펙 인터페이스 분리 | **절반 부합** | 초박형 컨트롤러는 이미 부합. 스펙 인터페이스 분리는 기각 — 계약 SSOT 가 `docs/api-contract.md` 고 소비자가 하나라 Swagger 문서화 계층이 필요 없다. |
 | 8 | 일급 컬렉션(`Participants`·`Votes`) | **보류(사례 발생 시 채택)** | 현재 컬렉션 불변식을 가진 도메인 개념이 없다. 생기면 이 패턴을 쓴다. |
 | 9 | `TimeProvider` 포트로 시간 주입, 도메인은 `now` 파라미터 수령 | **보류(사례 발생 시 채택)** | 현재 시간 의존 도메인 로직이 없다. 생기면 `Instant.now()` 직접 호출 대신 이 패턴을 쓴다. |
 | 10 | 파라미터·로컬변수 `final` 전면 | **기각** | 시그니처 노이즈 대비 이득이 작고 repo 관례가 아니다. 불변은 record·불변 컬렉션으로 표현한다. |
-| 11 | 주석 최소주의(151개 파일 중 Javadoc 6개) | **기각 — "왜" Javadoc 자산 유지** | 이 repo 의 "왜" 주석은 CLAUDE.md 가 자산으로 선언한 차별점이다(포팅 근거·계약 경계·보안 근거). estime 방향으로 줄이지 않는다. 단 시그니처 재진술 `@param` 같은 "무엇" 주석은 노이즈로 제거한다(§2). |
-| 12 | 테스트: @DisplayName 한국어 · AssertJ 전면 · Mockito 계층 · @BeforeEach 적극 | **부분 채택(이미 부합) / 나머지 기각** | @DisplayName 한국어 한 문장은 이미 규약. Mockito 는 기각(stub 우선 규율이 estime 보다 강하고 유지 가치가 있다). @BeforeEach 금지 유지(각 테스트 자기완결). AssertJ 는 현행대로 컬렉션·객체 그래프 비교에만. given-when-then 주석은 강제하지 않되 긴 테스트에서 허용. |
+| 11 | 주석 최소주의(151개 파일 중 Javadoc 6개) | **기각 — "왜" Javadoc 자산 유지** | 이 repo 의 "왜" 주석은 CLAUDE.md 가 자산으로 선언한 차별점이다(포팅 근거·계약 경계·보안 근거). 그 방향으로 줄이지 않는다. 단 시그니처 재진술 `@param` 같은 "무엇" 주석은 노이즈로 제거한다(§2). |
+| 12 | 테스트: @DisplayName 한국어 · AssertJ 전면 · Mockito 계층 · @BeforeEach 적극 | **부분 채택(이미 부합) / 나머지 기각** | @DisplayName 한국어 한 문장은 이미 규약. Mockito 는 기각(stub 우선 규율이 검토한 관례보다 강하고 유지 가치가 있다). @BeforeEach 금지 유지(각 테스트 자기완결). AssertJ 는 현행대로 컬렉션·객체 그래프 비교에만. given-when-then 주석은 강제하지 않되 긴 테스트에서 허용. |
 | 13 | 메서드 명명: `validate~`(생성 시)·`ensure~`(사용 시)·`obtain~`(찾고 없으면 throw)·`markAs~`(상태전이) | **채택(새 코드 기준)** | 검증 계열 명명의 일관성은 가져갈 가치가 있다. 단 기존 코드 일괄 개명은 하지 않는다 — 포팅 파리티 기간엔 새로 쓰는 코드부터 적용. |
 
 ## 2. 이번 /code-review 결과의 결정
