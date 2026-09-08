@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -44,6 +45,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private static final String ZSTD_ENCODING = "zstd";
     /** 해제 결과(홉 전체의 JSON)의 안전 상한. 내부망이라도 해제 폭탄·오배선을 바운드하려 둔다. */
     private static final int MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
+    private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
 
     private final RestClient restClient;
     private final HeadlessExtractionProperties properties;
@@ -79,17 +81,19 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
 
     private List<RenderedHop> renderVerified(ProductLink link, boolean authorized) {
         HeadlessRenderResponse response = requestRender(link, authorized);
+        if (response.legacyBlocked()) {
+            throw HeadlessRenderException.blocked();
+        }
         List<HeadlessRenderResponse.Hop> hops = response.hopsOrLegacy();
         if (hops.isEmpty()) {
             log.warn("headless render no hops error={} url={}", maskUrls(response.error()), link.safeLogString());
             throw HeadlessRenderException.upstream("렌더 홉이 없다: " + maskUrls(response.error()), null);
         }
         log.info(
-            "headless render hops={} status={} proxied={} error={} url={}",
+            "headless render hops={} status={} proxied={} url={}",
             hops.size(),
             hops.getLast().status(),
             response.proxied(),
-            maskUrls(response.error()),
             link.safeLogString()
         );
         return hops.stream().map(hop -> toRendered(hop, link)).toList();
@@ -98,8 +102,8 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private RenderedHop toRendered(HeadlessRenderResponse.Hop hop, ProductLink link) {
         return new RenderedHop(
             resolveHopUrl(hop.url(), link),
-            hop.status() == null ? 0 : hop.status(),
-            hop.headers() == null ? Map.of() : hop.headers(),
+            Objects.requireNonNullElse(hop.status(), 0),
+            Objects.requireNonNullElse(hop.headers(), Map.of()),
             Objects.requireNonNullElse(hop.body(), ""),
             Objects.requireNonNullElse(hop.dom(), "")
         );
@@ -205,6 +209,6 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         if (error == null) {
             return null;
         }
-        return error.replaceAll("https?://\\S+", "<url>");
+        return URL_PATTERN.matcher(error).replaceAll("<url>");
     }
 }

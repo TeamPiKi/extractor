@@ -131,6 +131,23 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
+    @DisplayName("구계약 renderer 의 verdict=BLOCK 은 html 이 실려 와도 일시 실패(HEADLESS_BLOCKED)다 — 챌린지 페이지를 내용으로 흘리지 않는다")
+    void legacyBlockVerdictIsTransient() {
+        for (String body : List.of(
+            "{\"verdict\":\"BLOCK\",\"status\":429}",
+            "{\"verdict\":\"BLOCK\",\"status\":200,\"html\":\"<html><title>ok</title>challenge</html>\"}"
+        )) {
+            HttpHeadlessRenderer renderer = rendererWith(server -> server
+                .expect(requestTo(BASE_URL + "/render"))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON)));
+
+            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
+
+            assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, ex.code());
+        }
+    }
+
+    @Test
     @DisplayName("zstd 압축 응답(X-Encoding: zstd, 사전 없음)은 해제해 plain JSON 과 같은 계약으로 처리한다")
     void zstdResponseIsDecompressed() {
         HttpHeadlessRenderer renderer = rendererWith(server -> server

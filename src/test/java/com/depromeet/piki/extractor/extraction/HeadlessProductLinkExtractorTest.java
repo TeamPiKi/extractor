@@ -29,7 +29,8 @@ import tools.jackson.databind.ObjectMapper;
 class HeadlessProductLinkExtractorTest {
 
     private static final String SHELL = "<html><head><script src=\"/app.js\"></script></head><body><div id=\"root\"></div></body></html>";
-    private static final String CHALLENGE = "<html><head><title>보안 확인 중..</title></head><body>" + "확인 ".repeat(200) + "</body></html>";
+    private static final String CHALLENGE = "<html><head><title>보안 확인 중..</title></head><body>확인 중</body></html>";
+    private static final String TEXT = "<html><body>" + "구조화 데이터 없이 렌더된 상품 상세 설명 텍스트. ".repeat(3) + "</body></html>";
 
     private final ProductLink link = ProductLink.parse("https://m.a-bly.com/goods/1");
     private final ProductLink mobile = ProductLink.parse("https://mobile.a-bly.com/goods/1");
@@ -75,30 +76,27 @@ class HeadlessProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("홈 피드로 튕겨 나간 뒤여도 앞 홉에 남은 상품 문서를 찾는다 — 마지막 홉이 곧 상품이 아니다")
-    void productInEarlierHopWins() {
+    @DisplayName("앞 홉의 dom 이 마지막 홉의 body 보다 먼저다 — 홈 피드 body 의 사이트 공통 JSON-LD 에 밀리지 않는다")
+    void earlierDomBeatsLaterBody() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
             hop(mobile, 200, SHELL, product("앞 홉 상품", 10_000)),
-            hop(feed, 200, "<html><body>" + "추천 피드 ".repeat(100) + "</body></html>", "<html><body>" + "추천 피드 ".repeat(100) + "</body></html>")
+            hop(feed, 200, product("피드 대표 상품", 1), SHELL)
         ));
 
-        ProductSnapshot snapshot = extractor.extract(link, false, null);
-
-        assertEquals("앞 홉 상품", snapshot.name());
-        assertEquals(0, stubGemini.invocations());
+        assertEquals("앞 홉 상품", extractor.extract(link, false, null).name());
     }
 
     @Test
-    @DisplayName("구조화 데이터가 어디에도 없으면 마지막 홉의 dom 한 장으로만 LLM fallback 을 탄다")
-    void llmFallbackUsesLastDomOnce() {
+    @DisplayName("구조화 데이터가 어디에도 없으면 LLM 에 넘길 것이 있는 첫 후보 한 장으로만 LLM fallback 을 탄다")
+    void llmFallbackUsesFirstUsableCandidateOnce() {
         stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠 상품", 50_000, "KRW", "https://cdn.example.com/i.png");
-        String text = "<html><body>" + "구조화 데이터 없이 렌더된 상품 상세 설명 텍스트. ".repeat(3) + "</body></html>";
-        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, text, text), hop(mobile, 200, text, text)));
+        // 마지막 홉은 셸(앱 유도), 상품 텍스트는 앞 홉에만 있다 — 셸을 LLM 에 넣어 확정 실패로 닫으면 안 된다.
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, TEXT, TEXT), hop(mobile, 200, SHELL, SHELL)));
 
         ProductSnapshot snapshot = extractor.extract(link, false, null);
 
         assertEquals("엘엘엠 상품", snapshot.name());
-        assertEquals(mobile, snapshot.finalUrl());
+        assertEquals(link, snapshot.finalUrl());
         assertEquals(1, stubGemini.invocations());
     }
 
@@ -114,11 +112,20 @@ class HeadlessProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("모든 홉이 차단 status 거나 챌린지 title 이면 일시 실패(HEADLESS_BLOCKED)다")
-    void allHopsBlockedIsTransient() {
+    @DisplayName("차단 status 뒤에 실린 온전한 구조화 데이터는 그대로 쓴다 — 봇 방어는 어떤 status 로도 위장한다")
+    void structuredDataBehindBlockStatusStillExtracts() {
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 403, product("위장 403 상품", 1_000), "")));
+
+        assertEquals("위장 403 상품", extractor.extract(link, false, null).name());
+    }
+
+    @Test
+    @DisplayName("차단 신호 홉만 있고 구조화 데이터가 없으면 일시 실패(HEADLESS_BLOCKED)다 — 본문 없는 403·챌린지 title·cf-mitigated 헤더")
+    void blockedWithoutStructuredDataIsTransient() {
         for (List<RenderedHop> hops : List.of(
-            List.of(hop(link, 403, product("차단 뒤에 숨은 상품", 1), product("차단 뒤에 숨은 상품", 1))),
-            List.of(hop(link, 200, CHALLENGE, CHALLENGE), hop(mobile, 429, "", ""))
+            List.of(hop(link, 403, "", "")),
+            List.of(hop(link, 200, CHALLENGE, CHALLENGE), hop(mobile, 429, TEXT, TEXT)),
+            List.of(new RenderedHop(link, 200, Map.of("cf-mitigated", "challenge"), TEXT, TEXT))
         )) {
             HeadlessProductLinkExtractor extractor = extractorWith(l -> hops);
 
@@ -126,6 +133,7 @@ class HeadlessProductLinkExtractorTest {
 
             assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, e.code());
             assertFalse(e.permanent());
+            assertEquals(0, stubGemini.invocations());
         }
     }
 
@@ -141,7 +149,7 @@ class HeadlessProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("홉은 있는데 HTML 이 전부 비어 있으면 일시 실패(HEADLESS_UPSTREAM)다")
+    @DisplayName("홉은 있는데 HTML 이 전부 비어 있고 차단 신호도 없으면 일시 실패(HEADLESS_UPSTREAM)다")
     void hopsWithoutHtmlAreTransient() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 302, "", ""), hop(mobile, 200, "", " ")));
 

@@ -17,17 +17,27 @@ record HeadlessRenderResponse(
     Boolean proxied,
     String error,
     List<Hop> hops,
-    /** 홉 계약 이전 renderer 의 단일 HTML. 그쪽 배포가 수동이라 뒤처지는 동안 홉 하나로 읽는다. */
+    /**
+     * 홉 계약 이전 renderer 의 필드. 그쪽 배포가 수동이라 뒤처지는 동안 홉 하나로 읽는다.
+     * 제거 조건: renderer 홉 계약(#34) 배포 완료.
+     */
+    String verdict,
     String html,
     @JsonProperty("final_url") String finalUrl,
     Integer status
 ) {
 
+    private static final String LEGACY_BLOCK = "BLOCK";
+
+    boolean legacyBlocked() {
+        return (hops == null || hops.isEmpty()) && LEGACY_BLOCK.equals(verdict);
+    }
+
     List<Hop> hopsOrLegacy() {
         if (hops != null && !hops.isEmpty()) {
             return hops;
         }
-        if (html == null || html.isBlank()) {
+        if (status == null && (html == null || html.isBlank())) {
             return List.of();
         }
         return List.of(new Hop(finalUrl, status, Map.of(), "", html));
