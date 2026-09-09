@@ -33,7 +33,7 @@ public enum ExtractionErrorCode {
     IMAGE_UNSUPPORTED,
     STORAGE_ERROR,
 
-    /** 실제 브라우저로도 차단(verdict=BLOCK). 일시 챌린지(429 등)가 섞이므로 fail-safe 로 일시 취급한다. */
+    /** 실제 브라우저로도 모든 홉이 차단 신호. 일시 챌린지(429 등)가 섞이므로 fail-safe 로 일시 취급한다. */
     HEADLESS_BLOCKED,
     HEADLESS_UPSTREAM,
 

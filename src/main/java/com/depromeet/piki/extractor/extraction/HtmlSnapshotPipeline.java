@@ -47,11 +47,15 @@ public class HtmlSnapshotPipeline {
      *     내려갈 때만 소비된다.
      */
     public ProductSnapshot extract(PageContent page, String timing, String model) {
+        return extract(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model);
+    }
+
+    /** 호출 전략이 후보 선별에 쓴 구조화 결과를 그대로 받는다 — 같은 Document 를 두 번 파싱하지 않는다. */
+    public ProductSnapshot extract(PageContent page, StructuredExtraction result, String timing, String model) {
         // 수신 단계가 이미 파싱해 둔 Document 를 구조화 파서·게이트·Gemini fallback 이 그대로 공유한다.
         // baseUri 는 html 의 출처인 최종 URL 기준 — redirect 를 따라갔으면 원본 link 와 host 가 다를 수 있다.
         Document document = page.document();
 
-        StructuredExtraction result = structuredDataExtractor.extract(document, page.link());
         // 게이트 판정은 sanitize(GeminiHtmlExtractor) 전이어야 한다 — sanitize 는 공유 Document 에서 script 를
         // 제거하므로, 순서가 뒤집히면 데이터 script 존재 판정이 깨진다.
         boolean nothingForLlm = result instanceof StructuredExtraction.Miss && LlmInputGate.hasNothingForLlm(document);
