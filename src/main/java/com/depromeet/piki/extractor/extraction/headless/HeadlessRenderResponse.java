@@ -24,7 +24,9 @@ record HeadlessRenderResponse(
     String verdict,
     String html,
     @JsonProperty("final_url") String finalUrl,
-    Integer status
+    Integer status,
+    /** 브라우저가 홉 상한(10)을 채워 렌더를 끊었다는 신호. 구버전 renderer 는 이 필드를 보내지 않아 null 이다. */
+    @JsonProperty("hop_cap_hit") Boolean hopCapHit
 ) {
 
     private static final String LEGACY_BLOCK = "BLOCK";

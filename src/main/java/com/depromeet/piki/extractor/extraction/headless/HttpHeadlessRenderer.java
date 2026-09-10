@@ -88,6 +88,10 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             log.warn("headless render no hops error={} url={}", maskUrls(response.error()), link.safeLogString());
             throw HeadlessRenderException.upstream("렌더 홉이 없다: " + maskUrls(response.error()), null);
         }
+        if (Boolean.TRUE.equals(response.hopCapHit()) && hops.stream().noneMatch(HttpHeadlessRenderer::hasUsableHtml)) {
+            log.warn("headless render hop cap hit hops={} url={}", hops.size(), link.safeLogString());
+            throw HeadlessRenderException.hopCapHit();
+        }
         log.info(
             "headless render hops={} status={} proxied={} url={}",
             hops.size(),
@@ -96,6 +100,11 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             link.safeLogString()
         );
         return hops.stream().map(hop -> toRendered(hop, link)).toList();
+    }
+
+    /** hop_cap_hit 판정용 — body(서버 원문)·dom(렌더 결과) 둘 다 있어야 상품이 실렸을 만한 홉으로 본다. */
+    private static boolean hasUsableHtml(HeadlessRenderResponse.Hop hop) {
+        return hop.body() != null && !hop.body().isBlank() && hop.dom() != null && !hop.dom().isBlank();
     }
 
     private RenderedHop toRendered(HeadlessRenderResponse.Hop hop, ProductLink link) {
