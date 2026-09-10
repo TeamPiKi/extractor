@@ -31,6 +31,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # 계약 정본(contracts/extraction.proto)을 빌드가 읽는다(generateProto) - ci.yml 과 같은 자리·같은 경로 별칭.
+      # 아래 blocks checkout 과 합치지 않는 이유: 그쪽은 bootJar 뒤에 오고 sparse 범위가 다르다.
+      - name: Checkout extraction contract
+        uses: actions/checkout@v4
+        with:
+          repository: TeamPiKi/infra
+          ref: main
+          path: shared-infra
+          sparse-checkout: contracts
+          persist-credentials: false
+
       - uses: actions/setup-java@v4
         with:
           java-version: '25'

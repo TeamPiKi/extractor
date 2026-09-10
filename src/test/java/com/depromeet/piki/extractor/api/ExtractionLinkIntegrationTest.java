@@ -1,6 +1,5 @@
 package com.depromeet.piki.extractor.api;
 
-import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -202,7 +201,8 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("이미지 없는 상품"))
             .andExpect(jsonPath("$.currentPrice").value(5000))
-            .andExpect(jsonPath("$.imageUrl").value(nullValue()));
+            // 계약 생성 클래스는 안 채운 필드를 JSON 에서 생략한다 — 호출자는 생략과 null 을 같게 읽는다.
+            .andExpect(jsonPath("$.imageUrl").doesNotExist());
     }
 
     @Test

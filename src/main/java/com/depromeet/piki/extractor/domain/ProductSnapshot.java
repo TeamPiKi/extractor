@@ -39,7 +39,7 @@ public record ProductSnapshot(
 
     /**
      * 호출자(core)의 READY 불변식(name·imageUrl·currentPrice)을 채우지 못했는가 — currency 는 READY 필수가 아니다.
-     * 응답 경계(ExtractionResponse)의 성공 게이트와 헤드리스 에스컬레이션 판정(FallbackProductLinkExtractor)이
+     * 응답 경계(ExtractionResultMapper)의 성공 게이트와 헤드리스 에스컬레이션 판정(FallbackProductLinkExtractor)이
      * 이 판정 하나를 공유한다 — 두 곳의 조건이 어긋나면 "승격 없이 확정 실패" 또는 "무의미한 승격"이 생긴다.
      */
     public boolean missingReadyField() {

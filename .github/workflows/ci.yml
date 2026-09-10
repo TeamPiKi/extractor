@@ -20,8 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 에러 code 카탈로그 정본을 받아 ExtractionErrorCodeCatalogTest 가 enum 과 대조한다.
-      # 경로 별칭 shared-infra 는 install.sh 가 로컬에 설치하는 경로와 같다 - 테스트가 경로 하나만 알면 된다.
+      # 계약 정본(contracts/)을 받는다. proto 는 빌드(generateProto)가 클래스 생성에 읽고, 에러 code 카탈로그는
+      # ExtractionErrorCodeCatalogTest 가 enum 과 대조한다.
+      # 경로 별칭 shared-infra 는 install.sh 가 로컬에 설치하는 경로와 같다 - 빌드와 테스트가 경로 하나만 알면 된다.
       - name: Checkout extraction contract
         uses: actions/checkout@v4
         with:

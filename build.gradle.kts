@@ -1,7 +1,11 @@
+import com.google.protobuf.gradle.id
+
 plugins {
     java
     id("org.springframework.boot") version "4.0.5"
     id("io.spring.dependency-management") version "1.1.7"
+    // 추출 계약의 와이어 모양 정본(infra contracts/extraction.proto)에서 요청·응답 클래스를 생성한다.
+    id("com.google.protobuf") version "0.10.0"
 }
 
 group = "com.depromeet"
@@ -22,6 +26,9 @@ val awsSdkVersion = "2.44.11"
 
 // 생성자 보일러플레이트 제거(@RequiredArgsConstructor) 전용 — 채택 범위·금지 애노테이션은 CLAUDE.md 참조.
 val lombokVersion = "1.18.46"
+
+// Spring Boot BOM 이 protobuf 를 관리하지 않아 명시한다. protoc 도 같은 버전으로 맞춘다(생성 코드와 런타임의 호환).
+val protobufVersion = "4.35.0"
 
 dependencyManagement {
     imports {
@@ -56,6 +63,10 @@ dependencies {
     // 이미지(OCR) 경로: S3 raw 읽기 + 크롭 결과 업로드 (이관 6단계). 버전은 위 BOM 이 관리.
     implementation("software.amazon.awssdk:s3")
 
+    // 계약 생성 클래스의 런타임 + JSON 매핑(JsonFormat). 와이어는 JSON 그대로다 — 계약 정본의 머리말 참조.
+    implementation("com.google.protobuf:protobuf-java:$protobufVersion")
+    implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
+
     // 관측: /actuator/health(상태)·/actuator/prometheus(Alloy scrape) + OTLP tracing.
     // 구성 근거(왜 OTel 3종인지)는 core build.gradle.kts 의 동일 블록 주석 참고.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -71,6 +82,22 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testCompileOnly("org.projectlombok:lombok:$lombokVersion")
     testAnnotationProcessor("org.projectlombok:lombok:$lombokVersion")
+}
+
+// 계약 정본은 이 소스 트리 밖(shared-infra/contracts)에 있다 — 로컬은 infra 의 install.sh 가, CI 는 ci.yml 의
+// checkout 이 같은 경로에 놓는다(카탈로그와 같은 배치). 생성물은 build/ 아래라 커밋하지 않는다.
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:$protobufVersion"
+    }
+}
+
+sourceSets {
+    main {
+        proto {
+            srcDir("shared-infra/contracts")
+        }
+    }
 }
 
 tasks.withType<Test> {

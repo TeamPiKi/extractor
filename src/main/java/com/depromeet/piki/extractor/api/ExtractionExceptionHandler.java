@@ -1,5 +1,7 @@
 package com.depromeet.piki.extractor.api;
 
+import com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode;
+import com.depromeet.piki.contracts.extraction.v1.ExtractionFailure;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -18,7 +20,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class ExtractionExceptionHandler {
 
     @ExceptionHandler(ExtractionException.class)
-    public ResponseEntity<ExtractionFailureResponse> handleExtraction(ExtractionException e) {
+    public ResponseEntity<ExtractionFailure> handleExtraction(ExtractionException e) {
         // 확정 실패는 계약상 정상 결과라 info, 일시 실패는 외부 의존성 문제라 warn.
         if (e.permanent()) {
             log.info("extraction failed permanently code={} message={}", e.code(), e.getMessage());
@@ -26,6 +28,11 @@ public class ExtractionExceptionHandler {
             log.warn("extraction failed transiently code={} message={}", e.code(), e.getMessage(), e);
         }
         HttpStatus status = e.permanent() ? HttpStatus.UNPROCESSABLE_ENTITY : HttpStatus.BAD_GATEWAY;
-        return ResponseEntity.status(status).body(new ExtractionFailureResponse(e.code()));
+        // body 에 message 같은 내부 정보는 싣지 않는다 — 디버깅 컨텍스트는 위 로그가 책임진다.
+        // 도메인 code 와 계약 enum 은 이름이 같다(ExtractionErrorCodeCatalogTest 가 대조).
+        ExtractionFailure body = ExtractionFailure.newBuilder()
+            .setCode(ExtractionErrorCode.valueOf(e.code().name()))
+            .build();
+        return ResponseEntity.status(status).body(body);
     }
 }
