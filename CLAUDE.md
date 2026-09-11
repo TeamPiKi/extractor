@@ -2,11 +2,11 @@
 
 ## 이 서비스의 정체
 
-core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또는 S3 이미지)을 받아 fetch → 구조화 파싱(JSON-LD/OG) → LLM(Gemini) fallback → 정규화를 거쳐 추출 결과를 돌려준다.
+core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또는 S3 이미지)을 받아 fetch → 구조화 파싱(JSON-LD/OG) → LLM(Gemini) fallback → 정규화를 거쳐 추출 결과를 돌려준다. 단순 fetch 로 닿지 않는 호스트는 renderer(헤드리스 브라우저)가 거쳐 간 홉들을 받아 같은 파이프라인에 태운다 — 어느 홉을 쓸지 고르는 판단은 이 repo 가 한다.
 
 - **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(core 파싱 작업 큐)의 몫이다.
 - **소비자는 core 워커 하나뿐.** 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
-- **계약의 single source 는 `docs/api-contract.md`.** 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
+- **계약의 정본은 infra 의 `contracts/extraction-api.md`** 와 실패 code 카탈로그 `contracts/extraction-error-codes.yaml` 이다(`docs/api-contract.md` 는 그리로 보내는 포인터). 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
 - 차단 우회 **방법론**(스텔스·프록시·IP 전략)은 private repo(renderer)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
 
 ## 언어: Java 25
@@ -33,8 +33,8 @@ core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또�
 - **선언부**(클래스·인터페이스·record·enum·상수·필드·메서드·생성자) 주석은 Javadoc(`/** */`). 메서드 본문 안에서만 `//`.
 - **지운다**: 코드가 이미 말하는 "무엇", 시그니처 재진술 `@param`(`@param region S3 리전`), 클래스 Javadoc 과 같은 말의 반복, 흐름 나레이션(`// 1) fetch 한다`), 자명한 분기 설명, 테스트에서 `@DisplayName`·단언이 이미 말하는 라벨.
 - **남긴다**: 설계 근거(왜 이 대안을 버렸나), 코드로 안 보이는 외부 제약·함정, 계약·보안 판단의 이유, 도달 불가 분기의 불변식, 외부 명세 링크. 이 "왜" 주석이 이 repo 의 자산이다.
-- **SSOT 위반 주석 금지.** 정본이 딴 곳에 있는 수치·목록·동작 — 다른 repo(renderer·core)의 구현 상세, `docs/api-contract.md` 의 계약 서술·타임아웃 예산, **코드의 기본값·상수값**, 다른 클래스가 정본인 분류 — 을 복제하지 않는다(조용히 낡는다). 정본을 가리키는 참조 한 줄로 대신한다.
-- **Javadoc 문법 게이트: `./gradlew javadoc` 이 error 0 이어야 한다.** raw `<...>` 는 `{@code <script>}` 로 감싸고, 본문 줄머리에 `@` 로 시작하는 애노테이션 이름을 두지 않는다(`{@code @DefaultValue}`) — 둘 다 error 를 낸다. `>`·`&` 단독은 `&gt;`·`&amp;`, 목록은 `<ul><li>`, 문단은 `<p>`.
+- **SSOT 위반 주석 금지.** 정본이 딴 곳에 있는 수치·목록·동작 — 다른 repo(renderer·core)의 구현 상세, infra 정본(`contracts/extraction-api.md`)의 계약 서술·타임아웃 예산, **코드의 기본값·상수값**, 다른 클래스가 정본인 분류 — 을 복제하지 않는다(조용히 낡는다). 정본을 가리키는 참조 한 줄로 대신한다.
+- **Javadoc 문법은 `./gradlew javadoc` 으로 직접 확인한다 — CI 게이트가 아니라 사람이 돌린다**(`build` 에 javadoc task 가 걸려 있지 않다). error 0 이어야 한다. raw `<...>` 는 `{@code <script>}` 로 감싸고, 본문 줄머리에 `@` 로 시작하는 애노테이션 이름을 두지 않는다(`{@code @DefaultValue}`) — 둘 다 error 를 낸다. `>`·`&` 단독은 `&gt;`·`&amp;`, 목록은 `<ul><li>`, 문단은 `<p>`.
 
 ### Null 처리
 
@@ -79,7 +79,7 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 - **메서드명**: Java 는 backtick 식별자가 안 되므로 **`@DisplayName` 에 한국어 한 문장**으로 시나리오를 적는다 (원칙의 "메서드명은 시나리오를 한 문장으로" 를 Java 로 바인딩한 것).
 - **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
 - **DB 가 없다** — Testcontainers·Docker 불필요. `./gradlew test` 가 그냥 돈다. 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
-- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(GeminiClient·PageFetcher·S3)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
+- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(PageFetcher·GeminiClient·S3·HeadlessRenderer)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
 - **메타 테스트**: `support/TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)가 `./gradlew test` 에 포함된다. 규칙을 바꿀 땐 산문을 먼저 고치고 메타 테스트를 따라 고친다.
 
 ## 의존성
