@@ -85,8 +85,7 @@ class ExtractionErrorCodeCatalogTest {
     @Test
     @DisplayName("계약 정본(extraction.proto)의 ExtractionErrorCode enum 은 카탈로그의 code 집합과 정확히 일치한다")
     void protoEnumMatchesCatalog() {
-        // 모양 정본(proto)과 분류 정본(yaml)이 같은 목록을 들어야 한다. 응답 핸들러가 도메인 code 이름으로
-        // 계약 enum 을 찾으므로(valueOf), 여기가 어긋나면 그 code 의 422 가 500 으로 새는 것을 미리 막는다.
+        // 핸들러가 도메인 code 이름으로 계약 enum 을 찾으므로, 목록이 어긋나면 그 code 의 422 가 500 으로 샌다.
         Set<String> catalogCodes = catalogEntries().keySet();
         Set<String> protoCodes = Arrays.stream(com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.values())
             .filter(value -> value != com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.UNRECOGNIZED)

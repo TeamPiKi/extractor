@@ -18,8 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 내부 추출 API (docs/api-contract.md). 소비자는 core 의 파싱 작업 큐 워커 하나뿐이고 보안그룹으로
  * 격리되므로 인증·응답 래퍼 없이 계약 그대로 노출한다.
  *
- * <p>link 경로의 요청·응답 타입은 계약 정본({@code extraction.proto})에서 생성된다 — 필드를 여기서 정의하지
- * 않으므로 계약과 코드가 어긋날 자리가 없다. image·probe 경로는 아직 Jackson record 다(파일럿 범위 밖).
+ * <p>link 경로의 요청·응답 타입은 계약 정본에서 생성된다. image·probe 는 아직 Jackson record 다(파일럿 범위 밖).
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -42,7 +41,6 @@ public class ExtractionController {
         // model 은 호출자가 백오피스에서 지정한 값이라 원장에 남긴다 — 추출 품질이 흔들릴 때 "그때 어느 모델이었나"를
         // 되짚는 유일한 근거다(자유 문자열이라 메트릭 라벨로는 못 쓴다).
         // authorized 도 원장에 남긴다 — 우회 수단이 열린 요청이었는지를 사후에 되짚을 수 있는 유일한 근거다.
-        // 생략은 false 로 읽히는 fail-safe 가 proto3 의 기본값 규칙 자체다.
         log.info(
             "extract request correlationId={} authorized={} model={} url={}",
             correlationId,

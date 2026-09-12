@@ -4,7 +4,6 @@ plugins {
     java
     id("org.springframework.boot") version "4.0.5"
     id("io.spring.dependency-management") version "1.1.7"
-    // 추출 계약의 와이어 모양 정본(infra contracts/extraction.proto)에서 요청·응답 클래스를 생성한다.
     id("com.google.protobuf") version "0.10.0"
 }
 
@@ -63,7 +62,6 @@ dependencies {
     // 이미지(OCR) 경로: S3 raw 읽기 + 크롭 결과 업로드 (이관 6단계). 버전은 위 BOM 이 관리.
     implementation("software.amazon.awssdk:s3")
 
-    // 계약 생성 클래스의 런타임 + JSON 매핑(JsonFormat). 와이어는 JSON 그대로다 — 계약 정본의 머리말 참조.
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
     implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
 
@@ -84,8 +82,7 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok:$lombokVersion")
 }
 
-// 계약 정본은 이 소스 트리 밖(shared-infra/contracts)에 있다 — 로컬은 infra 의 install.sh 가, CI 는 ci.yml 의
-// checkout 이 같은 경로에 놓는다(카탈로그와 같은 배치). 생성물은 build/ 아래라 커밋하지 않는다.
+// 정본이 소스 트리 밖이라 경로가 규약이다. 로컬은 infra 의 install.sh 가, CI 는 checkout 이 같은 자리에 놓는다.
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:$protobufVersion"

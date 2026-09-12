@@ -12,9 +12,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * 계약 생성 클래스가 JSON 와이어에서 지키는 성질. 세 가지가 계약의 일부라 여기서 못 박는다 — 누락 필드의
- * 안전 기본값(fail-safe), 모르는 필드·enum 값의 무시(tolerant reader), 안 채운 값의 생략.
- * 파서·프린터 구성은 {@link ContractMessageConverterConfig} 와 같아야 하므로 같은 옵션을 그대로 쓴다.
+ * 계약 생성 클래스가 JSON 와이어에서 지키는 성질을 못 박는다. 파서·프린터 옵션은
+ * {@link ContractMessageConverterConfig} 와 같아야 하므로 그대로 쓴다.
  */
 class ContractWireTest {
 

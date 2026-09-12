@@ -29,7 +29,6 @@ public class ExtractionExceptionHandler {
         }
         HttpStatus status = e.permanent() ? HttpStatus.UNPROCESSABLE_ENTITY : HttpStatus.BAD_GATEWAY;
         // body 에 message 같은 내부 정보는 싣지 않는다 — 디버깅 컨텍스트는 위 로그가 책임진다.
-        // 도메인 code 와 계약 enum 은 이름이 같다(ExtractionErrorCodeCatalogTest 가 대조).
         ExtractionFailure body = ExtractionFailure.newBuilder()
             .setCode(ExtractionErrorCode.valueOf(e.code().name()))
             .build();
