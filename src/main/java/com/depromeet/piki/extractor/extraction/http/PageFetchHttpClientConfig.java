@@ -38,6 +38,7 @@ public class PageFetchHttpClientConfig {
     public RestClient pageFetchRestClient(
         ObservationRegistry observationRegistry,
         RequestScopedDnsResolver dnsResolver,
+        RequestScopedCookieStore cookieStore,
         FetchProperties properties
     ) {
         // InternalHostGuard 도 같은 resolver 인스턴스를 보므로, 가드가 검증한 그 IP 로 연결이 이뤄진다
@@ -76,6 +77,9 @@ public class PageFetchHttpClientConfig {
                 // 봤으면(429·503·느림) 전부 호출자(core)의 작업 큐가 소유한다. 근거는 PreDeliveryRetryStrategy.
                 // HttpClient5 기본 전략은 그 둘을 섞어(429·503 까지 재시도) 우리 방침 밖에서 겹치므로 쓰지 않는다.
                 .setRetryStrategy(new PreDeliveryRetryStrategy())
+                // 쿠키를 들고 hop 을 넘어야 "쿠키 심고 자기 자신으로 302" 하는 딥링크 바운스가 풀린다. 저장소는
+                // 요청 스코프라 fetch 사이에 쿠키가 새지 않는다(RequestScopedCookieStore).
+                .setDefaultCookieStore(cookieStore)
                 .setDefaultRequestConfig(
                     RequestConfig.custom()
                         .setConnectionRequestTimeout(Timeout.ofMilliseconds(properties.connectionRequestTimeout().toMillis()))

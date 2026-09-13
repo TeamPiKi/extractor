@@ -31,7 +31,7 @@ class HttpPageFetcherCharsetTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo("https://shop.example.com/p")).andRespond(withSuccess(bytes, contentType));
-        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), FetchProperties.defaults());
+        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), new RequestScopedCookieStore(), FetchProperties.defaults());
     }
 
     @Test

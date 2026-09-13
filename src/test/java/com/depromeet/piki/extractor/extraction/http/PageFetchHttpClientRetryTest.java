@@ -135,7 +135,7 @@ class PageFetchHttpClientRetryTest {
 
     private static void fetch(ServerSocket server) {
         RestClient client = new PageFetchHttpClientConfig()
-            .pageFetchRestClient(ObservationRegistry.NOOP, loopbackResolver(), FetchProperties.defaults());
+            .pageFetchRestClient(ObservationRegistry.NOOP, loopbackResolver(), new RequestScopedCookieStore(), FetchProperties.defaults());
         client.get()
             .uri("http://127.0.0.1:" + server.getLocalPort() + "/p")
             .retrieve()

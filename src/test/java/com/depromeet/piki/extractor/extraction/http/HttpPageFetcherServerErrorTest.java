@@ -35,7 +35,7 @@ class HttpPageFetcherServerErrorTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         configure.accept(server);
-        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), FetchProperties.defaults());
+        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), new RequestScopedCookieStore(), FetchProperties.defaults());
     }
 
     @Test

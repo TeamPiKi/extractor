@@ -34,7 +34,7 @@ class HttpPageFetcherRedirectTest {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         configure.accept(server);
-        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), FetchProperties.defaults());
+        return new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(publicIp), new RequestScopedCookieStore(), FetchProperties.defaults());
     }
 
     @Test
@@ -90,7 +90,7 @@ class HttpPageFetcherRedirectTest {
         server.expect(requestTo("https://www.zigzag.kr/p"))
             .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https://internal.attacker.test/p")));
         HttpPageFetcher fetcher =
-            new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(resolver), FetchProperties.defaults());
+            new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(resolver), new RequestScopedCookieStore(), FetchProperties.defaults());
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
