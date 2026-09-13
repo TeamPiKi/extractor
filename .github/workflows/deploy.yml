@@ -86,7 +86,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,shared-infra/blocks/prune_images.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
           target: "/tmp/piki-blocks"
           strip_components: 2
 
@@ -166,7 +166,7 @@ jobs:
             echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh \
-              /tmp/piki-blocks/slot_decide.sh /tmp/piki-blocks/slot_switch.sh
+              /tmp/piki-blocks/slot_decide.sh /tmp/piki-blocks/slot_switch.sh /tmp/piki-blocks/prune_images.sh
 
             # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8090) ──
             # 설치·conf 반영은 매 배포 수행하고, (재)시작·reload 는 아래 전환 블록(slot_switch)이 수행한다.
@@ -197,6 +197,11 @@ jobs:
             #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙은 MaxRAMPercentage=70 이 cgroup 한도
             #   기준으로 잡혀 약 448m. 기존 무제한(호스트 70%) 대비 좁아진 값이라 파싱 스파이크 OOM 이 관측되면
             #   실측으로 재조정한다 (cgroup-OOM 은 슬롯 하나로 격리되고 --restart 가 재기동 - core 와 같은 설계).
+            # 새 이미지를 받기 전에 쓰지 않는 이미지를 비우고 여유를 확인한다. 배포 끝에 두면 디스크가
+            # 찬 상태에서 pull 이 먼저 죽어 정리가 실행되지 않는다(renderer 2026-09-13 실측).
+            # 기준 10GB 는 네 앱 박스 공통이다(볼륨 25GB 통일, TeamPiKi/infra#94).
+            bash /tmp/piki-blocks/prune_images.sh --min-free-gb 10
+
             bash /tmp/piki-blocks/run_container.sh \
               --name "piki-extractor-$INACTIVE" --image "$IMAGE" --restart unless-stopped \
               --publish "127.0.0.1:$INACTIVE_PORT:8090" --env-file "$ENV_FILE" --pull --replace \
@@ -237,5 +242,4 @@ jobs:
               timeout 30 docker rm -f "piki-extractor-$ACTIVE" 2>/dev/null || true
             fi
 
-            # 이전 이미지 정리 (dangling 만 - 직전 sha 태그는 남겨 수동 롤백 여지 유지)
-            docker image prune -f >/dev/null
+            # 이미지 정리는 이 자리가 아니라 pull 앞의 prune_images.sh 가 한다.
