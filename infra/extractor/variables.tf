@@ -60,9 +60,14 @@ variable "ami_id" {
 }
 
 variable "root_volume_size" {
-  description = "루트 EBS(gp3) 크기(GB)"
+  description = <<-EOT
+    루트 EBS(gp3) 크기(GB). 배포 게이트(blocks/prune_images.sh)가 요구하는 여유 10GB 를 남기려면
+    "실사용 최대 + 10GB" 가 파일시스템 가용 안에 들어야 한다. 이 박스의 실사용 최대는 6.0GB 로
+    네 앱 박스 중 가장 작지만, 게이트 값을 하나로 두려고 같은 25GB 로 맞춘다
+    (TeamPiKi/infra#94).
+  EOT
   type        = number
-  default     = 20
+  default     = 25
 }
 
 # ---------------------------------------------------------------------------
