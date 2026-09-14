@@ -172,9 +172,6 @@ jobs:
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
             echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
 
-            chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh \
-              /tmp/piki-blocks/slot_decide.sh /tmp/piki-blocks/slot_switch.sh /tmp/piki-blocks/prune_images.sh
-
             # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8090) ──
             # 설치·conf 반영은 매 배포 수행하고, (재)시작·reload 는 아래 전환 블록(slot_switch)이 수행한다.
             command -v nginx >/dev/null || {
