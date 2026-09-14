@@ -86,7 +86,14 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,shared-infra/blocks/prune_images.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
+          source: |
+            shared-infra/blocks/healthcheck.sh,
+            shared-infra/blocks/prune_images.sh,
+            shared-infra/blocks/run_container.sh,
+            shared-infra/blocks/slot_decide.sh,
+            shared-infra/blocks/slot_switch.sh,
+            infra/nginx/extractor.conf,
+            infra/scripts/provision-observability.sh
           target: "/tmp/piki-blocks"
           strip_components: 2
 
