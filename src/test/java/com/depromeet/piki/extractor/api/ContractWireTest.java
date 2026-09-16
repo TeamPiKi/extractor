@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * 계약 생성 클래스가 JSON 와이어에서 지키는 성질을 못 박는다. 파서·프린터 옵션은
- * {@link ContractMessageConverterConfig} 와 같아야 하므로 그대로 쓴다.
+ * {@link ProtobufJsonConverterConfig} 와 같아야 하므로 그대로 쓴다.
  */
 class ContractWireTest {
 

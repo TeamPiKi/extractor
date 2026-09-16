@@ -15,7 +15,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * additive-only 진화가 막힌다. 모르는 enum 문자열도 같은 옵션으로 UNSPECIFIED 로 읽힌다.
  */
 @Configuration
-public class ContractMessageConverterConfig implements WebMvcConfigurer {
+public class ProtobufJsonConverterConfig implements WebMvcConfigurer {
 
     @Override
     public void configureMessageConverters(HttpMessageConverters.ServerBuilder builder) {
