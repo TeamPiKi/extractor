@@ -31,6 +31,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout extraction contract
+        uses: actions/checkout@v4
+        with:
+          repository: TeamPiKi/infra
+          ref: main
+          path: shared-infra
+          sparse-checkout: contracts
+          persist-credentials: false
+
       - uses: actions/setup-java@v4
         with:
           java-version: '25'

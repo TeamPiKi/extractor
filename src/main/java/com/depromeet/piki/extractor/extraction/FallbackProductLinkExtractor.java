@@ -67,7 +67,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             return escalateToHeadless(link, categoryOf(e), authorized, model);
         }
         if (plainSnapshot.missingReadyField()) {
-            // 이대로 반환하면 응답 경계(ExtractionResponse.from)가 확정 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
+            // 이대로 반환하면 응답 경계(ExtractionResultMapper.from)가 확정 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
             // 확정 전에 브라우저 렌더 DOM 으로 한 번 더 시도한다. 승격은 plain 의 try 바깥이라 headless 실패가
             // 위 catch 로 새어 재승격되는 일이 없고, 승격 결과가 여전히 불완전하면 그때 경계가 같은 확정 실패로
             // 닫는다(재승격 없음).

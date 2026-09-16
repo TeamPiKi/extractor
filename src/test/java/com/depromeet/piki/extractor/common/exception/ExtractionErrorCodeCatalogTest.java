@@ -83,6 +83,29 @@ class ExtractionErrorCodeCatalogTest {
     }
 
     @Test
+    @DisplayName("계약 정본(extraction.proto)의 ExtractionErrorCode enum 은 카탈로그의 code 집합과 정확히 일치한다")
+    void protoEnumMatchesCatalog() {
+        // 핸들러가 도메인 code 이름으로 계약 enum 을 찾으므로, 목록이 어긋나면 그 code 의 422 가 500 으로 샌다.
+        Set<String> catalogCodes = catalogEntries().keySet();
+        Set<String> protoCodes = Arrays.stream(com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.values())
+            .filter(value -> value != com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.UNRECOGNIZED)
+            .filter(value -> value.getNumber() != 0)
+            .map(Enum::name)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Set<String> protoOnly = new TreeSet<>(protoCodes);
+        protoOnly.removeAll(catalogCodes);
+        Set<String> catalogOnly = new TreeSet<>(catalogCodes);
+        catalogOnly.removeAll(protoCodes);
+        if (protoOnly.isEmpty() && catalogOnly.isEmpty()) {
+            return;
+        }
+        fail("extraction.proto 의 ExtractionErrorCode 와 카탈로그(" + CATALOG + ")가 어긋난다.\n"
+            + "  proto 에만 있음: " + String.join(", ", protoOnly) + "\n"
+            + "  카탈로그에만 있음: " + String.join(", ", catalogOnly));
+    }
+
+    @Test
     @DisplayName("카탈로그의 disposition·escalatable 은 예외 팩토리가 실제로 세우는 플래그와 일치한다")
     void catalogFlagsMatchFactories() {
         Map<String, Map<String, Object>> catalog = catalogEntries();

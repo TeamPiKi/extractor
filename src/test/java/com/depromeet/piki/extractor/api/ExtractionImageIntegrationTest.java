@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -70,7 +69,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.currency").value("KRW"))
             .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
             // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
-            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
+            .andExpect(jsonPath("$.finalUrl").doesNotExist())
             .andExpect(jsonPath("$.method").value("LLM"));
     }
 
@@ -111,7 +110,7 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.imageUrl").value(StubImageStorage.UPLOADED_URL))
             // additive 계약(core#825): 이미지 경로는 원본 URL 이 없어 finalUrl 이 명시적 null 이고, 추출은 Gemini 라 method=LLM.
-            .andExpect(jsonPath("$.finalUrl").value(nullValue()))
+            .andExpect(jsonPath("$.finalUrl").doesNotExist())
             .andExpect(jsonPath("$.method").value("LLM"));
 
         BufferedImage uploaded = ImageIO.read(new ByteArrayInputStream(stubImageStorage.lastUploadedBytes));
@@ -186,7 +185,8 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("items/raw/noname.png")))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.name").value(nullValue()))
+            // 계약 생성 클래스는 안 채운 필드를 JSON 에서 생략한다 — 호출자는 생략과 null 을 같게 읽는다.
+            .andExpect(jsonPath("$.name").doesNotExist())
             .andExpect(jsonPath("$.currentPrice").value(1000))
             // 이미지 경로는 추출 결과물을 올려 imageUrl 이 항상 채워진다 — 사용자가 채울 것은 이름뿐이다.
             .andExpect(jsonPath("$.imageUrl").value(notNullValue()));
