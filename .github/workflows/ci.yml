@@ -20,7 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # infra 의 계약 파일을 로컬 설치 위치와 같은 자리에 받아 온다. 빌드와 테스트가 경로를 하나만 알면 된다.
       - name: Checkout extraction contract
         uses: actions/checkout@v4
         with:

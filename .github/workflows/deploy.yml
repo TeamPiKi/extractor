@@ -31,8 +31,6 @@ jobs:
         with:
           persist-credentials: false
 
-      # proto 가 없으면 배포 빌드의 컴파일이 깨진다.
-      # 아래 blocks checkout 과 합치지 않는다 - 그쪽은 bootJar 뒤에 오고 sparse 범위가 다르다.
       - name: Checkout extraction contract
         uses: actions/checkout@v4
         with:
