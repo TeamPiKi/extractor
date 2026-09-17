@@ -84,3 +84,9 @@ variable "images_bucket_name" {
   type        = string
   default     = null
 }
+
+variable "github_repo" {
+  description = "OIDC push 역할의 assume 을 허용할 GitHub repo (owner/name)"
+  type        = string
+  default     = "TeamPiKi/extractor"
+}

@@ -1,10 +1,11 @@
-# 배포: main push 자동 + 수동 트리거(workflow_dispatch) 단일 잡. 빌드 → 이미지 push → SSH 배포까지 러너가 주관한다.
+# 배포: main CI 성공(workflow_run) 자동 + 수동 트리거(workflow_dispatch) 단일 잡. 이미지 push → SSH 배포까지 러너가 주관한다.
+# JAR 은 자동 경로면 트리거한 CI 실행의 아티팩트를 받고, 수동 경로만 러너에서 빌드한다 (core deploy 와 같은 구조).
 #
 # - transport 는 core 와 같은 "러너에서 SSH" 단일이다 (SSM Run Command 수동 배포를 대체 - 배포 블록 공통화 결정,
 #   SG 22 개방은 #5). 기동·헬스 판정은 TeamPiKi/infra 의 공용 블록(run_container·healthcheck)을 매 배포
 #   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
 # - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
-#   롤백은 main 에 revert 를 머지하거나(push 트리거가 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
+#   롤백은 main 에 revert 를 머지하거나(CI 성공이 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
 # - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 :8090 은 박스 로컬 nginx 가 고정하고,
 #   슬롯 컨테이너(blue=18090 / green=18091, 127.0.0.1 바인딩)를 upstream 전환으로 바꾼다.
 #   초기의 "교체식 단일 컨테이너 + 수초 다운타임 허용" 결정은 renderer #15 미배포 사고(머지 후 수동
@@ -12,8 +13,10 @@
 name: Deploy
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -22,16 +25,39 @@ concurrency:
 
 permissions:
   contents: read
+  # 트리거한 CI 실행의 아티팩트를 다른 run 에서 내려받는 데 필요하다.
+  actions: read
+  # OIDC 로 ECR push 역할을 assume 하는 데 필요하다.
+  id-token: write
+
+env:
+  # workflow_run 의 github.sha 는 기본 브랜치 끝이라, 배포 도중 다른 push 가 오면 CI 가 빌드한 커밋과 어긋난다.
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
   deploy:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
-      - name: Checkout extraction contract
+      # run-id 로 트리거한 CI 실행에 못박는다. '최신' 아티팩트를 집으면 배포 도중 다른 push 의 JAR 이 섞인다.
+      - name: Download JAR from triggering CI run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: build/libs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout extraction contract (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
         with:
           repository: TeamPiKi/infra
@@ -40,12 +66,15 @@ jobs:
           sparse-checkout: contracts
           persist-credentials: false
 
-      - uses: actions/setup-java@v4
+      - name: Set up JDK 25 (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
         with:
           java-version: '25'
           distribution: 'temurin'
 
-      - name: Cache Gradle
+      - name: Cache Gradle (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/cache@v4
         with:
           path: |
@@ -54,22 +83,28 @@ jobs:
           key: gradle-${{ runner.os }}-arm64-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-${{ runner.os }}-arm64-
 
-      - name: Build bootJar
+      - name: Build bootJar (manual dispatch fallback)
+        if: github.event_name == 'workflow_dispatch'
         run: |
           chmod +x gradlew
           ./gradlew bootJar
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr_login
+        uses: aws-actions/amazon-ecr-login@v2
 
       # 태그·image ref 는 셸 보간 injection 을 피해 env 로 받아 "$VAR" 로 쓴다 (core deploy 와 같은 관례).
       - name: Build and push image
         env:
-          IMAGE_LATEST: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:latest
-          IMAGE_SHA: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ github.sha }}
+          # 레지스트리 호스트는 로그인 액션이 낸다. 계정번호를 repo 에 박지 않는다.
+          IMAGE_LATEST: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:latest
+          IMAGE_SHA: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:${{ env.DEPLOY_SHA }}
         run: |
           docker build -t "$IMAGE_LATEST" -t "$IMAGE_SHA" .
           docker push "$IMAGE_LATEST"
@@ -121,12 +156,12 @@ jobs:
       - name: Deploy (SSM env pull + blue-green slot + nginx switch)
         uses: appleboy/ssh-action@v1
         env:
-          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ github.sha }}
+          IMAGE_TAG: ${{ env.DEPLOY_SHA }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE
+          envs: IMAGE_TAG
           script: |
             set -euo pipefail
 
@@ -173,6 +208,14 @@ jobs:
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
             echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
+
+            # ECR 레지스트리는 온박스에서 도출한다. 계정번호를 워크플로에 안 박는다 (core 와 동일).
+            # pull 자격은 instance role 의 ecr-pull 정책(infra/extractor/ecr.tf). run_container --pull 이 이 로그인을 쓴다.
+            ACCOUNT="$(docker run --rm --network host "$AWSCLI_IMAGE" sts get-caller-identity --query Account --output text)"
+            REGISTRY="$ACCOUNT.dkr.ecr.ap-northeast-2.amazonaws.com"
+            IMAGE="$REGISTRY/piki-extractor:$IMAGE_TAG"
+            docker run --rm --network host "$AWSCLI_IMAGE" ecr get-login-password --region ap-northeast-2 \
+              | docker login --username AWS --password-stdin "$REGISTRY"
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh \
               /tmp/piki-blocks/slot_decide.sh /tmp/piki-blocks/slot_switch.sh
