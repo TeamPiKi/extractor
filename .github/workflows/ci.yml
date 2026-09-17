@@ -50,17 +50,7 @@ jobs:
       - name: Build and test
         run: ./gradlew build --no-daemon
 
-      # deploy.yml 이 workflow_run 으로 이 JAR 을 받아 쓴다. 보존 3일은 그 소비가 수분 내라 충분하고,
-      # 롤백·수동 재배포는 옛 아티팩트에 기대지 않는다(수동 dispatch 는 러너 빌드 fallback).
+      # deploy.yml 이 workflow_run 으로 이 JAR 을 받아 쓴다.
       - name: Upload JAR artifact
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-jar
-          path: |
-            build/libs/*.jar
-            !build/libs/*-plain.jar
-          retention-days: 3
-          if-no-files-found: error
-          # JAR 은 이미 zip 이라 재압축은 CPU 만 쓴다.
-          compression-level: 0
+        uses: TeamPiKi/infra/.github/actions/app-jar-upload@main
