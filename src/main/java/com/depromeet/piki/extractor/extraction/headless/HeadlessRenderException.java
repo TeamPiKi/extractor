@@ -39,4 +39,18 @@ public final class HeadlessRenderException extends ExtractionException {
             cause
         );
     }
+
+    /**
+     * 브라우저가 홉 상한(10)을 채워 렌더를 끊었고, 그때까지의 홉 어디에도 쓸 HTML 이 없다. 재시도해도 브라우저는
+     * 같은 redirect 체인을 다시 따라가 같은 상한에서 끊기므로 확정 실패 — 정적 fetch 경로의 redirect 상한
+     * ({@code PageFetchException.tooManyRedirects})과 같은 code 를 쓴다.
+     */
+    public static HeadlessRenderException hopCapHit() {
+        return new HeadlessRenderException(
+            "헤드리스 렌더가 홉 상한에 도달했고 쓸 HTML 이 있는 홉이 없다.",
+            ExtractionErrorCode.TOO_MANY_REDIRECTS,
+            true,
+            null
+        );
+    }
 }

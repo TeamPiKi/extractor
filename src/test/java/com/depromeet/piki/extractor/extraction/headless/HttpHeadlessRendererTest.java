@@ -113,6 +113,42 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
+    @DisplayName("홉 상한 도달 응답에 쓸 HTML 이 있는 홉이 하나도 없으면 확정 실패(TOO_MANY_REDIRECTS)다")
+    void hopCapHitWithNoUsableHtmlIsPermanentTooManyRedirects() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"hop_cap_hit\":true,\"hops\":["
+                    + "{\"url\":\"https://kream.co.kr/a\",\"status\":302},"
+                    + "{\"url\":\"https://kream.co.kr/b\",\"status\":302}]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
+
+        assertEquals(ExtractionErrorCode.TOO_MANY_REDIRECTS, ex.code());
+        assertTrue(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("홉 상한 도달 응답이라도 쓸 HTML 이 있는 홉이 섞여 있으면 홉 목록을 그대로 돌려준다")
+    void hopCapHitWithUsableHopReturnsHops() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"hop_cap_hit\":true,\"hops\":["
+                    + "{\"url\":\"https://kream.co.kr/a\",\"status\":200,"
+                    + "\"body\":\"<html>ssr</html>\",\"dom\":\"<html>dom</html>\"},"
+                    + "{\"url\":\"https://kream.co.kr/b\",\"status\":302}]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        List<RenderedHop> hops = renderer.render(link, false);
+
+        assertEquals(2, hops.size());
+    }
+
+    @Test
     @DisplayName("홉 계약 이전 renderer 의 html·final_url 응답은 홉 하나로 읽는다 — renderer 배포가 수동이라 뒤처질 수 있다")
     void legacySingleHtmlBecomesOneHop() {
         HttpHeadlessRenderer renderer = rendererWith(server -> server
