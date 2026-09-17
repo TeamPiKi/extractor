@@ -27,6 +27,8 @@ permissions:
   contents: read
   # 트리거한 CI 실행의 아티팩트를 다른 run 에서 내려받는 데 필요하다.
   actions: read
+  # OIDC 로 ECR push 역할을 assume 하는 데 필요하다.
+  id-token: write
 
 env:
   # workflow_run 의 github.sha 는 기본 브랜치 끝이라, 배포 도중 다른 push 가 오면 CI 가 빌드한 커밋과 어긋난다.
@@ -87,17 +89,22 @@ jobs:
           chmod +x gradlew
           ./gradlew bootJar
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr_login
+        uses: aws-actions/amazon-ecr-login@v2
 
       # 태그·image ref 는 셸 보간 injection 을 피해 env 로 받아 "$VAR" 로 쓴다 (core deploy 와 같은 관례).
       - name: Build and push image
         env:
-          IMAGE_LATEST: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:latest
-          IMAGE_SHA: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ env.DEPLOY_SHA }}
+          # 레지스트리 호스트는 로그인 액션이 낸다. 계정번호를 repo 에 박지 않는다.
+          IMAGE_LATEST: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:latest
+          IMAGE_SHA: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:${{ env.DEPLOY_SHA }}
         run: |
           docker build -t "$IMAGE_LATEST" -t "$IMAGE_SHA" .
           docker push "$IMAGE_LATEST"
@@ -149,12 +156,12 @@ jobs:
       - name: Deploy (SSM env pull + blue-green slot + nginx switch)
         uses: appleboy/ssh-action@v1
         env:
-          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/piki-extractor:${{ env.DEPLOY_SHA }}
+          IMAGE_TAG: ${{ env.DEPLOY_SHA }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE
+          envs: IMAGE_TAG
           script: |
             set -euo pipefail
 
@@ -201,6 +208,14 @@ jobs:
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
             echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
+
+            # ECR 레지스트리는 온박스에서 도출한다. 계정번호를 워크플로에 안 박는다 (core 와 동일).
+            # pull 자격은 instance role 의 ecr-pull 정책(infra/extractor/ecr.tf). run_container --pull 이 이 로그인을 쓴다.
+            ACCOUNT="$(docker run --rm --network host "$AWSCLI_IMAGE" sts get-caller-identity --query Account --output text)"
+            REGISTRY="$ACCOUNT.dkr.ecr.ap-northeast-2.amazonaws.com"
+            IMAGE="$REGISTRY/piki-extractor:$IMAGE_TAG"
+            docker run --rm --network host "$AWSCLI_IMAGE" ecr get-login-password --region ap-northeast-2 \
+              | docker login --username AWS --password-stdin "$REGISTRY"
 
             chmod +x /tmp/piki-blocks/run_container.sh /tmp/piki-blocks/healthcheck.sh \
               /tmp/piki-blocks/slot_decide.sh /tmp/piki-blocks/slot_switch.sh
