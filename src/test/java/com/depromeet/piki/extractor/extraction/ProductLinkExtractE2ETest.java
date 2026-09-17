@@ -7,6 +7,7 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiProperties;
 import com.depromeet.piki.extractor.extraction.http.FetchProperties;
 import com.depromeet.piki.extractor.extraction.http.HttpPageFetcher;
 import com.depromeet.piki.extractor.extraction.http.PageFetchHttpClientConfig;
+import com.depromeet.piki.extractor.extraction.http.RequestScopedCookieStore;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -44,9 +45,11 @@ class ProductLinkExtractE2ETest {
 
     private final RequestScopedDnsResolver dnsResolver = new RequestScopedDnsResolver();
     private final FetchProperties fetchProperties = FetchProperties.defaults();
+    private final RequestScopedCookieStore cookieStore = new RequestScopedCookieStore();
     private final HttpPageFetcher pageFetcher = new HttpPageFetcher(
-        new PageFetchHttpClientConfig().pageFetchRestClient(ObservationRegistry.NOOP, dnsResolver, fetchProperties),
+        new PageFetchHttpClientConfig().pageFetchRestClient(ObservationRegistry.NOOP, dnsResolver, cookieStore, fetchProperties),
         dnsResolver,
+        cookieStore,
         fetchProperties
     );
     private final ObjectMapper objectMapper = new ObjectMapper();

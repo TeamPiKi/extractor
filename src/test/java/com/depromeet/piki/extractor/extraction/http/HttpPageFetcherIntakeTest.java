@@ -127,7 +127,7 @@ class HttpPageFetcherIntakeTest {
             return request;
         };
         RestClient restClient = RestClient.builder().requestFactory(factory).build();
-        return new HttpPageFetcher(restClient, new RequestScopedDnsResolver(publicIp), properties);
+        return new HttpPageFetcher(restClient, new RequestScopedDnsResolver(publicIp), new RequestScopedCookieStore(), properties);
     }
 
 }
