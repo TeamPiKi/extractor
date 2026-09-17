@@ -103,7 +103,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
+          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,shared-infra/blocks/ssm_env.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
           target: "/tmp/piki-blocks"
           strip_components: 2
 
@@ -155,21 +155,11 @@ jobs:
             umask 077
             ENV_FILE="$(mktemp)"
             trap 'rm -f "$ENV_FILE"' EXIT
-            # kebab-key -> UPPER_SNAKE 로 복원해 KEY=VALUE 라인으로 쓴다. docker --env-file 은 다중행 값을
-            # 싣지 못하므로(현 파라미터는 전부 단일행) 다중행이 들어오면 조용히 깨지기 전에 여기서 실패시킨다.
-            # PEM 류 다중행 파라미터가 생기면 core deploy 의 '-e KEY passthrough' 방식으로 옮길 것.
-            if ! printf '%s' "$PARAMS_JSON" | python3 -c '
-            import sys, json
-            params = json.load(sys.stdin).get("Parameters", [])
-            if not params:
-                raise SystemExit("no parameters under /piki-extractor/app/")
-            for p in params:
-                key = p["Name"].rsplit("/", 1)[1].replace("-", "_").upper()
-                val = p["Value"]
-                if "\n" in val:
-                    raise SystemExit(f"multi-line value not supported by --env-file: {key}")
-                print(f"{key}={val}")' > "$ENV_FILE"; then
-              echo "::error::SSM 파라미터 -> env 파일 변환 실패 (파라미터 0개 또는 다중행 값)"
+            # 아래 튜닝·관측 값을 파일 끝에 덧붙이므로 같은 이름의 SSM 키는 예약으로 막는다.
+            if ! PARAM_COUNT="$(printf '%s' "$PARAMS_JSON" | bash /tmp/piki-blocks/ssm_env.sh --out "$ENV_FILE" \
+              --reserve JAVA_TOOL_OPTIONS --reserve TRACING_OTLP_ENABLED --reserve OTLP_ENDPOINT \
+              --reserve LOGGING_STRUCTURED_FORMAT_CONSOLE)"; then
+              echo "::error::SSM 파라미터 -> env 파일 변환 실패 (파라미터 0개 · 다중행 값 · 예약 이름 충돌 - 블록 stderr 참조)"
               exit 1
             fi
             # 튜닝값(비시크릿)은 여기 고정 - 시크릿이 아니라 SSM 에 두지 않는다.
@@ -180,7 +170,7 @@ jobs:
             echo "TRACING_OTLP_ENABLED=true" >> "$ENV_FILE"
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
-            echo "SSM env $(grep -c '' "$ENV_FILE") 라인 로드 (/piki-extractor/app/)"
+            echo "SSM 에서 $PARAM_COUNT 개 파라미터 로드 (/piki-extractor/app/)"
 
             # ECR 레지스트리는 온박스에서 도출한다. 계정번호를 워크플로에 안 박는다 (core 와 동일).
             # pull 자격은 instance role 의 ecr-pull 정책(infra/extractor/ecr.tf). run_container --pull 이 이 로그인을 쓴다.
