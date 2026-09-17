@@ -46,16 +46,6 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
-      # run-id 로 트리거한 CI 실행에 못박는다. '최신' 아티팩트를 집으면 배포 도중 다른 push 의 JAR 이 섞인다.
-      - name: Download JAR from triggering CI run
-        if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: build/libs
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Checkout extraction contract (manual dispatch fallback)
         if: github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
@@ -66,28 +56,11 @@ jobs:
           sparse-checkout: contracts
           persist-credentials: false
 
-      - name: Set up JDK 25 (manual dispatch fallback)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/setup-java@v4
+      # workflow_run 이면 트리거한 CI run 의 아티팩트, dispatch 면 러너 빌드.
+      - name: Resolve JAR
+        uses: TeamPiKi/infra/.github/actions/app-jar-resolve@main
         with:
           java-version: '25'
-          distribution: 'temurin'
-
-      - name: Cache Gradle (manual dispatch fallback)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-arm64-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-arm64-
-
-      - name: Build bootJar (manual dispatch fallback)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          chmod +x gradlew
-          ./gradlew bootJar
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
