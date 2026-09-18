@@ -18,9 +18,25 @@ on:
     branches: [main]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      migration_host:
+        description: "[이관 전용] 배포 대상 호스트를 직접 지정한다. 비우면 secrets.EC2_HOST. 평소에는 비워 둘 것."
+        required: false
+        type: string
+        default: ""
+  # 계정 이관(TeamPiKi/core 의 migrate.yml)이 신 계정 박스로 이 배포를 돌리려고 호출한다.
+  # 호출측이 대상 호스트를 넘기고 secrets 는 inherit 로 받는다.
+  workflow_call:
+    inputs:
+      migration_host:
+        description: "[이관 전용] 배포 대상 호스트. 비우면 secrets.EC2_HOST."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
-  group: deploy
+  # 이관 배포(신 계정 박스)와 평소 배포가 서로를 막지 않도록 대상 호스트로 그룹을 가른다.
+  group: deploy-${{ inputs.migration_host || 'default' }}
   cancel-in-progress: false
 
 permissions:
@@ -36,8 +52,10 @@ env:
 
 jobs:
   deploy:
+    # workflow_call(계정 이관 호출)도 통과시킨다 — 빠뜨리면 호출돼도 job 이 통째로 skip 된다.
     if: |
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'workflow_call' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
     steps:
@@ -100,7 +118,7 @@ jobs:
       - name: Upload blocks
         uses: appleboy/scp-action@v1
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,shared-infra/blocks/ssm_env.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
@@ -118,7 +136,7 @@ jobs:
       - name: Provision observability (Alloy)
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
@@ -131,7 +149,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ env.DEPLOY_SHA }}
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           envs: IMAGE_TAG
