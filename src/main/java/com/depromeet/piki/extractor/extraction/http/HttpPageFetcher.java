@@ -199,7 +199,12 @@ public class HttpPageFetcher implements PageFetcher {
         HttpStatusCode status,
         ConvertibleClientHttpResponse response
     ) throws IOException {
-        log.warn("link fetch failed: status={} url={}", status, current.safeLogString());
+        if (status.is5xxServerError()) {
+            log.warn("link fetch failed: status={} url={}", status, current.safeLogString());
+        } else {
+            // 4xx 는 대개 없는 상품·비공개 페이지 등록이라 정상 실패 — 몰 장애 신호인 5xx 만 warn 으로 남긴다.
+            log.info("link fetch failed: status={} url={}", status, current.safeLogString());
+        }
         RestClientResponseException cause = new RestClientResponseException(
             "link fetch " + status.value(),
             status,
