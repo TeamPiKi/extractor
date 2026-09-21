@@ -43,6 +43,12 @@ public final class ProductLink {
         return value;
     }
 
+    /** 경로가 없거나 {@code /} 뿐인 사이트 루트. 상품 요청이 여기로 튕기면 홈 피드에 도착한 것이다(HttpPageFetcher 참조). */
+    public boolean isSiteRoot() {
+        String path = value.getRawPath();
+        return path == null || path.isEmpty() || "/".equals(path);
+    }
+
     /** 쿼리스트링·fragment 에 토큰/세션이 섞일 수 있어 host+path 만 노출한다 — 로그·메트릭에는 이 값만 쓴다. */
     public String safeLogString() {
         String host = value.getHost() == null ? "?" : value.getHost();

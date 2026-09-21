@@ -20,6 +20,7 @@ class PageFetchExceptionTest {
         assertTrue(PageFetchException.upstreamError(cause).escalatable(), "502/503/504(일시)");
         assertTrue(PageFetchException.emptyBody().escalatable(), "빈 body");
         assertTrue(PageFetchException.tooManyRedirects().escalatable(), "redirect 루프");
+        assertTrue(PageFetchException.redirectedToSiteRoot().escalatable(), "사이트 루트 착지");
         // malformedRedirect(cause) 단일 팩토리라 "Location 없음"은 cause 없이 null 로 호출한다.
         assertTrue(PageFetchException.malformedRedirect(null).escalatable(), "비정상 redirect");
     }
