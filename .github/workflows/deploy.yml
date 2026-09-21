@@ -35,8 +35,11 @@ on:
         default: ""
 
 concurrency:
-  # 이관 배포(신 계정 박스)와 평소 배포가 서로를 막지 않도록 대상 호스트로 그룹을 가른다.
-  group: deploy-${{ inputs.migration_host || 'default' }}
+  # 그룹은 단일 'deploy' 로 둔다. 대상 호스트별로 가르면 호출자가 secrets.EC2_HOST 와 같은 주소를
+  # migration_host 로 넘겼을 때 'deploy-default' 와 'deploy-<host>' 로 갈려 같은 박스에 두 배포가
+  # 동시에 돌 수 있다 — 슬롯 선택·nginx 전환·구 컨테이너 정리가 서로를 밟는다.
+  # 이관은 드문 1회성이라 평소 배포가 잠깐 대기하는 비용보다 그 충돌을 막는 편이 싸다.
+  group: deploy
   cancel-in-progress: false
 
 permissions:
