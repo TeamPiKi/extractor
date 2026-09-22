@@ -24,12 +24,22 @@ on:
         required: false
         type: string
         default: ""
+      migration_role_arn:
+        description: "[이관 전용] ECR push 에 쓸 역할 ARN. 신 계정 이미지 푸시용. 비우면 vars.AWS_ECR_PUSH_ROLE_ARN(구 계정 역할)."
+        required: false
+        type: string
+        default: ""
   # 계정 이관(TeamPiKi/core 의 migrate.yml)이 신 계정 박스로 이 배포를 돌리려고 호출한다.
   # 호출측이 대상 호스트를 넘기고 secrets 는 inherit 로 받는다.
   workflow_call:
     inputs:
       migration_host:
         description: "[이관 전용] 배포 대상 호스트. 비우면 secrets.EC2_HOST."
+        required: false
+        type: string
+        default: ""
+      migration_role_arn:
+        description: "[이관 전용] ECR push 에 쓸 역할 ARN(신 계정)."
         required: false
         type: string
         default: ""
@@ -86,7 +96,7 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+          role-to-assume: ${{ inputs.migration_role_arn != '' && inputs.migration_role_arn || vars.AWS_ECR_PUSH_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Login to Amazon ECR
