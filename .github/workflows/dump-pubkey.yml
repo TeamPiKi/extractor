@@ -1,0 +1,28 @@
+name: Dump SSH public key
+
+# EC2_SSH_KEY 에서 공개키만 뽑아 출력한다(프라이빗 키는 절대 찍지 않는다).
+# 계정 이관에서 신 계정 키페어를 이 레포 키로 등록하려면 공개키가 필요한데,
+# GitHub secret 값은 API 로 읽을 수 없어 이 경로로 한 번 꺼낸다. 확인 뒤 삭제할 일회성 워크플로.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 공개키 출력
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          [ -n "${SSH_KEY:-}" ] || { echo "::error::EC2_SSH_KEY 미설정"; exit 1; }
+          umask 077
+          printf '%s\n' "$SSH_KEY" > /tmp/k.pem
+          echo "=== public key ==="
+          ssh-keygen -y -f /tmp/k.pem
+          echo "=== fingerprint (md5, AWS 형식) ==="
+          ssh-keygen -y -f /tmp/k.pem | ssh-keygen -lf - -E md5
+          rm -f /tmp/k.pem
