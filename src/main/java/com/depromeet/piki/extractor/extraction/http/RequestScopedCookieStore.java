@@ -11,13 +11,15 @@ import org.springframework.stereotype.Component;
 /**
  * fetch 한 번 동안만 사는 쿠키 저장소.
  *
- * <p>왜 드는가: 딥링크가 "쿠키를 심고 자기 자신으로 302" 하는 바운스를 쓴다(airbridge 실측). 쿠키를 안 들고 있으면
- * 같은 자리를 계속 돌다 redirect 상한을 소진해 확정 실패가 되고, 브라우저는 받은 쿠키를 다음 hop 에 실어 빠져나온다.
- * 지금 fetch 경로는 쿠키를 하나도 보관하지 않아 그런 링크를 구조적으로 못 푼다.
+ * <p>왜 드는가: HttpClient5 는 저장소를 지정하지 않아도 자기 기본 저장소로 쿠키를 보관해 다음 요청에 싣는다(실측).
+ * 그 저장소는 클라이언트 빈 하나에 묶여 프로세스 수명만큼 살므로, 어떤 링크에서 받은 쿠키가 뒤이은 다른 사용자의
+ * fetch 에 실리고 만료 쿠키도 쌓인다. 쿠키 보관 자체는 그대로 두되 수명을 fetch 하나로 끊는 것이 이 클래스다.
  *
- * <p>왜 요청 스코프인가: HttpClient 하나를 모든 fetch 가 공유하므로 저장소도 공유하면 남의 링크에서 받은 쿠키가 다음
- * 사용자의 요청에 실린다. {@link RequestScopedDnsResolver} 와 같은 이유·같은 모양으로 ThreadLocal 에 두고, fetch 가
- * 끝날 때 {@link #clear()} 로 비운다. 동기 호출이라 한 fetch 의 모든 hop 이 같은 스레드에서 돈다.
+ * <p>쿠키 보관이 필요한 이유는 따로 있다 - 딥링크가 "쿠키를 심고 자기 자신으로 302" 하는 바운스를 쓴다(airbridge
+ * 실측). 브라우저는 받은 쿠키를 다음 hop 에 실어 빠져나온다.
+ *
+ * <p>{@link RequestScopedDnsResolver} 와 같은 이유·같은 모양으로 ThreadLocal 에 두고 fetch 가 끝날 때
+ * {@link #clear()} 로 비운다. 동기 호출이라 한 fetch 의 모든 hop 이 같은 스레드에서 돈다.
  */
 @Component
 public class RequestScopedCookieStore implements CookieStore {

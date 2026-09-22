@@ -77,8 +77,8 @@ public class PageFetchHttpClientConfig {
                 // 봤으면(429·503·느림) 전부 호출자(core)의 작업 큐가 소유한다. 근거는 PreDeliveryRetryStrategy.
                 // HttpClient5 기본 전략은 그 둘을 섞어(429·503 까지 재시도) 우리 방침 밖에서 겹치므로 쓰지 않는다.
                 .setRetryStrategy(new PreDeliveryRetryStrategy())
-                // 쿠키를 들고 hop 을 넘어야 "쿠키 심고 자기 자신으로 302" 하는 딥링크 바운스가 풀린다. 저장소는
-                // 요청 스코프라 fetch 사이에 쿠키가 새지 않는다(RequestScopedCookieStore).
+                // 지정하지 않으면 빌더가 자기 기본 저장소를 만들어 프로세스 내내 쿠키를 쌓는다 - 요청 스코프
+                // 저장소로 바꿔 수명을 fetch 하나로 끊는다(RequestScopedCookieStore).
                 // cookieSpec 은 기본값(strict)을 둔다 - relaxed 와 만료 형식 5종을 비교해 차이가 없었고,
                 // 파싱 불가한 만료값은 양쪽 다 쿠키를 버린다.
                 .setDefaultCookieStore(cookieStore)
