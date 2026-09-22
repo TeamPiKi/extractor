@@ -81,6 +81,14 @@ jobs:
           ref: ${{ github.event_name == 'workflow_call' && 'main' || env.DEPLOY_SHA }}
           persist-credentials: false
 
+      # 이미지 태그는 "실제로 빌드한 커밋" 이어야 한다. workflow_call 은 이 레포의 main 을 받는데
+      # env.DEPLOY_SHA 는 호출자 커밋이라, 그대로 태그에 쓰면 호출자 재실행 때 extractor/main 이
+      # 바뀐 사이 다른 이미지가 같은 태그를 덮어쓴다(ECR mutable 태그). SHA 태그를 롤백 좌표로
+      # 쓰는 계약도 깨진다. 체크아웃한 HEAD 를 직접 읽어 그 값을 쓴다.
+      - name: Resolve built SHA
+        id: built
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       # 공용 contract 는 러너 빌드 경로(dispatch·call)에서 필요하다. workflow_run 은 CI 아티팩트를 받아 쓴다.
       - name: Checkout extraction contract (manual dispatch fallback)
         if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
@@ -113,7 +121,7 @@ jobs:
         env:
           # 레지스트리 호스트는 로그인 액션이 낸다. 계정번호를 repo 에 박지 않는다.
           IMAGE_LATEST: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:latest
-          IMAGE_SHA: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:${{ env.DEPLOY_SHA }}
+          IMAGE_SHA: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:${{ steps.built.outputs.sha }}
         run: |
           docker build -t "$IMAGE_LATEST" -t "$IMAGE_SHA" .
           docker push "$IMAGE_LATEST"
@@ -165,7 +173,7 @@ jobs:
       - name: Deploy (SSM env pull + blue-green slot + nginx switch)
         uses: appleboy/ssh-action@v1
         env:
-          IMAGE_TAG: ${{ env.DEPLOY_SHA }}
+          IMAGE_TAG: ${{ steps.built.outputs.sha }}
         with:
           host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
