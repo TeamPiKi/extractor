@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
+import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import org.apache.hc.client5.http.cookie.BasicCookieStore;
@@ -33,10 +34,15 @@ public class RequestScopedCookieStore implements CookieStore {
         return delegate.get().getCookies();
     }
 
-    /** HttpClient5 의 계약이 아직 Date 다 — 우리가 고를 수 있는 시그니처가 아니라 그대로 위임한다. */
+    /** Date 쪽은 deprecated 지만 인터페이스가 아직 abstract 로 들고 있어 둘 다 위임한다. */
     @Override
     public boolean clearExpired(Date date) {
         return delegate.get().clearExpired(date);
+    }
+
+    @Override
+    public boolean clearExpired(Instant instant) {
+        return delegate.get().clearExpired(instant);
     }
 
     @Override

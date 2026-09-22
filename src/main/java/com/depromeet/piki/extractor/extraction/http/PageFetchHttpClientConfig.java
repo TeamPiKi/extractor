@@ -79,6 +79,8 @@ public class PageFetchHttpClientConfig {
                 .setRetryStrategy(new PreDeliveryRetryStrategy())
                 // 쿠키를 들고 hop 을 넘어야 "쿠키 심고 자기 자신으로 302" 하는 딥링크 바운스가 풀린다. 저장소는
                 // 요청 스코프라 fetch 사이에 쿠키가 새지 않는다(RequestScopedCookieStore).
+                // cookieSpec 은 기본값(strict)을 둔다 - relaxed 와 만료 형식 5종을 비교해 차이가 없었고,
+                // 파싱 불가한 만료값은 양쪽 다 쿠키를 버린다.
                 .setDefaultCookieStore(cookieStore)
                 .setDefaultRequestConfig(
                     RequestConfig.custom()
