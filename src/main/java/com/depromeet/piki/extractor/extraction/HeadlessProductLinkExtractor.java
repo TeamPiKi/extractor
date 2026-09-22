@@ -5,6 +5,7 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
+import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import java.util.ArrayList;
@@ -24,7 +25,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>차단 신호는 후보를 거르지 않는다. 403 뒤에 온전한 상품 JSON-LD 가 실려 오기도 하므로(봇 방어의 위장 status)
  * 구조화 데이터는 그대로 쓰고, 차단으로 보이는 문서는 LLM 후보에서만 뺀다. 아무것도 못 뽑았을 때 실패 코드를
- * 차단과 장애로 가르는 데만 쓴다.
+ * 차단과 장애로 가르는 데만 쓴다. 상품 경로가 사이트 루트에 착지한 홉도 같은 취급이다 — 홈 피드를 LLM 에 보내면
+ * 확정 실패로 닫혀 버리므로 후보에서 빼고, 그것뿐이면 일시 실패로 남긴다(HttpPageFetcher 의 redirect 판정과 짝).
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -49,6 +51,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         String timing = "render=" + renderMs + "ms hops=" + hops.size();
 
         boolean blocked = hops.stream().anyMatch(hop -> HeadlessBlockSignal.isBlocked(hop.status(), hop.headers()));
+        boolean rootLanded = false;
         Chosen first = null;      // 차단 신호 없는 첫 후보 — 전부 셸이면 이걸로 게이트가 확정 실패를 닫는다
         Chosen fallback = null;   // 그중 LLM 에 넘길 것이 있는 첫 후보
         for (Candidate candidate : candidates(hops)) {
@@ -62,6 +65,10 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
             if (challenge || HeadlessBlockSignal.isBlocked(candidate.hop().status(), candidate.hop().headers())) {
                 continue;
             }
+            if (!link.isSiteRoot() && candidate.hop().url().isSiteRoot()) {
+                rootLanded = true;
+                continue;
+            }
             if (first == null) {
                 first = new Chosen(page, result);
             }
@@ -73,8 +80,16 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         if (chosen != null) {
             return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
         }
-        log.warn("headless hops unusable blocked={} hops={} url={}", blocked, hops.size(), link.safeLogString());
-        throw blocked ? HeadlessRenderException.blocked() : HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
+        if (blocked) {
+            log.warn("headless hops unusable blocked=true hops={} url={}", hops.size(), link.safeLogString());
+            throw HeadlessRenderException.blocked();
+        }
+        if (rootLanded) {
+            log.info("headless hops landed on site root hops={} url={}", hops.size(), link.safeLogString());
+            throw PageFetchException.redirectedToSiteRoot();
+        }
+        log.warn("headless hops unusable blocked=false hops={} url={}", hops.size(), link.safeLogString());
+        throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
     }
 
     private static List<Candidate> candidates(List<RenderedHop> hops) {

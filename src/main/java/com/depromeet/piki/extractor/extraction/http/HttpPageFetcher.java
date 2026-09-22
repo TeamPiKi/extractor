@@ -120,7 +120,13 @@ public class HttpPageFetcher implements PageFetcher {
             ProductLink target = current;
             internalHostGuard.verify(target);
             switch (request(target)) {
-                case Received.Redirect redirect -> current = redirect.target();
+                case Received.Redirect redirect -> {
+                    current = redirect.target();
+                    if (landsOnSiteRoot(link, current)) {
+                        log.info("link fetch redirected to site root url={}", link.safeLogString());
+                        throw PageFetchException.redirectedToSiteRoot();
+                    }
+                }
                 // link 는 사용자가 등록한 원본을 유지하고, finalUrl 은 redirect 를 따라간 최종 페이지 —
                 // 상대 URL resolve 의 baseUri 가 원본이 아닌 최종 host 기준이 되게 한다.
                 case Received.Page page -> {
@@ -130,6 +136,16 @@ public class HttpPageFetcher implements PageFetcher {
         }
         log.warn("link fetch too many redirects url={}", link.safeLogString());
         throw PageFetchException.tooManyRedirects();
+    }
+
+    /**
+     * 상품 경로를 요청했는데 redirect 가 사이트 루트로 보내는 경우. 몰이 진열 중단·일시 상태로 상품 주소를 홈으로
+     * 돌리는 패턴이라 홈 본문을 받아 LLM 에 넘기면 확정 실패(NOT_PRODUCT_PAGE)로 닫혀 버린다(packnfold 실측,
+     * extractor#82). 본문을 받기 전에 끊어 일시 실패로 남긴다. 루트로 등록된 링크는 판정 대상이 아니다.
+     * 헤드리스 쪽의 같은 판정은 HeadlessProductLinkExtractor 가 홉 후보 단계에서 한다.
+     */
+    private static boolean landsOnSiteRoot(ProductLink link, ProductLink target) {
+        return !link.isSiteRoot() && target.isSiteRoot();
     }
 
     private PageContent page(ProductLink link, ProductLink finalUrl, PruningHtmlParser.Pruned pruned) {
@@ -183,7 +199,12 @@ public class HttpPageFetcher implements PageFetcher {
         HttpStatusCode status,
         ConvertibleClientHttpResponse response
     ) throws IOException {
-        log.warn("link fetch failed: status={} url={}", status, current.safeLogString());
+        if (status.is5xxServerError()) {
+            log.warn("link fetch failed: status={} url={}", status, current.safeLogString());
+        } else {
+            // 4xx 는 대개 없는 상품·비공개 페이지 등록이라 정상 실패 — 몰 장애 신호인 5xx 만 warn 으로 남긴다.
+            log.info("link fetch failed: status={} url={}", status, current.safeLogString());
+        }
         RestClientResponseException cause = new RestClientResponseException(
             "link fetch " + status.value(),
             status,

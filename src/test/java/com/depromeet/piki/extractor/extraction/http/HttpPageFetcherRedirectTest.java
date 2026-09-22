@@ -1,6 +1,7 @@
 package com.depromeet.piki.extractor.extraction.http;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -129,6 +130,40 @@ class HttpPageFetcherRedirectTest {
             () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop")));
         // redirect 루프는 재시도해도 결정론적으로 재실패하므로 확정 실패로 가른다.
         assertEquals(ExtractionErrorCode.TOO_MANY_REDIRECTS, ex.code());
+    }
+
+    @Test
+    @DisplayName("상품 경로 요청이 사이트 루트로 redirect 되면 홈 본문을 받지 않고 일시 실패로 끊는다")
+    void stopsWhenRedirectLandsOnSiteRoot() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                // 홈으로의 두 번째 요청을 기대하지 않는다 — 요청이 나가면 MockRestServiceServer 가 예기치 않은 요청으로 실패시킨다.
+                server.expect(requestTo("https://packnfold.co.kr/product/61/category/42/"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https://packnfold.co.kr/")));
+            });
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://packnfold.co.kr/product/61/category/42/")));
+
+        assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("루트로 등록된 링크가 다른 호스트의 루트로 redirect 되는 것은 판정하지 않는다")
+    void rootRegisteredLinkMayRedirectToRoot() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                server.expect(requestTo("https://toss.shopping/"))
+                    .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("https://shopping.toss.im/")));
+                server.expect(requestTo("https://shopping.toss.im/"))
+                    .andRespond(withSuccess("<html>landing</html>", MediaType.TEXT_HTML));
+            });
+
+        PageContent page = fetcher.fetch(ProductLink.parse("https://toss.shopping/"));
+
+        assertEquals("landing", page.document().text());
     }
 
     @Test
