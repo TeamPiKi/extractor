@@ -85,6 +85,7 @@ public class HttpPageFetcher implements PageFetcher {
 
     private final RestClient restClient;
     private final RequestScopedDnsResolver dnsResolver;
+    private final RequestScopedCookieStore cookieStore;
     private final InternalHostGuard internalHostGuard;
     private final int maxRedirects;
 
@@ -95,10 +96,12 @@ public class HttpPageFetcher implements PageFetcher {
     public HttpPageFetcher(
         @Qualifier(PageFetchHttpClientConfig.PAGE_FETCH_REST_CLIENT) RestClient restClient,
         RequestScopedDnsResolver dnsResolver,
+        RequestScopedCookieStore cookieStore,
         FetchProperties properties
     ) {
         this.restClient = restClient;
         this.dnsResolver = dnsResolver;
+        this.cookieStore = cookieStore;
         // 가드와 연결이 같은 resolver 를 봐야 IP pin 이 성립한다 — 같은 인스턴스로 직접 조립해 그 계약을 코드로 박는다.
         this.internalHostGuard = new InternalHostGuard(dnsResolver);
         this.maxRedirects = properties.maxRedirects();
@@ -110,6 +113,8 @@ public class HttpPageFetcher implements PageFetcher {
             return fetchFollowingRedirects(link);
         } finally {
             dnsResolver.clear();
+            // 이 링크에서 받은 쿠키는 여기서 끝난다 - 다음 fetch 는 빈 손으로 시작한다.
+            cookieStore.clear();
         }
     }
 

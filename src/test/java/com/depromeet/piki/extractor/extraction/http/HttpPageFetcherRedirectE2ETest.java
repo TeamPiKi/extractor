@@ -11,15 +11,19 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.springframework.web.client.RestClient;
 
 @Disabled("실제 외부 페이지 fetch (지그재그 same-domain · 무신사 OneLink cross-domain). 검증 필요 시 수동 enable.")
 class HttpPageFetcherRedirectE2ETest {
 
     private final RequestScopedDnsResolver dnsResolver = new RequestScopedDnsResolver();
+    private final RequestScopedCookieStore cookieStore = new RequestScopedCookieStore();
     private final HttpPageFetcher fetcher =
         new HttpPageFetcher(
-            new PageFetchHttpClientConfig().pageFetchRestClient(ObservationRegistry.NOOP, dnsResolver, FetchProperties.defaults()),
+            new PageFetchHttpClientConfig()
+                .pageFetchRestClient(ObservationRegistry.NOOP, dnsResolver, cookieStore, FetchProperties.defaults()),
             dnsResolver,
+            cookieStore,
             FetchProperties.defaults());
 
     @Test
@@ -54,5 +58,28 @@ class HttpPageFetcherRedirectE2ETest {
             page.document().selectFirst("meta[property=og:title]"),
             "최종 무신사 상품 페이지(OG 메타태그)를 받았어야 한다"
         );
+    }
+
+    @Test
+    @Timeout(value = 30, unit = TimeUnit.SECONDS)
+    @DisplayName("쿠키를 심고 자기 자신으로 302 하는 딥링크 바운스를 쿠키를 들고 빠져나온다")
+    void deepLinkCookieBounceResolves() {
+        // al.wconcept.co.kr 은 Sec-CH-UA 를 받으면 쿠키를 심는 자기 리다이렉트를 한 번 태운다(2026-09-12 실측).
+        // 쿠키를 안 들고 있으면 같은 자리를 계속 돌다 redirect 상한을 소진한다. 운영 UA 는 아직 이 헤더를 보내지
+        // 않으므로 여기서만 얹어 그 바운스를 일부러 태운다.
+        RequestScopedDnsResolver resolver = new RequestScopedDnsResolver();
+        RequestScopedCookieStore cookies = new RequestScopedCookieStore();
+        RestClient clientHints = new PageFetchHttpClientConfig()
+            .pageFetchRestClient(ObservationRegistry.NOOP, resolver, cookies, FetchProperties.defaults())
+            .mutate()
+            .defaultHeader("Sec-CH-UA", "\"Chromium\";v=\"153\", \"Google Chrome\";v=\"153\", \"Piki\";v=\"1\"")
+            .build();
+        HttpPageFetcher bouncing = new HttpPageFetcher(clientHints, resolver, cookies, FetchProperties.defaults());
+
+        PageContent page = bouncing.fetch(ProductLink.parse("https://al.wconcept.co.kr/8xpg78c"));
+
+        String host = page.finalUrl().value().getHost();
+        assertTrue(host != null && host.endsWith("wconcept.co.kr"), "최종 호스트가 W컨셉이어야 한다");
+        assertTrue(page.retainedChars() > 1_000, "바운스를 빠져나와 상품 페이지 본문을 받았어야 한다");
     }
 }
