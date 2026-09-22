@@ -72,13 +72,18 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
     steps:
+      # workflow_call 로 불리면 checkout 의 기본 대상이 "호출자 레포" 라, repository 를 명시하지 않으면
+      # 이 레포가 아니라 core 소스를 받아 빌드한다(실측 — core 의 proto 참조가 Unresolved reference 로 터졌다).
+      # ref 도 마찬가지로 호출자 SHA 라 여기서는 쓰지 않고 이 레포의 main 을 받는다.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.DEPLOY_SHA }}
+          repository: ${{ github.event_name == 'workflow_call' && 'TeamPiKi/extractor' || github.repository }}
+          ref: ${{ github.event_name == 'workflow_call' && 'main' || env.DEPLOY_SHA }}
           persist-credentials: false
 
+      # 공용 contract 는 러너 빌드 경로(dispatch·call)에서 필요하다. workflow_run 은 CI 아티팩트를 받아 쓴다.
       - name: Checkout extraction contract (manual dispatch fallback)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
         uses: actions/checkout@v4
         with:
           repository: TeamPiKi/infra
