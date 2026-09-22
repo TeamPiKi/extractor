@@ -72,13 +72,16 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-24.04-arm # 박스(t4g/arm64)와 동일 arch 네이티브 빌드 - buildx 크로스빌드 불필요 (core deploy 와 같은 선택)
     steps:
-      # workflow_call 로 불리면 checkout 의 기본 대상이 "호출자 레포" 라, repository 를 명시하지 않으면
-      # 이 레포가 아니라 core 소스를 받아 빌드한다(실측 — core 의 proto 참조가 Unresolved reference 로 터졌다).
-      # ref 도 마찬가지로 호출자 SHA 라 여기서는 쓰지 않고 이 레포의 main 을 받는다.
+      # 재사용 호출(workflow_call)이면 checkout 의 기본 대상이 "호출자 레포" 라, 명시하지 않으면 이 레포가
+      # 아니라 core 소스를 받아 빌드한다(실측 — core 의 proto 참조가 Unresolved reference 로 터졌다).
+      #
+      # 호출 여부를 github.event_name 으로 가르면 안 된다 — 재사용 워크플로는 호출자의 event_name 을
+      # 그대로 물려받아 'workflow_dispatch' 로 보인다(실측: 그 조건으로는 분기가 안 걸려 core 를 받았다).
+      # github.repository 가 이 레포인지로 판별한다(호출되면 호출자 레포명이 들어온다).
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.event_name == 'workflow_call' && 'TeamPiKi/extractor' || github.repository }}
-          ref: ${{ github.event_name == 'workflow_call' && 'main' || env.DEPLOY_SHA }}
+          repository: TeamPiKi/extractor
+          ref: ${{ github.repository == 'TeamPiKi/extractor' && env.DEPLOY_SHA || 'main' }}
           persist-credentials: false
 
       # 이미지 태그는 "실제로 빌드한 커밋" 이어야 한다. workflow_call 은 이 레포의 main 을 받는데
@@ -91,7 +94,9 @@ jobs:
 
       # 공용 contract 는 러너 빌드 경로(dispatch·call)에서 필요하다. workflow_run 은 CI 아티팩트를 받아 쓴다.
       - name: Checkout extraction contract (manual dispatch fallback)
-        if: github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call'
+        # 러너 빌드 경로(수동 dispatch·재사용 호출)에서 필요하다. 호출은 event_name 으로 못 가르므로
+        # "workflow_run 이 아니거나, 호출돼서 repository 가 이 레포가 아닌" 경우로 판별한다.
+        if: github.event_name != 'workflow_run' || github.repository != 'TeamPiKi/extractor'
         uses: actions/checkout@v4
         with:
           repository: TeamPiKi/infra
