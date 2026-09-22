@@ -12,6 +12,10 @@
 #   트리거 누락으로 이틀 방치)를 계기로 "머지 = 무조건 배포 + 무중단" 으로 대체됐다 (2026-08-10 결정).
 name: Deploy
 
+# request_id 가 오면 제목에 실어, 호출자(core 의 migrate.yml)가 자기 dispatch 로 생긴 실행만
+# 정확히 집어낼 수 있게 한다. 없으면 기본 제목.
+run-name: ${{ inputs.request_id && format('Deploy (req {0})', inputs.request_id) || 'Deploy' }}
+
 on:
   workflow_run:
     workflows: [CI]
@@ -26,6 +30,11 @@ on:
         default: ""
       migration_role_arn:
         description: "[이관 전용] ECR push 에 쓸 역할 ARN. 신 계정 이미지 푸시용. 비우면 vars.AWS_ECR_PUSH_ROLE_ARN(구 계정 역할)."
+        required: false
+        type: string
+        default: ""
+      request_id:
+        description: "[이관 전용] 호출자가 자기 실행을 특정하려고 넘기는 값. run-name 에 실려 조회 키가 된다."
         required: false
         type: string
         default: ""
