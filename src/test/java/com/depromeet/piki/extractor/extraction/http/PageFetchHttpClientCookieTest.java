@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.micrometer.observation.ObservationRegistry;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -74,6 +76,37 @@ class PageFetchHttpClientCookieTest {
             assertEquals(2, requestHeads.size());
             assertFalse(requestHeads.get(1).contains("Cookie:"), requestHeads.get(1));
         }
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    @DisplayName("빌더 기본 저장소는 스레드를 넘어 쿠키를 싣고 요청 스코프 저장소는 싣지 않는다 - 이 저장소가 있는 이유")
+    void defaultStoreLeaksAcrossThreadsAndScopedDoesNot() throws Exception {
+        // 기본 클라이언트는 우리 DNS 를 안 거치므로 loopback 을 직접 친다. 그 차이는 쿠키 판정과 무관하다.
+        assertTrue(ridesOnAnotherThread(builderDefaultClient(), "127.0.0.1"), "지정 없는 기본 저장소는 샌다");
+        assertFalse(ridesOnAnotherThread(client(new RequestScopedCookieStore()), "cookie.test"), "요청 스코프는 안 샌다");
+    }
+
+    /** 한 요청이 쿠키를 받은 뒤, 다른 스레드가 보낸 요청에 그 쿠키가 실리는가. */
+    private static boolean ridesOnAnotherThread(RestClient client, String host) throws Exception {
+        List<String> heads = new CopyOnWriteArrayList<>();
+        try (ServerSocket server = new ServerSocket(0, 0, InetAddress.getLoopbackAddress())) {
+            serve(server, heads, List.of(SET_COOKIE_302, page()));
+            String base = "http://" + host + ":" + server.getLocalPort();
+            client.get().uri(base + "/p").retrieve().body(String.class);
+            Thread other = new Thread(() -> client.get().uri(base + "/next").retrieve().body(String.class));
+            other.start();
+            other.join();
+            return heads.get(1).contains("Cookie: bounce");
+        }
+    }
+
+    /** 저장소를 지정하지 않은 조립 - 빌더가 자기 기본 저장소를 끼운다. */
+    private static RestClient builderDefaultClient() {
+        return RestClient.builder()
+            .requestFactory(new HttpComponentsClientHttpRequestFactory(
+                HttpClients.custom().disableRedirectHandling().build()))
+            .build();
     }
 
     /** 운영과 같은 조립 — DNS 만 loopback 으로 돌려 실제 클라이언트를 그대로 쓴다. */
