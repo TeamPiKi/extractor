@@ -155,6 +155,8 @@ resource "aws_instance" "extractor" {
   ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.ubuntu[0].id
   instance_type          = var.instance_type
   subnet_id              = data.aws_subnet.public.id
+  # 비우면 null 로 넘겨 기존처럼 키페어 없이 만든다(공개키는 terraform 밖에서 주입).
+  key_name               = var.key_name != "" ? var.key_name : null
   iam_instance_profile   = aws_iam_instance_profile.extractor.name
   vpc_security_group_ids = [aws_security_group.extractor.id]
 

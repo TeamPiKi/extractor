@@ -90,3 +90,15 @@ variable "github_repo" {
   type        = string
   default     = "TeamPiKi/extractor"
 }
+
+# SSH 키페어 이름. 기본값 빈 문자열이면 key_name 없이(기존 동작) 박스를 만든다 — 공개키는 terraform
+# 밖에서 authorized_keys 로 주입한다는 원래 설계 그대로다.
+#
+# 계정 이관에서는 이 값을 채운다. 새 계정 박스에는 사람이 넣어 둔 authorized_keys 가 없어 배포
+# 워크플로의 scp 가 "unable to authenticate, attempted methods [none publickey]" 로 죽기 때문이다(실측).
+# 이관 워크플로(core 의 migrate.yml)가 bootstrap 단계에서 등록한 키 이름을 넘긴다.
+variable "key_name" {
+  description = "EC2 키페어 이름. 비우면 키페어 없이 생성(기존 동작). 계정 이관 시 bootstrap 이 등록한 키 이름을 넣는다."
+  type        = string
+  default     = ""
+}
