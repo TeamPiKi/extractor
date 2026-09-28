@@ -161,7 +161,16 @@ jobs:
           host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "shared-infra/blocks/run_container.sh,shared-infra/blocks/healthcheck.sh,shared-infra/blocks/slot_decide.sh,shared-infra/blocks/slot_switch.sh,shared-infra/blocks/deploy_slot.sh,shared-infra/blocks/ssm_env.sh,infra/nginx/extractor.conf,infra/scripts/provision-observability.sh"
+          source: |
+            shared-infra/blocks/deploy_slot.sh,
+            shared-infra/blocks/healthcheck.sh,
+            shared-infra/blocks/prune_images.sh,
+            shared-infra/blocks/run_container.sh,
+            shared-infra/blocks/slot_decide.sh,
+            shared-infra/blocks/slot_switch.sh,
+            shared-infra/blocks/ssm_env.sh,
+            infra/nginx/extractor.conf,
+            infra/scripts/provision-observability.sh
           target: "/tmp/piki-blocks"
           strip_components: 2
 
@@ -257,6 +266,10 @@ jobs:
             #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙은 MaxRAMPercentage=70 이 cgroup 한도
             #   기준으로 잡혀 약 448m. 파싱 스파이크 OOM 이 관측되면 실측으로 재조정한다.
             sudo systemctl enable nginx >/dev/null 2>&1 || true
+
+            # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
+            bash /tmp/piki-blocks/prune_images.sh
+
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \
               --slot-a blue:18090 --slot-b green:18091 \
@@ -267,6 +280,3 @@ jobs:
               --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \
               --label piki.observe=true --label piki.service=piki-extractor --label piki.metrics.path=/actuator/prometheus
-
-            # 이전 이미지 정리 (dangling 만 - 직전 sha 태그는 남겨 수동 롤백 여지 유지)
-            docker image prune -f >/dev/null
