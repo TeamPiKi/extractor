@@ -301,8 +301,8 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("허락이 없어도 불완전 결과는 headless 로 승격한다 (허락은 승격 조건이 아니다)")
     void unauthorizedStillEscalates() {
-        // 브라우저로 여는 것 자체는 신원을 밝히고 하는 일이라 허락을 전제하지 않는다. 허락이 여는 것은
-        // 렌더 서비스의 우회 수단뿐이고, 그 판단은 이 클래스가 아니라 렌더 경계 너머에 있다.
+        // 브라우저로 여는 것 자체는 신원을 밝히고 하는 일이라 허락을 전제하지 않는다. 허락을 쓰는 곳은
+        // 렌더 서비스뿐이고, 그 판단은 이 클래스가 아니라 렌더 경계 너머에 있다.
         FakeStrategy plain = new FakeStrategy(l -> incomplete);
         ProductSnapshot rescued =
             new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", 23_900, null);
@@ -318,7 +318,7 @@ class FallbackProductLinkExtractorTest {
     @Test
     @DisplayName("허락 플래그는 headless 전략까지 그대로 전달된다")
     void authorizationReachesHeadlessStrategy() {
-        // 이 전달이 끊기면 허락받은 대상이 조용히 정직 모드로 가거나 그 반대가 된다 — 반환값으로는 안 드러난다.
+        // 이 전달이 끊기면 허락받은 대상이 조용히 허락 없는 요청으로 가거나 그 반대가 된다 — 반환값으로는 안 드러난다.
         FakeStrategy plain = new FakeStrategy(l -> {
             throw PageFetchException.clientError(new RuntimeException("403"));
         });

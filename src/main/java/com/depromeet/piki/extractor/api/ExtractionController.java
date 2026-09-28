@@ -40,7 +40,7 @@ public class ExtractionController {
         String model = request.getModel().isEmpty() ? null : request.getModel();
         // model 은 호출자가 백오피스에서 지정한 값이라 원장에 남긴다 — 추출 품질이 흔들릴 때 "그때 어느 모델이었나"를
         // 되짚는 유일한 근거다(자유 문자열이라 메트릭 라벨로는 못 쓴다).
-        // authorized 도 원장에 남긴다 — 우회 수단이 열린 요청이었는지를 사후에 되짚을 수 있는 유일한 근거다.
+        // authorized 도 원장에 남긴다 — 허락받은 요청이었는지를 사후에 되짚을 수 있는 유일한 근거다.
         log.info(
             "extract request correlationId={} authorized={} model={} url={}",
             correlationId,
