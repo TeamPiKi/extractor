@@ -151,6 +151,22 @@ class HttpPageFetcherRedirectTest {
     }
 
     @Test
+    @DisplayName("루트 경로라도 query 로 상품을 싣는 redirect 타깃은 끝까지 따라가 본문을 받는다")
+    void followsRedirectToRootPathWithQuery() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                server.expect(requestTo("https://bit.ly/abc"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https://shop.example.com/?goodsNo=123")));
+                server.expect(requestTo("https://shop.example.com/?goodsNo=123"))
+                    .andRespond(withSuccess("<html>goods</html>", MediaType.TEXT_HTML));
+            });
+
+        PageContent page = fetcher.fetch(ProductLink.parse("https://bit.ly/abc"));
+
+        assertEquals("goods", page.document().text());
+    }
+
+    @Test
     @DisplayName("루트로 등록된 링크가 다른 호스트의 루트로 redirect 되는 것은 판정하지 않는다")
     void rootRegisteredLinkMayRedirectToRoot() {
         HttpPageFetcher fetcher =
