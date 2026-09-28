@@ -11,7 +11,7 @@ import java.util.List;
 public interface HeadlessRenderer {
 
     /**
-     * @param authorized 허락받은 대상인가. 렌더 서비스는 이 값이 true 일 때만 우회 수단(프록시)을 연다.
+     * @param authorized 허락받은 대상인가.
      *     이 경계는 판정하지 않고 전달만 한다 — 원장은 호출자(core)에 있다.
      */
     List<RenderedHop> render(ProductLink link, boolean authorized);

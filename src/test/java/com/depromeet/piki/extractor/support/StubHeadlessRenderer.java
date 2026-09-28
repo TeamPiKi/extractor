@@ -12,7 +12,7 @@ import java.util.function.Function;
  * 켜서 검증할 때의 주입 지점이다. default build 는 throw(명시 세팅 강제).
  *
  * <p>lastAuthorized 를 기록하는 이유: 허락 플래그가 렌더 경계까지 그대로 도달하는지는 반환값으로 드러나지
- * 않는다. 이 값이 끊기면 우회 수단이 열려야 할 요청이 조용히 정직 모드로 가거나 그 반대가 된다.
+ * 않는다. 이 값이 끊기면 허락받은 요청이 조용히 허락 없는 요청으로 가거나 그 반대가 된다.
  */
 public class StubHeadlessRenderer implements HeadlessRenderer {
 
