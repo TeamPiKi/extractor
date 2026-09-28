@@ -56,6 +56,12 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         Chosen fallback = null;   // 그중 LLM 에 넘길 것이 있는 첫 후보
         for (Candidate candidate : candidates(hops)) {
             PageContent page = PageContent.of(link, candidate.html(), candidate.hop().url());
+            // 구조화 추출보다 먼저 거른다 — 홈의 대표 상품 JSON-LD 가 등록 상품으로 채택되지 않게.
+            if (!link.isSiteRoot() && candidate.hop().url().isSiteRoot()) {
+                rootLanded = true;
+                blocked |= HeadlessBlockSignal.isChallenge(page.document());
+                continue;
+            }
             StructuredExtraction result = structuredDataExtractor.extract(page);
             if (result instanceof StructuredExtraction.Extracted) {
                 return htmlSnapshotPipeline.extract(page, result, timing, model);
@@ -63,10 +69,6 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
             boolean challenge = HeadlessBlockSignal.isChallenge(page.document());
             blocked |= challenge;
             if (challenge || HeadlessBlockSignal.isBlocked(candidate.hop().status(), candidate.hop().headers())) {
-                continue;
-            }
-            if (!link.isSiteRoot() && candidate.hop().url().isSiteRoot()) {
-                rootLanded = true;
                 continue;
             }
             if (first == null) {

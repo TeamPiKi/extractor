@@ -144,6 +144,37 @@ class HeadlessProductLinkExtractorTest {
     }
 
     @Test
+    @DisplayName("사이트 루트 홉의 구조화 데이터는 등록 상품으로 채택하지 않는다 — 홈의 대표 상품일 뿐이다")
+    void structuredDataOnSiteRootIsNotAdopted() {
+        ProductLink home = ProductLink.parse("https://mobile.a-bly.com/");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(link, 302, "", ""),
+            hop(home, 200, SHELL, product("홈 대표 상품", 1_000))
+        ));
+
+        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null));
+
+        assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
+        assertEquals(0, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("루트 경로라도 query 로 상품을 싣는 홉은 사이트 루트 착지가 아니다")
+    void rootPathWithQueryIsNotSiteRoot() {
+        stubGemini.build = request -> new GeminiExtractionResult(true, "쿼리 상품", 3_000, "KRW", "https://cdn.example.com/i.png");
+        ProductLink goods = ProductLink.parse("https://mobile.a-bly.com/?goodsNo=1");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(link, 302, "", ""),
+            hop(goods, 200, TEXT, TEXT)
+        ));
+
+        ProductSnapshot snapshot = extractor.extract(link, false, null);
+
+        assertEquals("쿼리 상품", snapshot.name());
+        assertEquals(1, stubGemini.invocations());
+    }
+
+    @Test
     @DisplayName("차단 status 뒤에 실린 온전한 구조화 데이터는 그대로 쓴다 — 봇 방어는 어떤 status 로도 위장한다")
     void structuredDataBehindBlockStatusStillExtracts() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 403, product("위장 403 상품", 1_000), "")));
