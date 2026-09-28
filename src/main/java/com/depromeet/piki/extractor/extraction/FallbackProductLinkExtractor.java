@@ -97,7 +97,8 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             // Exception 이 아니라 Throwable 을 잡는다: headless 구현이 미구현 오류나 OOM 등 Error 로 실패해도
             // outcome=failed 집계가 빠지지 않게. 여기선 기록만 하고 그대로 rethrow 하므로(swallow 아님) Error 의미는 보존된다.
             escalationCounter(OUTCOME_FAILED, category).increment();
-            log.warn(
+            // info 인 이유: 이 실패는 예외로 상위에 전파돼 호출자의 파싱 실패 알림이 되므로, 여기서 warn 을 더하면 같은 실패가 두 번 울린다.
+            log.info(
                 "extract escalate=headless outcome=failed plainCategory={} headlessCause={} url={}",
                 category,
                 headlessFailure.getClass().getSimpleName(),

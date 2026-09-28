@@ -12,6 +12,7 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
+import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -109,6 +110,68 @@ class HeadlessProductLinkExtractorTest {
 
         assertEquals(ExtractionErrorCode.NO_EXTRACTABLE_CONTENT, e.code());
         assertEquals(0, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("상품 경로가 사이트 루트에 착지한 홉만 남으면 LLM 을 부르지 않고 일시 실패(UPSTREAM_ERROR)다")
+    void rootLandingOnlyFailsTransientlyWithoutLlm() {
+        ProductLink home = ProductLink.parse("https://mobile.a-bly.com/");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(link, 302, "", ""),
+            hop(home, 200, TEXT, TEXT)
+        ));
+
+        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null));
+
+        assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
+        assertFalse(e.permanent());
+        assertEquals(0, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("사이트 루트에 착지했어도 앞 홉에 구조화 데이터가 있으면 그것으로 끝낸다")
+    void structuredDataBeforeRootLandingStillWins() {
+        ProductLink home = ProductLink.parse("https://mobile.a-bly.com/");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(mobile, 200, product("가죽 벨트", 6_380), ""),
+            hop(home, 200, TEXT, TEXT)
+        ));
+
+        ProductSnapshot snapshot = extractor.extract(link, false, null);
+
+        assertEquals("가죽 벨트", snapshot.name());
+        assertEquals(0, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("사이트 루트 홉의 구조화 데이터는 등록 상품으로 채택하지 않는다 — 홈의 대표 상품일 뿐이다")
+    void structuredDataOnSiteRootIsNotAdopted() {
+        ProductLink home = ProductLink.parse("https://mobile.a-bly.com/");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(link, 302, "", ""),
+            hop(home, 200, SHELL, product("홈 대표 상품", 1_000))
+        ));
+
+        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null));
+
+        assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
+        assertEquals(0, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("루트 경로라도 query 로 상품을 싣는 홉은 사이트 루트 착지가 아니다")
+    void rootPathWithQueryIsNotSiteRoot() {
+        stubGemini.build = request -> new GeminiExtractionResult(true, "쿼리 상품", 3_000, "KRW", "https://cdn.example.com/i.png");
+        ProductLink goods = ProductLink.parse("https://mobile.a-bly.com/?goodsNo=1");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
+            hop(link, 302, "", ""),
+            hop(goods, 200, TEXT, TEXT)
+        ));
+
+        ProductSnapshot snapshot = extractor.extract(link, false, null);
+
+        assertEquals("쿼리 상품", snapshot.name());
+        assertEquals(1, stubGemini.invocations());
     }
 
     @Test

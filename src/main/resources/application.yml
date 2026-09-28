@@ -25,6 +25,12 @@ gemini:
     # 파싱 작업 큐 회수 한 곳으로 모여 있다. 여기서 내부 재시도를 켜면 재시도가 이중으로 겹친다.
     max-attempts: ${GEMINI_RETRY_MAX_ATTEMPTS:1}
 
+logging:
+  level:
+    # cafe24 몰이 Set-Cookie domain 을 자기 도메인이 아닌 *.cafe24.com 으로 내려 HttpClient 가 거부할 때마다 WARN.
+    # 추출 결과와 무관한 몰 쪽 결함이라 끈다 (extractor#82).
+    org.apache.hc.client5.http.protocol.ResponseProcessCookies: ERROR
+
 management:
   endpoints:
     web:

@@ -181,6 +181,7 @@ class ExtractionErrorCodeCatalogTest {
             new FactoryCase("PageFetchException.clientError", PageFetchException.clientError(cause)),
             new FactoryCase("PageFetchException.emptyShell", PageFetchException.emptyShell(cause)),
             new FactoryCase("PageFetchException.tooManyRedirects", PageFetchException.tooManyRedirects()),
+            new FactoryCase("PageFetchException.redirectedToSiteRoot", PageFetchException.redirectedToSiteRoot()),
             new FactoryCase("PageFetchException.malformedRedirect", PageFetchException.malformedRedirect(cause)),
             new FactoryCase("PageFetchException.blockedHost", PageFetchException.blockedHost()),
 
