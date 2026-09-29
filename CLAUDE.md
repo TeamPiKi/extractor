@@ -5,9 +5,9 @@
 core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또는 S3 이미지)을 받아 fetch → 구조화 파싱(JSON-LD/OG) → LLM(Gemini) fallback → 정규화를 거쳐 추출 결과를 돌려준다. 단순 fetch 로 닿지 않는 호스트는 renderer(헤드리스 브라우저)가 거쳐 간 홉들을 받아 같은 파이프라인에 태운다 — 어느 홉을 쓸지 고르는 판단은 이 repo 가 한다.
 
 - **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(core 파싱 작업 큐)의 몫이다.
-- **소비자는 core 워커 하나뿐.** 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
-- **계약의 정본은 infra 의 `contracts/extraction-api.md`** 와 실패 code 카탈로그 `contracts/extraction-error-codes.yaml` 이다(`docs/api-contract.md` 는 그리로 보내는 포인터). 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
-- 렌더링 **방법론**은 private repo(renderer)에만 둔다. 이 repo(public)에는 "이 호스트는 헤드리스로 라우팅" 수준까지만 담는다.
+- **소비자는 core 하나뿐**(파싱 작업 워커·관리자 모델 프로브). 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
+- **계약의 정본은 infra 의 `contracts/`** 다(`docs/api-contract.md` 는 그리로 보내는 포인터). 의미·진화 규칙은 `extraction-api.md`, 요청·응답 모양은 `extraction.proto`(빌드가 `shared-infra/contracts/` 에서 클래스를 생성), 실패 code 는 `extraction-error-codes.yaml` 이 정본이다. 모양을 바꿀 땐 infra 의 proto 를 먼저 고친다. 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
+- 렌더링 **방법론**은 private repo(renderer)에만 둔다. 이 repo(public)에는 renderer 의 이름·역할·호출 관계와 스택 표기(Chrome·JS 렌더)까지만 담고, 그 너머의 수단은 쓰지 않는다.
 
 ## 언어: Java 25
 
@@ -50,7 +50,7 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 예외 정책
 
-판단 기준 한 줄은 core 와 같다: **"정상 호출로 여기 닿을 수 있나?"** 단, 이 서비스의 클라이언트는 core 워커다.
+판단 기준 한 줄은 core 와 같다: **"정상 호출로 여기 닿을 수 있나?"** 단, 이 서비스의 클라이언트는 core 다.
 
 - 닿는다 → **계약** → `ExtractionException`(커스텀, code + 일시/확정 구분 내장) → 핸들러가 422 또는 502 로 매핑.
 - 못 닿는다 → **불변식** → `IllegalStateException`/`IllegalArgumentException` → 일반 500. 호출자는 이를 "일시 실패"로 보고 bounded 재시도하므로 안전하다.
@@ -59,15 +59,13 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 ## 로깅
 
-- 클래스에 `@Slf4j` 를 붙여 쓴다(필드명 `log`). 명시적 `LoggerFactory.getLogger` 선언은 쓰지 않는다.
 - URL 은 마스킹해서 찍는다(`safeLogString`: host+path만, 쿼리스트링 제외). 쿼리스트링에 토큰이 실릴 수 있어서다. 토큰·원문 HTML·LLM 응답 원문도 로그에 남기지 않는다.
 - 레벨: info=정상 흐름·지표·호출자 계약 위반 / warn=외부(몰·Gemini·S3) 실패·에스컬레이션 실패·SSRF 차단 / error=서버 버그(스택 포함).
-- SLF4J `{}` placeholder 사용, 문자열 연결 금지.
 
 ## 설정값
 
 - 운영 튜닝 손잡이(UA·타임아웃·리다이렉트 횟수)는 하드코딩하지 않고 `@ConfigurationProperties` 로 외부화한다(`FetchProperties`·`GeminiProperties`·`HeadlessExtractionProperties` 등).
-- 크기 안전 상한은 손잡이가 아니라 안전장치라 클래스 상수로 둔다(`HttpPageFetcher.MAX_FETCH_BYTES`·`PruningHtmlParser.MAX_RETAINED_CHARS`·`GeminiHtmlExtractor.MAX_LLM_CHARS`). 설정으로 열어 둔 동안 아무도 지정하지 않았고 키 이름만 드리프트할 자리가 생겨 상수로 되돌린 이력이 `HttpPageFetcher`·`PruningHtmlParser` 의 상수 주석에 있다.
+- 크기 안전 상한은 손잡이가 아니라 안전장치라 클래스 상수로 둔다(근거는 `PruningHtmlParser.MAX_RETAINED_CHARS` 의 Javadoc).
 - 기본값은 코드가 정본이라 문서에 숫자를 박지 않는다.
 
 ## 테스트
@@ -78,15 +76,15 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 - **메서드명**: Java 는 backtick 식별자가 안 되므로 **`@DisplayName` 에 한국어 한 문장**으로 시나리오를 적는다 (원칙의 "메서드명은 시나리오를 한 문장으로" 를 Java 로 바인딩한 것).
 - **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
-- **DB 가 없다** — Testcontainers·Docker 불필요. `./gradlew test` 가 그냥 돈다. 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
-- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(PageFetcher·GeminiClient·S3·HeadlessRenderer)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
+- **DB 가 없다** — Testcontainers·Docker 불필요. 사전 조건은 `shared-infra/contracts/` 하나다(로컬은 infra `install.sh` 가 설치, 없으면 proto 생성 단계에서 컴파일 실패). 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
+- **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(PageFetcher·GeminiClient·ImageStorage·HeadlessRenderer)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
 - **메타 테스트**: `support/TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)가 `./gradlew test` 에 포함된다. 규칙을 바꿀 땐 산문을 먼저 고치고 메타 테스트를 따라 고친다.
 
 ## 의존성
 
 - 버전의 single source 는 `build.gradle.kts`. 문서에 버전 숫자를 박지 않는다.
 - 새 의존성은 Maven Central 최신 안정 버전(pre-release 제외), Spring Boot BOM 관리 대상은 버전 명시 금지.
-- core 와 공유하는 라인(jsoup·guava·AWS SDK·springdoc)은 그쪽과 버전을 맞춘다.
+- core 의 `build.gradle.kts` 에도 있는 라이브러리는 그쪽과 버전을 맞춘다. protobuf 는 생성 코드와 런타임 호환이 걸려 특히 어긋나면 안 된다.
 
 ## 브랜치·PR
 
