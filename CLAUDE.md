@@ -6,7 +6,7 @@ core(코틀린)에서 분리된 **상품 추출 서비스**다. 상품 URL(또�
 
 - **무상태.** DB 없음, 호출 간 상태 없음. 상태를 넣고 싶어지면 설계 경고 신호다. 재시도·내구성·상태 전이는 전부 호출자(core 파싱 작업 큐)의 몫이다.
 - **소비자는 core 하나뿐**(파싱 작업 워커·관리자 모델 프로브). 공개 API 가 아니다. 보안그룹 내부망 전용, 인증 없음.
-- **계약의 정본은 infra 의 `contracts/`** 다(`docs/api-contract.md` 는 그리로 보내는 포인터). 의미·진화 규칙은 `extraction-api.md`, 요청·응답 모양은 `extraction.proto`(빌드가 `shared-infra/contracts/` 에서 클래스를 생성), 실패 code 는 `extraction-error-codes.yaml` 이 정본이다. 모양을 바꿀 땐 infra 의 proto 를 먼저 고친다. 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
+- **계약의 정본은 infra 의 `contracts/`** 다(파일별 역할은 `docs/api-contract.md`). 모양을 바꿀 땐 infra 의 proto 를 먼저 고친다. 응답은 3갈래뿐이다: 2xx(성공) / 422+code(확정 실패) / 그 외 전부(일시 실패). 진화는 additive-only, 배포는 Extractor 먼저.
 - 렌더링 **방법론**은 private repo(renderer)에만 둔다. 이 repo(public)에는 renderer 의 이름·역할·호출 관계와 스택 표기(Chrome·JS 렌더)까지만 담고, 그 너머의 수단은 쓰지 않는다.
 
 ## 언어: Java 25
@@ -76,7 +76,7 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 - **메서드명**: Java 는 backtick 식별자가 안 되므로 **`@DisplayName` 에 한국어 한 문장**으로 시나리오를 적는다 (원칙의 "메서드명은 시나리오를 한 문장으로" 를 Java 로 바인딩한 것).
 - **단언**: JUnit 5 `Assertions` 기본. 컬렉션·객체 그래프 비교만 AssertJ.
-- **DB 가 없다** — Testcontainers·Docker 불필요. 사전 조건은 `shared-infra/contracts/` 하나다(로컬은 infra `install.sh` 가 설치, 없으면 proto 생성 단계에서 컴파일 실패). 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
+- **DB 가 없다** — Testcontainers·Docker 불필요. 사전 조건은 `shared-infra/contracts/` 하나다(로컬은 infra `install.sh` 가 설치, 없으면 계약 클래스가 생성되지 않아 컴파일 실패). 저장소 격리·트랜잭션 롤백 관련 원칙은 이 repo 에 해당 사항이 없다.
 - **좌표**: 통합 베이스는 `support/IntegrationTestSupport`(`@SpringBootTest` 유일 선언), 외부 경계 stub(PageFetcher·GeminiClient·ImageStorage·HeadlessRenderer)은 `support/IntegrationStubs` 에 `@Primary` 로 등록한다.
 - **메타 테스트**: `support/TestConventionTest`(금지 import·컨텍스트 규칙 기계 강제)가 `./gradlew test` 에 포함된다. 규칙을 바꿀 땐 산문을 먼저 고치고 메타 테스트를 따라 고친다.
 
@@ -84,7 +84,7 @@ core 의 Elvis 규칙에 대응하는 Java 규칙:
 
 - 버전의 single source 는 `build.gradle.kts`. 문서에 버전 숫자를 박지 않는다.
 - 새 의존성은 Maven Central 최신 안정 버전(pre-release 제외), Spring Boot BOM 관리 대상은 버전 명시 금지.
-- core 의 `build.gradle.kts` 에도 있는 라이브러리는 그쪽과 버전을 맞춘다. protobuf 는 생성 코드와 런타임 호환이 걸려 특히 어긋나면 안 된다.
+- core 의 `build.gradle.kts` 에도 있는 라이브러리는 그쪽과 버전을 맞춘다.
 
 ## 브랜치·PR
 
