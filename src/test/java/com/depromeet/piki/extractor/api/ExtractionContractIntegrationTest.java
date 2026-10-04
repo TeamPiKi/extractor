@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.contracts.extraction.v1.ExtractionProto;
+import com.depromeet.piki.contracts.render.v1.RenderProto;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiHttpClient;
 import com.depromeet.piki.extractor.support.IntegrationTestSupport;
@@ -20,7 +21,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
 /**
- * 계약 정본(TeamPiKi/infra 의 contracts/extraction.proto)의 service 선언과 이 서비스의 실물을 대조한다.
+ * 계약 정본(TeamPiKi/infra 의 contracts/extraction.proto·render.proto)의 service 선언과 이 서비스의 실물을 대조한다.
  * 경로는 어노테이션 상수라 계약에서 읽어 올 수 없어, 등록된 매핑을 계약과 비교한다.
  */
 class ExtractionContractIntegrationTest extends IntegrationTestSupport {
@@ -66,5 +67,17 @@ class ExtractionContractIntegrationTest extends IntegrationTestSupport {
         assertTrue(
             budget.compareTo(callerReadTimeout) < 0,
             "내부 예산 " + budget + " 이 호출자 read 타임아웃 " + callerReadTimeout + " 이상이다");
+    }
+
+    /** 기본값이 어노테이션 상수라 계약에서 읽어 올 수 없어 대조한다. renderer 는 자기 렌더 기한을 이 값과 대조한다. */
+    @Test
+    @DisplayName("렌더 read 타임아웃 기본값은 렌더 계약의 호출자 read 타임아웃과 같다")
+    void renderReadTimeoutMatchesRenderContract() {
+        Duration contractTimeout = Duration.ofSeconds(RenderProto.getDescriptor()
+            .findServiceByName("RenderService")
+            .getOptions()
+            .getExtension(RenderProto.callerReadTimeoutSeconds));
+
+        assertEquals(contractTimeout, headlessProperties.readTimeout());
     }
 }
