@@ -70,21 +70,6 @@ variable "root_volume_size" {
   default     = 25
 }
 
-# ---------------------------------------------------------------------------
-# 근미래(이관 6단계 — 이미지 OCR 경로) 대비: S3 이미지 버킷 접근.
-# 지금은 null(정책 미생성). 6단계 착수 때 버킷 이름을 tfvars 로 넣으면 읽기/쓰기 정책이 생긴다.
-# ---------------------------------------------------------------------------
-variable "images_bucket_name" {
-  description = <<-EOT
-    상품 이미지 S3 버킷 이름(raw 읽기 + 크롭 결과 쓰기). null 이면 정책을 만들지 않는다.
-    extractor 는 dev/staging/prod 세 환경 트래픽을 받고 각 환경 버킷이 다르므로, IAM 리소스에
-    와일드카드를 쓴다 — 예: "*piki-images-<ACCOUNT_ID>" 를 넣으면 dev-piki-images-*·staging-*·piki-images-* 를 모두 덮는다.
-    account id 가 들어가 public repo 에 커밋하지 않는다 — apply 시 -var 또는 gitignore 된 tfvars 로 주입한다.
-  EOT
-  type        = string
-  default     = null
-}
-
 variable "github_repo" {
   description = "OIDC push 역할의 assume 을 허용할 GitHub repo (owner/name)"
   type        = string

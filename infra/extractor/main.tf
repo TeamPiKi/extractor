@@ -88,18 +88,20 @@ resource "aws_iam_role_policy" "extractor_params" {
   })
 }
 
-# 이관 6단계(이미지 OCR 경로) 대비 — images_bucket_name 이 주어질 때만 생성된다.
-# raw 원본 읽기(items/raw/*) + 크롭 결과 쓰기(items/*). 버킷 관리(수명주기·정책)는 piki 앱 state 소관이라 여기선 접근권만.
+data "aws_caller_identity" "current" {}
+
+# 변수로 받으면 주입을 빠뜨린 apply 가 정책을 지운다(TeamPiKi/extractor#97).
+# 앞의 * 는 환경 접두사(dev-·staging-) 자리다. 이름 형식의 정본은 TeamPiKi/core terraform 의 image_bucket_name.
+# 버킷 관리(수명주기·정책)는 piki 앱 state 소관이라 여기선 접근권만.
 resource "aws_iam_role_policy" "extractor_images" {
-  count = var.images_bucket_name == null ? 0 : 1
-  name  = "${var.name_prefix}-images"
-  role  = aws_iam_role.extractor.id
+  name = "${var.name_prefix}-images"
+  role = aws_iam_role.extractor.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
       Action   = ["s3:GetObject", "s3:PutObject"]
-      Resource = "arn:aws:s3:::${var.images_bucket_name}/items/*"
+      Resource = "arn:aws:s3:::*piki-images-${data.aws_caller_identity.current.account_id}/items/*"
     }]
   })
 }
