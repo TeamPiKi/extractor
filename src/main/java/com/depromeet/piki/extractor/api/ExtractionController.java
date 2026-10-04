@@ -37,7 +37,6 @@ public class ExtractionController {
     ) {
         // 정상 흐름이면 호출자가 등록 경계에서 이미 걸렀다 — 여기 parse 는 다층 방어다.
         ProductLink link = ProductLink.parse(request.getUrl());
-        String model = modelOrNull(request.getModel());
         // model 은 호출자가 백오피스에서 지정한 값이라 원장에 남긴다 — 추출 품질이 흔들릴 때 "그때 어느 모델이었나"를
         // 되짚는 유일한 근거다(자유 문자열이라 메트릭 라벨로는 못 쓴다).
         // authorized 도 원장에 남긴다 — 허락받은 요청이었는지를 사후에 되짚을 수 있는 유일한 근거다.
@@ -45,10 +44,11 @@ public class ExtractionController {
             "extract request correlationId={} authorized={} model={} url={}",
             correlationId,
             request.getAuthorized(),
-            model,
+            request.getModel(),
             link.safeLogString()
         );
-        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.getAuthorized(), model);
+        // 생략된 model 은 빈 문자열로 읽히고(proto3), 기본 모델 처리는 모델을 실제로 쓰는 GeminiHttpClient 가 한다.
+        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.getAuthorized(), request.getModel());
         return ExtractionResultMapper.from(snapshot);
     }
 
@@ -57,21 +57,16 @@ public class ExtractionController {
         @RequestBody ImageExtractionRequest request,
         @RequestHeader(value = "X-Correlation-Id", required = false) String correlationId
     ) {
-        String model = modelOrNull(request.getModel());
         // bucket 은 내부 식별자라 URL 과 달리 마스킹 없이 로그에 남겨도 안전하다.
         log.info(
             "image extract request correlationId={} bucket={} key={} model={}",
             correlationId,
             request.getBucket(),
             request.getKey(),
-            model
+            request.getModel()
         );
-        ProductSnapshot snapshot = imageExtractionService.extract(request.getBucket(), request.getKey(), model);
+        ProductSnapshot snapshot = imageExtractionService.extract(
+            request.getBucket(), request.getKey(), request.getModel());
         return ExtractionResultMapper.from(snapshot);
-    }
-
-    /** 생략된 문자열 필드는 빈 문자열로 읽힌다(proto3). 추출기 계약은 "null 이면 기본 모델"이라 여기서 맞춘다. */
-    private static String modelOrNull(String model) {
-        return model.isEmpty() ? null : model;
     }
 }
