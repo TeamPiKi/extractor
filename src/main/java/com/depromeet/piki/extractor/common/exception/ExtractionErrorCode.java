@@ -1,8 +1,8 @@
 package com.depromeet.piki.extractor.common.exception;
 
 /**
- * 실패 응답 body 의 code. 정본 카탈로그(TeamPiKi/infra 의 contracts/extraction-error-codes.yaml)와 1:1 이어야
- * 하고 ExtractionErrorCodeCatalogTest 가 그것을 강제한다 — 여기에 상수를 더하면 카탈로그도 함께 고친다.
+ * 실패 응답 body 의 code. 계약 정본(TeamPiKi/infra 의 contracts/extraction.proto)의 enum 과 1:1 이어야
+ * 하고 ExtractionErrorCodeCatalogTest 가 그것을 강제한다 — 여기에 상수를 더하면 계약도 함께 고친다.
  * 추가는 자유(additive), 제거·의미 변경 금지. 호출자(core)는 이 값을 전이 판정에 쓰지 않고(status 만 본다)
  * 관측·디버깅에만 쓴다.
  * <p>일시/확정 분류의 정본은 각 예외 팩토리의 permanent 플래그다 — 여기 복제하지 않는다.

@@ -106,7 +106,7 @@ public final class PageFetchException extends ExtractionException {
     /**
      * 상품 경로 요청이 사이트 루트로 튕긴 경우(정적 fetch 의 redirect, 또는 헤드리스 홉 전부가 루트 착지). 몰 쪽
      * 일시 상태일 수 있어 일시 실패로 두고 호출자 recover 가 재시도한다. escalatable=true 는 "무조건 폴백" 과
-     * UPSTREAM_ERROR 카탈로그 선언을 따른 것이다 — 3xx 는 브라우저도 같은 Location 을 따라가 대개 이득이 없지만,
+     * UPSTREAM_ERROR 의 다른 팩토리를 따른 것이다 — 3xx 는 브라우저도 같은 Location 을 따라가 대개 이득이 없지만,
      * 헤드리스 쪽은 루트 홉을 LLM 후보에서 빼므로 낭비는 렌더 1회에 그친다.
      */
     public static PageFetchException redirectedToSiteRoot() {
