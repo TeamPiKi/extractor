@@ -34,10 +34,10 @@ public class GeminiHttpClient implements GeminiClient {
     private static final String MODEL_FALLBACK_METRIC = "gemini.model.fallback";
 
     /**
-     * LLM 응답이 길어질 수 있어 넉넉히 두되, 호출자 read 예산 안에 들도록 상한을 둔다
-     * (층별 예산의 정본은 TeamPiKi/infra 의 contracts/extraction-api.md "타임아웃 예산" 절).
+     * LLM 응답이 길어질 수 있어 넉넉히 두되, 호출자 read 타임아웃 안에 들도록 상한을 둔다.
+     * 계약 값과의 대조는 ExtractionContractIntegrationTest 가 한다.
      */
-    private static final int READ_TIMEOUT_MS = 30_000;
+    public static final int READ_TIMEOUT_MS = 30_000;
 
     /**
      * 오류 body 로그의 길이 상한. Gemini 오류 JSON 은 details 를 포함해도 1KB 를 넘지 않는 것이 보통이라
