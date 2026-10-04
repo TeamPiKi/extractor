@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.contracts.extraction.v1.ExtractionMethod;
 import com.depromeet.piki.contracts.extraction.v1.ExtractionResult;
+import com.depromeet.piki.contracts.extraction.v1.ImageExtractionRequest;
 import com.depromeet.piki.contracts.extraction.v1.LinkExtractionRequest;
 import com.google.protobuf.util.JsonFormat;
 import org.junit.jupiter.api.DisplayName;
@@ -69,6 +70,16 @@ class ContractWireTest {
 
         // optional 스칼라는 0 이어도 "채웠다"가 보존된다 — 무료 상품(0원)이 생략으로 사라지지 않는다.
         assertEquals("{\"name\":\"상품\",\"currentPrice\":0,\"method\":\"STRUCTURED\"}", json);
+    }
+
+    @Test
+    @DisplayName("image 요청의 model null 은 생략과 같게 읽힌다 - 전환 전 호출자는 미지정을 null 로 보낸다")
+    void nullModelReadsAsUnset() throws Exception {
+        ImageExtractionRequest.Builder builder = ImageExtractionRequest.newBuilder();
+        PARSER.merge("{\"bucket\": \"b\", \"key\": \"items/raw/a.png\", \"model\": null}", builder);
+
+        assertEquals("", builder.getModel());
+        assertEquals("items/raw/a.png", builder.getKey());
     }
 
     private static LinkExtractionRequest parse(String json) throws Exception {

@@ -113,6 +113,15 @@ class ModelProbeIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("target 이 비면 400")
+    void missingTarget() throws Exception {
+        mockMvc().perform(post("/internal/models/probe")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"model\": \"gemini-ok\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("모르는 target 은 400 - 경로를 특정하지 못하면 프로브가 성립하지 않는다")
     void unknownTarget() throws Exception {
         mockMvc().perform(post("/internal/models/probe")

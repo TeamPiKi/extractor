@@ -1,7 +1,6 @@
 package com.depromeet.piki.extractor.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -309,6 +308,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
                 .content(body("https://shop.example.com/p/10")))
             .andExpect(status().isOk());
 
-        assertNull(stubGeminiClient.lastModel());
+        // 생략은 빈 문자열로 읽힌다(proto3). reset 직후의 null 과 달라 호출이 실제로 일어났는지도 함께 가린다.
+        assertEquals("", stubGeminiClient.lastModel());
     }
 }

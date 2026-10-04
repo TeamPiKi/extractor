@@ -7,7 +7,7 @@ package com.depromeet.piki.extractor.extraction.gemini;
 public interface GeminiClient {
 
     /**
-     * @param requestedModel 호출자(core 백오피스)가 지정한 모델. null 이면 기본 모델을 쓴다 — 지정이 없는 상태를
+     * @param requestedModel 호출자(core 백오피스)가 지정한 모델. null·빈 문자열이면 기본 모델을 쓴다 — 지정이 없는 상태를
      *     그대로 흘려보내는 것이 계약이라(docs/api-contract.md) 여기서 기본값을 미리 채우지 않는다.
      *     지정한 모델이 사라졌으면(404) 구현이 기본 모델로 대체한다.
      */
