@@ -34,3 +34,4 @@ build/
 *.tfstate.*
 backend.hcl
 *.tfvars
+tfplan
