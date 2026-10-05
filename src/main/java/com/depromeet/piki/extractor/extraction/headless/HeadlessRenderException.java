@@ -11,7 +11,7 @@ public final class HeadlessRenderException extends ExtractionException {
     }
 
     /**
-     * 실제 브라우저로도 모든 홉이 차단 신호다(HeadlessProductLinkExtractor 의 분류). 차단 신호에 429·"잠시 후 다시" 같은 일시
+     * 실제 브라우저로도 쓸 수 있는 홉이 없고 차단 신호가 있다(HeadlessProductLinkExtractor 의 분류). 차단 신호에 429·"잠시 후 다시" 같은 일시
      * 신호가 섞여 영구/일시를 못 가르므로, fail-safe 원칙(분류 불가 실패는 일시)대로 일시 실패로 둔다.
      * 결정론적 차단의 재시도 낭비는 호출자의 bounded 재시도가 바운드한다(docs/api-contract.md).
      *
@@ -20,7 +20,7 @@ public final class HeadlessRenderException extends ExtractionException {
      */
     public static HeadlessRenderException blocked() {
         return new HeadlessRenderException(
-            "헤드리스 렌더의 모든 홉이 차단 신호다 — 일시 챌린지가 섞여 있어 일시 실패로 분류한다.",
+            "헤드리스 렌더가 차단 신호에 막혔다 — 일시 챌린지가 섞여 있어 일시 실패로 분류한다.",
             ExtractionErrorCode.HEADLESS_BLOCKED,
             false,
             null
