@@ -31,7 +31,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
-import tools.jackson.databind.ObjectMapper;
 
 /**
  * POST /render 의 wire 계약(요청 필드·홉 변환·SSRF 가드·홉 url 폴백·zstd 해제)을 네트워크 없이 검증한다.
@@ -40,6 +39,7 @@ import tools.jackson.databind.ObjectMapper;
 class HttpHeadlessRendererTest {
 
     private static final String BASE_URL = "http://headless.test:8000";
+    /** proxied 는 계약에 없는 필드다 - 구버전 renderer 가 실어 보내도 무시되는지를 이 픽스처가 겸해서 본다. */
     private static final String TWO_HOPS =
         "{\"proxied\":true,\"hops\":["
             + "{\"url\":\"https://kream.co.kr/products/6963\",\"status\":302,\"headers\":{\"location\":\"/p\"}},"
@@ -63,7 +63,6 @@ class HttpHeadlessRendererTest {
             builder.build(),
             HeadlessExtractionProperties.of(true),
             new RequestScopedDnsResolver(hostResolver),
-            new ObjectMapper(),
             dictionaries
         );
     }
@@ -79,6 +78,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.url").value(link.value().toString()))
+            .andExpect(jsonPath("$.authorized").value(false))
             .andExpect(jsonPath("$.compress").value(true))
             .andRespond(withSuccess(TWO_HOPS, MediaType.APPLICATION_JSON)));
 
@@ -109,41 +109,6 @@ class HttpHeadlessRendererTest {
 
             assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
             assertFalse(ex.permanent());
-        }
-    }
-
-    @Test
-    @DisplayName("홉 계약 이전 renderer 의 html·final_url 응답은 홉 하나로 읽는다 — renderer 배포가 수동이라 뒤처질 수 있다")
-    void legacySingleHtmlBecomesOneHop() {
-        HttpHeadlessRenderer renderer = rendererWith(server -> server
-            .expect(requestTo(BASE_URL + "/render"))
-            .andRespond(withSuccess(
-                "{\"verdict\":\"OK\",\"status\":200,\"final_url\":\"https://kream.co.kr/p\",\"html\":\"<html>legacy</html>\"}",
-                MediaType.APPLICATION_JSON
-            )));
-
-        List<RenderedHop> hops = renderer.render(link, false);
-
-        assertEquals(1, hops.size());
-        assertEquals("https://kream.co.kr/p", hops.getFirst().url().value().toString());
-        assertEquals(200, hops.getFirst().status());
-        assertEquals("<html>legacy</html>", hops.getFirst().dom());
-    }
-
-    @Test
-    @DisplayName("구계약 renderer 의 verdict=BLOCK 은 html 이 실려 와도 일시 실패(HEADLESS_BLOCKED)다 — 챌린지 페이지를 내용으로 흘리지 않는다")
-    void legacyBlockVerdictIsTransient() {
-        for (String body : List.of(
-            "{\"verdict\":\"BLOCK\",\"status\":429}",
-            "{\"verdict\":\"BLOCK\",\"status\":200,\"html\":\"<html><title>ok</title>challenge</html>\"}"
-        )) {
-            HttpHeadlessRenderer renderer = rendererWith(server -> server
-                .expect(requestTo(BASE_URL + "/render"))
-                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON)));
-
-            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
-
-            assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, ex.code());
         }
     }
 

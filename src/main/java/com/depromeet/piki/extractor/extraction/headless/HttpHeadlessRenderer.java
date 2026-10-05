@@ -1,5 +1,9 @@
 package com.depromeet.piki.extractor.extraction.headless;
 
+import com.depromeet.piki.contracts.render.v1.Hop;
+import com.depromeet.piki.contracts.render.v1.RenderProto;
+import com.depromeet.piki.contracts.render.v1.RenderRequest;
+import com.depromeet.piki.contracts.render.v1.RenderResponse;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import com.depromeet.piki.extractor.domain.ProductLink;
@@ -8,10 +12,13 @@ import com.depromeet.piki.extractor.extraction.http.InternalHostGuard;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
 import com.github.luben.zstd.ZstdInputStream;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.JsonFormat;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Objects;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -21,11 +28,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
-import tools.jackson.core.JacksonException;
-import tools.jackson.databind.ObjectMapper;
 
 /**
- * renderer 의 POST /render 호출 wire 구현. 응답의 홉 목록을 {@link RenderedHop} 으로 옮기고 매 홉의 host 를
+ * renderer 의 렌더 호출 wire 구현(계약 정본: TeamPiKi/infra 의 contracts/render.proto). 응답의 홉 목록을 {@link RenderedHop} 으로 옮기고 매 홉의 host 를
  * SSRF 가드에 통과시킨다 — 렌더 서비스가 대신 따라간 redirect 로 내부망 응답이 상품 HTML 로 흘러드는 것을 막는
  * 마지막 층이다(요청 전의 원본 URL 검증과 이중). 홉의 해석은 하지 않는다.
  *
@@ -38,7 +43,16 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class HttpHeadlessRenderer implements HeadlessRenderer {
 
-    private static final String RENDER_PATH = "/render";
+    private static final String RENDER_PATH = RenderProto.getDescriptor()
+        .findServiceByName("RenderService")
+        .findMethodByName("Render")
+        .getOptions()
+        .getExtension(RenderProto.httpPost);
+    /** 모르는 필드를 무시해야 renderer 가 필드를 먼저 더해도 응답이 깨지지 않는다. */
+    private static final JsonFormat.Parser PARSER = JsonFormat.parser().ignoringUnknownFields();
+    /** false 도 찍어 무엇을 보냈는지가 와이어와 상대 로그에 남게 한다. */
+    private static final JsonFormat.Printer PRINTER =
+        JsonFormat.printer().alwaysPrintFieldsWithNoPresence().omittingInsignificantWhitespace();
     private static final String ENCODING_HEADER = "X-Encoding";
     private static final String ZSTD_DICT_HEADER = "X-Zstd-Dict";
     private static final String ZSTD_ENCODING = "zstd";
@@ -50,21 +64,18 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private final HeadlessExtractionProperties properties;
     private final RequestScopedDnsResolver dnsResolver;
     private final InternalHostGuard internalHostGuard;
-    private final ObjectMapper objectMapper;
     private final ZstdDictionaries dictionaries;
 
     public HttpHeadlessRenderer(
         @Qualifier(HeadlessRenderHttpClientConfig.HEADLESS_RENDER_REST_CLIENT) RestClient restClient,
         HeadlessExtractionProperties properties,
         RequestScopedDnsResolver dnsResolver,
-        ObjectMapper objectMapper,
         ZstdDictionaries dictionaries
     ) {
         this.restClient = restClient;
         this.properties = properties;
         this.dnsResolver = dnsResolver;
         this.internalHostGuard = new InternalHostGuard(dnsResolver);
-        this.objectMapper = objectMapper;
         this.dictionaries = dictionaries;
     }
 
@@ -79,42 +90,45 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     }
 
     private List<RenderedHop> renderVerified(ProductLink link, boolean authorized) {
-        HeadlessRenderResponse response = requestRender(link, authorized);
-        if (response.legacyBlocked()) {
-            throw HeadlessRenderException.blocked();
-        }
-        List<HeadlessRenderResponse.Hop> hops = response.hopsOrLegacy();
+        RenderResponse response = requestRender(link, authorized);
+        List<Hop> hops = response.getHopsList();
         if (hops.isEmpty()) {
-            log.warn("headless render no hops error={} url={}", maskUrls(response.error()), link.safeLogString());
-            throw HeadlessRenderException.upstream("렌더 홉이 없다: " + maskUrls(response.error()), null);
+            String error = response.hasError() ? maskUrls(response.getError()) : null;
+            log.warn("headless render no hops error={} url={}", error, link.safeLogString());
+            throw HeadlessRenderException.upstream("렌더 홉이 없다: " + error, null);
         }
         log.info(
-            "headless render hops={} status={} proxied={} url={}",
+            "headless render hops={} status={} url={}",
             hops.size(),
-            hops.getLast().status(),
-            response.proxied(),
+            hops.getLast().getStatus(),
             link.safeLogString()
         );
         return hops.stream().map(hop -> toRendered(hop, link)).toList();
     }
 
-    private RenderedHop toRendered(HeadlessRenderResponse.Hop hop, ProductLink link) {
+    private RenderedHop toRendered(Hop hop, ProductLink link) {
         return new RenderedHop(
-            resolveHopUrl(hop.url(), link),
-            Objects.requireNonNullElse(hop.status(), 0),
-            hop.headers(),
-            hop.body(),
-            hop.dom()
+            resolveHopUrl(hop.getUrl(), link),
+            hop.getStatus(),
+            hop.getHeadersMap(),
+            hop.getBody(),
+            hop.getDom()
         );
     }
 
-    private HeadlessRenderResponse requestRender(ProductLink link, boolean authorized) {
+    private RenderResponse requestRender(ProductLink link, boolean authorized) {
+        RenderRequest request = RenderRequest.newBuilder()
+            .setUrl(link.value().toString())
+            .setAuthorized(authorized)
+            .setCompress(properties.compress())
+            .build();
         ResponseEntity<byte[]> entity;
         try {
             entity = restClient.post()
                 .uri(RENDER_PATH)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(new HeadlessRenderRequest(link.value().toString(), authorized, properties.compress()))
+                // 바이트로 넘긴다 - 문자열 body 는 컨버터가 ISO-8859-1 로 써서 비ASCII URL 이 깨진다.
+                .body(PRINTER.print(request).getBytes(StandardCharsets.UTF_8))
                 .retrieve()
                 .toEntity(byte[].class);
         } catch (RestClientResponseException e) {
@@ -122,11 +136,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             throw HeadlessRenderException.upstream("render 서비스 응답 " + e.getStatusCode().value(), e);
         } catch (RestClientException e) {
             throw HeadlessRenderException.upstream("render 서비스 호출 실패", e);
+        } catch (InvalidProtocolBufferException e) {
+            throw new IllegalStateException("렌더 요청 직렬화 실패", e);
         }
         return decode(entity);
     }
 
-    private HeadlessRenderResponse decode(ResponseEntity<byte[]> entity) {
+    private RenderResponse decode(ResponseEntity<byte[]> entity) {
         byte[] body = entity.getBody();
         if (body == null || body.length == 0) {
             throw HeadlessRenderException.upstream("render 응답 body 가 비어 있다", null);
@@ -134,11 +150,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         if (ZSTD_ENCODING.equals(entity.getHeaders().getFirst(ENCODING_HEADER))) {
             body = decompress(body, entity.getHeaders().getFirst(ZSTD_DICT_HEADER));
         }
+        RenderResponse.Builder response = RenderResponse.newBuilder();
         try {
-            return objectMapper.readValue(body, HeadlessRenderResponse.class);
-        } catch (JacksonException e) {
+            PARSER.merge(new InputStreamReader(new ByteArrayInputStream(body), StandardCharsets.UTF_8), response);
+        } catch (IOException e) {
             throw HeadlessRenderException.upstream("render 응답 JSON 파싱 실패", e);
         }
+        return response.build();
     }
 
     private byte[] decompress(byte[] compressed, String dictId) {
