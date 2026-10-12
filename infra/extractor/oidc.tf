@@ -46,6 +46,25 @@ data "aws_iam_policy_document" "ecr_push" {
     ]
     resources = [aws_ecr_repository.extractor.arn]
   }
+  statement {
+    sid       = "FindDeployTarget"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+  statement {
+    sid     = "SshOverSsm"
+    actions = ["ssm:StartSession"]
+    resources = [
+      aws_instance.extractor.arn,
+      "arn:aws:ssm:ap-northeast-2::document/AWS-StartSSHSession",
+    ]
+  }
+  # 세션 id 가 호출자 이름으로 시작해(실측) AWS 예시의 session/${aws:userid}-* 로는 좁혀지지 않는다.
+  statement {
+    sid       = "SsmSessionChannel"
+    actions   = ["ssm:TerminateSession", "ssmmessages:OpenDataChannel"]
+    resources = ["arn:aws:ssm:ap-northeast-2:${data.aws_caller_identity.current.account_id}:session/*"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_ecr_push" {

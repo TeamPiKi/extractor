@@ -1,8 +1,8 @@
 # 배포: main CI 성공(workflow_run) 자동 + 수동 트리거(workflow_dispatch) 단일 잡. 이미지 push → SSH 배포까지 러너가 주관한다.
 # JAR 은 자동 경로면 트리거한 CI 실행의 아티팩트를 받고, 수동 경로만 러너에서 빌드한다 (core deploy 와 같은 구조).
 #
-# - transport 는 core 와 같은 "러너에서 SSH" 단일이다 (SSM Run Command 수동 배포를 대체 - 배포 블록 공통화 결정,
-#   SG 22 개방은 #5). 기동·헬스 판정은 TeamPiKi/infra 의 공용 블록(run_container·healthcheck)을 매 배포
+# - transport 는 core 와 같은 "러너에서 SSH" 단일이다 (배포 블록 공통화 결정). 연결은 SSM Session Manager 를
+#   거쳐 SG 에 22 번이 없다 (infra 의 ssm-ssh). 기동·헬스 판정은 TeamPiKi/infra 의 공용 블록(run_container·healthcheck)을 매 배포
 #   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
 # - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
 #   롤백은 main 에 revert 를 머지하거나(CI 성공이 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
@@ -23,13 +23,8 @@ on:
     types: [completed]
   workflow_dispatch:
     inputs:
-      migration_host:
-        description: "[이관 전용] 배포 대상 호스트를 직접 지정한다. 비우면 secrets.EC2_HOST. 평소에는 비워 둘 것."
-        required: false
-        type: string
-        default: ""
       migration_role_arn:
-        description: "[이관 전용] ECR push 에 쓸 역할 ARN. 신 계정 이미지 푸시용. 비우면 vars.AWS_ECR_PUSH_ROLE_ARN(구 계정 역할)."
+        description: "[이관 전용] 신 계정 배포 역할 ARN(ECR push·SSM 접속). 비우면 vars.AWS_ECR_PUSH_ROLE_ARN."
         required: false
         type: string
         default: ""
@@ -39,25 +34,17 @@ on:
         type: string
         default: ""
   # 계정 이관(TeamPiKi/core 의 migrate.yml)이 신 계정 박스로 이 배포를 돌리려고 호출한다.
-  # 호출측이 대상 호스트를 넘기고 secrets 는 inherit 로 받는다.
+  # 호출측이 신 계정 역할을 넘기고 secrets 는 inherit 로 받는다. 대상 박스는 그 계정에서 Name 태그로 찾는다.
   workflow_call:
     inputs:
-      migration_host:
-        description: "[이관 전용] 배포 대상 호스트. 비우면 secrets.EC2_HOST."
-        required: false
-        type: string
-        default: ""
       migration_role_arn:
-        description: "[이관 전용] ECR push 에 쓸 역할 ARN(신 계정)."
+        description: "[이관 전용] 신 계정 배포 역할 ARN(ECR push·SSM 접속)."
         required: false
         type: string
         default: ""
 
 concurrency:
-  # 그룹은 단일 'deploy' 로 둔다. 대상 호스트별로 가르면 호출자가 secrets.EC2_HOST 와 같은 주소를
-  # migration_host 로 넘겼을 때 'deploy-default' 와 'deploy-<host>' 로 갈려 같은 박스에 두 배포가
-  # 동시에 돌 수 있다 — 슬롯 선택·nginx 전환·구 컨테이너 정리가 서로를 밟는다.
-  # 이관은 드문 1회성이라 평소 배포가 잠깐 대기하는 비용보다 그 충돌을 막는 편이 싸다.
+  # 같은 박스에 배포 둘이 겹치면 슬롯 선택·nginx 전환·구 컨테이너 정리가 서로를 밟는다.
   group: deploy
   cancel-in-progress: false
 
@@ -141,8 +128,7 @@ jobs:
           docker push "$IMAGE_LATEST"
           docker push "$IMAGE_SHA"
 
-      # 공용 블록 정본을 받아 박스로 올린다. strip_components: 2 로 shared-infra/blocks/ 를 떼어
-      # /tmp/piki-blocks/*.sh 로 안착 (core deploy 와 동일 패턴).
+      # 공용 블록 정본을 받아 박스의 /tmp/piki-blocks/*.sh 로 올린다 (core deploy 와 동일 패턴).
       - name: Checkout infra blocks
         uses: actions/checkout@v4
         with:
@@ -153,26 +139,30 @@ jobs:
           sparse-checkout: blocks
           persist-credentials: false
 
-      # nginx 사이트 conf(이 repo 의 infra/nginx/extractor.conf)도 함께 올린다 - strip 2 로
-      # shared-infra/blocks/·infra/nginx/ 가 똑같이 떨어져 /tmp/piki-blocks/ 평면에 안착한다.
-      - name: Upload blocks
-        uses: appleboy/scp-action@v1
+      - name: Prepare SSH over SSM
+        id: box
+        uses: TeamPiKi/infra/.github/actions/ssm-ssh@main
         with:
-          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: |
-            shared-infra/blocks/deploy_slot.sh,
-            shared-infra/blocks/healthcheck.sh,
-            shared-infra/blocks/prune_images.sh,
-            shared-infra/blocks/run_container.sh,
-            shared-infra/blocks/slot_decide.sh,
-            shared-infra/blocks/slot_switch.sh,
-            shared-infra/blocks/ssm_env.sh,
-            infra/nginx/extractor.conf,
-            infra/scripts/provision-observability.sh
-          target: "/tmp/piki-blocks"
-          strip_components: 2
+          instance-name: piki-extractor
+          user: ${{ secrets.EC2_USER }}
+          ssh-key: ${{ secrets.EC2_SSH_KEY }}
+
+      # nginx 사이트 conf(이 repo 의 infra/nginx/extractor.conf)도 함께 /tmp/piki-blocks/ 평면에 올린다.
+      - name: Upload blocks
+        env:
+          HOST: ${{ steps.box.outputs.host }}
+        run: |
+          ssh -n "$HOST" 'mkdir -p /tmp/piki-blocks'
+          scp shared-infra/blocks/deploy_slot.sh \
+            shared-infra/blocks/healthcheck.sh \
+            shared-infra/blocks/prune_images.sh \
+            shared-infra/blocks/run_container.sh \
+            shared-infra/blocks/slot_decide.sh \
+            shared-infra/blocks/slot_switch.sh \
+            shared-infra/blocks/ssm_env.sh \
+            infra/nginx/extractor.conf \
+            infra/scripts/provision-observability.sh \
+            "$HOST:/tmp/piki-blocks/"
 
       # 관측 수집기(Alloy)를 매 배포 갱신한다. 이 단계가 없던 동안 공용 config(TeamPiKi/infra
       # blocks/alloy)를 고쳐도 이 박스에는 영영 반영되지 않았다 - 스크립트는 있었지만 사람이 박스에서
@@ -183,26 +173,16 @@ jobs:
       # 스크립트는 자기 완결적이라(공용 블록을 raw.githubusercontent 에서 직접 fetch, 자격은 박스가
       # SSM 공유 경로에서 직접 읽음) 러너가 넘길 인자·secret 이 없다.
       - name: Provision observability (Alloy)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            chmod +x /tmp/piki-blocks/provision-observability.sh
-            /tmp/piki-blocks/provision-observability.sh
-
-      - name: Deploy (SSM env pull + blue-green slot + nginx switch)
-        uses: appleboy/ssh-action@v1
         env:
+          HOST: ${{ steps.box.outputs.host }}
+        run: ssh -n "$HOST" 'chmod +x /tmp/piki-blocks/provision-observability.sh && /tmp/piki-blocks/provision-observability.sh'
+
+      # 스크립트는 ssh 인자로 넘긴다. stdin(bash -s)으로 주면 안의 명령이 남은 스크립트를 읽어 삼킬 수 있다.
+      - name: Deploy (SSM env pull + blue-green slot + nginx switch)
+        env:
+          HOST: ${{ steps.box.outputs.host }}
           IMAGE_TAG: ${{ steps.built.outputs.sha }}
-        with:
-          host: ${{ inputs.migration_host != '' && inputs.migration_host || secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: IMAGE_TAG
-          script: |
+          SCRIPT: |
             set -euo pipefail
 
             # ── 앱 시크릿/설정을 SSM 에서 pull 해 env 파일로 만든다 (/piki-extractor/app/<kebab-key>) ──
@@ -280,3 +260,4 @@ jobs:
               --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \
               --label piki.observe=true --label piki.service=piki-extractor --label piki.metrics.path=/actuator/prometheus
+        run: ssh -n "$HOST" "export IMAGE_TAG=$IMAGE_TAG; $SCRIPT"
