@@ -149,6 +149,7 @@ jobs:
 
       # nginx 사이트 conf(이 repo 의 infra/nginx/extractor.conf)도 함께 /tmp/piki-blocks/ 평면에 올린다.
       - name: Upload blocks
+        timeout-minutes: 10
         env:
           HOST: ${{ steps.box.outputs.host }}
         run: |
@@ -173,12 +174,14 @@ jobs:
       # 스크립트는 자기 완결적이라(공용 블록을 raw.githubusercontent 에서 직접 fetch, 자격은 박스가
       # SSM 공유 경로에서 직접 읽음) 러너가 넘길 인자·secret 이 없다.
       - name: Provision observability (Alloy)
+        timeout-minutes: 10
         env:
           HOST: ${{ steps.box.outputs.host }}
         run: ssh -n "$HOST" 'chmod +x /tmp/piki-blocks/provision-observability.sh && /tmp/piki-blocks/provision-observability.sh'
 
       # 스크립트는 ssh 인자로 넘긴다. stdin(bash -s)으로 주면 안의 명령이 남은 스크립트를 읽어 삼킬 수 있다.
       - name: Deploy (SSM env pull + blue-green slot + nginx switch)
+        timeout-minutes: 10
         env:
           HOST: ${{ steps.box.outputs.host }}
           IMAGE_TAG: ${{ steps.built.outputs.sha }}

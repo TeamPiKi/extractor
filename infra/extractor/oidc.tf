@@ -58,6 +58,12 @@ data "aws_iam_policy_document" "ecr_push" {
       aws_instance.extractor.arn,
       "arn:aws:ssm:ap-northeast-2::document/AWS-StartSSHSession",
     ]
+    # 문서를 빼고 부르면 열리는 기본 셸 세션(SSH 키 없이 sudo 가능한 ssm-user)을 막는다.
+    condition {
+      test     = "BoolIfExists"
+      variable = "ssm:SessionDocumentAccessCheck"
+      values   = ["true"]
+    }
   }
   # 세션 id 가 호출자 이름으로 시작해(실측) AWS 예시의 session/${aws:userid}-* 로는 좁혀지지 않는다.
   statement {
