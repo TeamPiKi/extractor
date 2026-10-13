@@ -125,17 +125,6 @@ resource "aws_security_group" "extractor" {
     security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
   }
 
-  # SSH 단일 transport 결정(배포 블록 공통화): 배포가 core 와 같은 "러너에서 SSH" 경로로 통일된다.
-  # GH 러너는 고정 IP 가 없어 전역 개방. 인증은 키 전용(비밀번호 로그인 없음)이라 실질 위험은
-  # sshd 자체 취약점 노출면이며, 이는 core 박스가 이미 수용 중인 것과 같은 등급이다.
-  ingress {
-    description = "SSH for deploy (GitHub Actions runner) and ops"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
     description = "all outbound (arbitrary product links + Gemini API + headless render)"
     from_port   = 0
