@@ -6,8 +6,9 @@
 #   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
 # - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
 #   롤백은 main 에 revert 를 머지하거나(CI 성공이 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
-# - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 :8081 은 박스 로컬 nginx 가 고정하고,
-#   슬롯 컨테이너(blue=18081 / green=28081, 127.0.0.1 바인딩)를 upstream 전환으로 바꾼다.
+# - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 서비스 포트는 박스 로컬 nginx 가 고정하고,
+#   슬롯 컨테이너(127.0.0.1 바인딩)를 upstream 전환으로 바꾼다. 서비스 포트는 infra 의 contracts/ports.json
+#   에서 읽고, 슬롯 포트는 블록이 계산한다.
 #   초기의 "교체식 단일 컨테이너 + 수초 다운타임 허용" 결정은 renderer #15 미배포 사고(머지 후 수동
 #   트리거 누락으로 이틀 방치)를 계기로 "머지 = 무조건 배포 + 무중단" 으로 대체됐다 (2026-08-10 결정).
 name: Deploy
@@ -136,8 +137,20 @@ jobs:
           ref: main
           # 경로 별칭은 shared-infra - 서비스 자신의 파일과 "공용 정본" 이 이름으로 구분되게 한다 (core 와 동일).
           path: shared-infra
-          sparse-checkout: blocks
+          sparse-checkout: |
+            blocks
+            contracts
           persist-credentials: false
+
+      # 포트와 renderer 주소는 정본에서 매 배포 계산한다. 주소를 SSM 에 적어 두면 포트·박스가 바뀔 때 조용히 낡는다.
+      - name: Resolve service port and renderer address
+        id: addr
+        run: |
+          PORT=$(jq -er '.extractor.port' shared-infra/contracts/ports.json)
+          RENDERER_URL=$(bash shared-infra/blocks/service_url.sh \
+            --ports-file shared-infra/contracts/ports.json --service renderer)
+          echo "service-port=$PORT" >> "$GITHUB_OUTPUT"
+          echo "renderer-url=$RENDERER_URL" >> "$GITHUB_OUTPUT"
 
       - name: Prepare SSH over SSM
         id: box
@@ -185,6 +198,8 @@ jobs:
         env:
           HOST: ${{ steps.box.outputs.host }}
           IMAGE_TAG: ${{ steps.built.outputs.sha }}
+          SERVICE_PORT: ${{ steps.addr.outputs.service-port }}
+          RENDERER_URL: ${{ steps.addr.outputs.renderer-url }}
           SCRIPT: |
             set -euo pipefail
 
@@ -208,7 +223,7 @@ jobs:
             # 아래 튜닝·관측 값을 파일 끝에 덧붙이므로 같은 이름의 SSM 키는 예약으로 막는다.
             if ! PARAM_COUNT="$(printf '%s' "$PARAMS_JSON" | bash /tmp/piki-blocks/ssm_env.sh --out "$ENV_FILE" \
               --reserve JAVA_TOOL_OPTIONS --reserve TRACING_OTLP_ENABLED --reserve OTLP_ENDPOINT \
-              --reserve LOGGING_STRUCTURED_FORMAT_CONSOLE)"; then
+              --reserve LOGGING_STRUCTURED_FORMAT_CONSOLE --reserve PRODUCT_EXTRACT_HEADLESS_BASE_URL)"; then
               echo "::error::SSM 파라미터 -> env 파일 변환 실패 (파라미터 0개 · 다중행 값 · 예약 이름 충돌 - 블록 stderr 참조)"
               exit 1
             fi
@@ -220,6 +235,7 @@ jobs:
             echo "TRACING_OTLP_ENABLED=true" >> "$ENV_FILE"
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
+            echo "PRODUCT_EXTRACT_HEADLESS_BASE_URL=$RENDERER_URL" >> "$ENV_FILE"
             echo "SSM 에서 $PARAM_COUNT 개 파라미터 로드 (/piki-extractor/app/)"
 
             # ECR 레지스트리는 온박스에서 도출한다. 계정번호를 워크플로에 안 박는다 (core 와 동일).
@@ -232,19 +248,20 @@ jobs:
 
             chmod +x /tmp/piki-blocks/*.sh
 
-            # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8081) ──
+            # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(서비스 포트) ──
             # 설치·conf 반영은 매 배포 수행하고, (재)시작·reload 는 아래 전환 블록(slot_switch)이 수행한다.
             command -v nginx >/dev/null || {
               sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
               sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
             }
             sudo rm -f /etc/nginx/sites-enabled/default
-            sudo cp /tmp/piki-blocks/extractor.conf /etc/nginx/sites-available/piki-extractor
+            sed "s/__SERVICE_PORT__/$SERVICE_PORT/g" /tmp/piki-blocks/extractor.conf \
+              | sudo tee /etc/nginx/sites-available/piki-extractor >/dev/null
             sudo ln -sf /etc/nginx/sites-available/piki-extractor /etc/nginx/sites-enabled/piki-extractor
 
             # ── blue-green 배포: 공용 블록(deploy_slot)이 결정·기동·슬롯 헬스·전환·구 슬롯 종료를 맡는다.
             # 실패 시 새 슬롯을 정리하고 exit 1, 그동안 트래픽은 구 슬롯이 서빙한다. 값은 전부 여기서 준다.
-            # --publish 127.0.0.1 바인딩(nginx 경유로만 노출)과 metrics 포트 라벨은 블록이 슬롯 값으로 채운다.
+            # --publish 127.0.0.1 바인딩(nginx 경유로만 노출)·metrics 포트 라벨·PORT env 는 블록이 서비스 포트로 채운다.
             # --memory/--memory-swap: 박스(t4g.small 1.8G)는 swap 0 이라 blue+green overlap 이 RAM 안에 들어야
             #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙은 MaxRAMPercentage=70 이 cgroup 한도
             #   기준으로 잡혀 약 448m. 파싱 스파이크 OOM 이 관측되면 실측으로 재조정한다.
@@ -253,17 +270,16 @@ jobs:
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
             bash /tmp/piki-blocks/prune_images.sh
 
-            # --legacy-slot: 슬롯 포트 이전(18090·18091 에서 18081·28081 로, #108) 중 서빙 중인 옛 슬롯을 알아보게 한다.
-            # 이 인자가 없으면 옛 blue 가 서빙 중일 때 새 blue 기동 전에 지워진다. 모든 배포가 새 포트로 넘어간 뒤 제거.
+            # --legacy-slot: 옛 슬롯(8090 시절 규칙) 중 서빙 중인 쪽을 알아보게 한다(#108). 이 인자가 없으면 옛 blue 가
+            # 서빙 중일 때 새 blue 기동 전에 지워진다. 새 슬롯으로 한 번 배포된 뒤 제거.
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \
-              --slot-a blue:18081 --slot-b green:28081 \
+              --service-port "$SERVICE_PORT" --name-prefix piki-extractor \
               --legacy-slot blue:18090 --legacy-slot green:18091 \
-              --name-prefix piki-extractor --container-port 8081 \
               --health-path /actuator/health --health-interval 5 --health-attempts 36 --health-expect-body '"status":"UP"' \
-              --verify-cmd "bash /tmp/piki-blocks/healthcheck.sh --url http://localhost:8081/actuator/health --interval 2 --attempts 10 --expect-body '\"status\":\"UP\"'" \
+              --verify-cmd "bash /tmp/piki-blocks/healthcheck.sh --url http://localhost:$SERVICE_PORT/actuator/health --interval 2 --attempts 10 --expect-body '\"status\":\"UP\"'" \
               -- --image "$IMAGE" --restart unless-stopped --env-file "$ENV_FILE" --pull \
               --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \
               --label piki.observe=true --label piki.service=piki-extractor --label piki.metrics.path=/actuator/prometheus
-        run: ssh -n "$HOST" "export IMAGE_TAG=$IMAGE_TAG; $SCRIPT"
+        run: ssh -n "$HOST" "export IMAGE_TAG=$IMAGE_TAG SERVICE_PORT=$SERVICE_PORT RENDERER_URL=$RENDERER_URL; $SCRIPT"

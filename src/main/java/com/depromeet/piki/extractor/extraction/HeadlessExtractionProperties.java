@@ -10,8 +10,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * 헤드리스(차단 우회) 추출 설정 — renderer(구 PIKI-HeadlessBrowser)의 {@code POST /render} 호출 파라미터.
  * 운영 주입은 relaxed binding 환경변수({@code PRODUCT_EXTRACT_HEADLESS_*})다.
  *
- * @param baseUrl 렌더 서비스 주소(사설망, 예: {@code http://<headless-private-ip>:8000}). 내부 주소라 코드·yml 에
- *     박지 않고 env 로만 주입한다.
+ * @param baseUrl 렌더 서비스 주소(사설망). 내부 주소라 코드·yml 에 박지 않고, 배포가 TeamPiKi/infra 의 포트 정본과
+ *     서버 Name 태그로 매번 계산해 env 로 주입한다.
  * @param readTimeout 렌더 서비스 내부 최악(goto + 렌더 정착 대기)을 다 기다리지는 않는다 — 호출자 read 예산 안에
  *     LLM fallback 몫을 남겨야 하기 때문이다. 층별 예산의 정본은 TeamPiKi/infra 의 contracts/extraction-api.md
  *     "타임아웃 예산" 절. 상한을 넘긴 렌더는 일시 실패로 떨어져 호출자 재시도가 진다.

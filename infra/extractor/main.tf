@@ -111,6 +111,23 @@ resource "aws_iam_instance_profile" "extractor" {
   role = aws_iam_role.extractor.name
 }
 
+# 추출 API 포트는 서비스 포트 정본에서 읽는다. 번호를 이 모듈에 적지 않는다.
+data "http" "ports" {
+  url = "https://raw.githubusercontent.com/TeamPiKi/infra/main/contracts/ports.json"
+
+  lifecycle {
+    postcondition {
+      condition     = self.status_code == 200
+      error_message = "TeamPiKi/infra contracts/ports.json 을 읽지 못함"
+    }
+  }
+}
+
+locals {
+  # 8090 은 옛 입구다. core 가 정본으로 extractor 주소를 계산하게 되면 뺀다(#108).
+  extractor_ports = [jsondecode(data.http.ports.response_body).extractor.port, 8090]
+}
+
 # --- SG: inbound = piki app SG 에서 추출 포트만, egress = 전체(임의 상품 링크 fetch + Gemini + 헤드리스) ---
 resource "aws_security_group" "extractor" {
   name        = var.name_prefix
@@ -118,7 +135,7 @@ resource "aws_security_group" "extractor" {
   vpc_id      = data.aws_vpc.main.id
 
   dynamic "ingress" {
-    for_each = var.extractor_ports
+    for_each = local.extractor_ports
     content {
       description     = "extraction API from piki app servers only"
       from_port       = ingress.value
