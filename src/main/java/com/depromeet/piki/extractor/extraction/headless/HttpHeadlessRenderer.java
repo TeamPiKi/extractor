@@ -69,6 +69,11 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     @Override
     public List<RenderedHop> render(ProductLink link, boolean authorized) {
         RenderResponse response = requestRender(link, authorized);
+        if (!response.hasInternalAddressHit()) {
+            // 홉 재검사를 하지 않으므로, 내부 주소를 판정하지 않는 renderer(배포 순서가 어긋났거나 롤백됨)의 홉은 쓸 수 없다.
+            log.error("headless render without internal address judgement url={}", link.safeLogString());
+            throw HeadlessRenderException.upstream("renderer 가 내부 주소를 판정하지 않는다", null);
+        }
         if (response.getInternalAddressHit()) {
             log.error("[SSRF] blocked: render reached internal address url={}", link.safeLogString());
             throw PageFetchException.blockedHost();

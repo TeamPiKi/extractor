@@ -39,7 +39,7 @@ class HttpHeadlessRendererTest {
     private static final String BASE_URL = "http://headless.test:8000";
     /** proxied 는 계약에 없는 필드다 - 구버전 renderer 가 실어 보내도 무시되는지를 이 픽스처가 겸해서 본다. */
     private static final String TWO_HOPS =
-        "{\"proxied\":true,\"hops\":["
+        "{\"proxied\":true,\"internal_address_hit\":false,\"hops\":["
             + "{\"url\":\"https://kream.co.kr/products/6963\",\"status\":302,\"headers\":{\"location\":\"/p\"}},"
             + "{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"headers\":{\"content-type\":\"text/html\"},"
             + "\"body\":\"<html>ssr</html>\",\"dom\":\"<html>dom</html>\"}]}";
@@ -83,9 +83,9 @@ class HttpHeadlessRendererTest {
     @DisplayName("홉이 없으면(브라우저 오류·빈 응답) 일시 실패(HEADLESS_UPSTREAM)다")
     void noHopsIsTransient() {
         for (String body : List.of(
-            "{\"error\":\"TimeoutError: boom\",\"hops\":[]}",
-            "{\"error\":\"TimeoutError: boom\"}",
-            "{}"
+            "{\"error\":\"TimeoutError: boom\",\"internal_address_hit\":false,\"hops\":[]}",
+            "{\"error\":\"TimeoutError: boom\",\"internal_address_hit\":false}",
+            "{\"internal_address_hit\":false}"
         )) {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
                 .expect(requestTo(BASE_URL + "/render"))
@@ -153,6 +153,22 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
+    @DisplayName("내부 주소를 판정하지 않는 renderer(필드 없음)의 홉은 쓰지 않고 일시 실패(HEADLESS_UPSTREAM)다")
+    void rendererWithoutJudgementIsRefused() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"hops\":[{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"dom\":\"<html>secret</html>\"}]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
     @DisplayName("renderer 가 내부 주소 응답을 알리면 SSRF 확정 실패(BLOCKED_HOST)이고 헤드리스 승격 대상이 아니다")
     void internalAddressHitIsBlockedHost() {
         HttpHeadlessRenderer renderer = rendererWith(server -> server
@@ -176,7 +192,7 @@ class HttpHeadlessRendererTest {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
                 .expect(requestTo(BASE_URL + "/render"))
                 .andRespond(withSuccess(
-                    "{\"hops\":[{" + urlField + "\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
+                    "{\"internal_address_hit\":false,\"hops\":[{" + urlField + "\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
                     MediaType.APPLICATION_JSON
                 )));
 
