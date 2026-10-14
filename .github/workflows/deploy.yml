@@ -6,8 +6,8 @@
 #   main 에서 checkout 해 쓴다 (SSOT 의도 - 블록 수정이 별도 커밋 없이 모든 소비자에 반영).
 # - 이미지는 piki-extractor:{latest,<sha>} 로 레지스트리에 남긴다 (박스 로컬 :prod 빌드 관행을 대체).
 #   롤백은 main 에 revert 를 머지하거나(CI 성공이 재배포), 헬스 실패 시 전환 없이 자동 중단된다.
-# - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 :8090 은 박스 로컬 nginx 가 고정하고,
-#   슬롯 컨테이너(blue=18090 / green=18091, 127.0.0.1 바인딩)를 upstream 전환으로 바꾼다.
+# - blue-green 슬롯식이다: 소비자(core 워커)가 바라보는 :8081 은 박스 로컬 nginx 가 고정하고,
+#   슬롯 컨테이너(blue=18081 / green=28081, 127.0.0.1 바인딩)를 upstream 전환으로 바꾼다.
 #   초기의 "교체식 단일 컨테이너 + 수초 다운타임 허용" 결정은 renderer #15 미배포 사고(머지 후 수동
 #   트리거 누락으로 이틀 방치)를 계기로 "머지 = 무조건 배포 + 무중단" 으로 대체됐다 (2026-08-10 결정).
 name: Deploy
@@ -232,7 +232,7 @@ jobs:
 
             chmod +x /tmp/piki-blocks/*.sh
 
-            # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8090) ──
+            # ── nginx 프로비저닝(멱등) - 무중단 전환의 고정 프론트(:8081) ──
             # 설치·conf 반영은 매 배포 수행하고, (재)시작·reload 는 아래 전환 블록(slot_switch)이 수행한다.
             command -v nginx >/dev/null || {
               sudo DEBIAN_FRONTEND=noninteractive apt-get update -y
@@ -253,12 +253,15 @@ jobs:
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
             bash /tmp/piki-blocks/prune_images.sh
 
+            # --legacy-slot: 슬롯 포트 이전(18090·18091 에서 18081·28081 로, #108) 중 서빙 중인 옛 슬롯을 알아보게 한다.
+            # 이 인자가 없으면 옛 blue 가 서빙 중일 때 새 blue 기동 전에 지워진다. 모든 배포가 새 포트로 넘어간 뒤 제거.
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \
-              --slot-a blue:18090 --slot-b green:18091 \
-              --name-prefix piki-extractor --container-port 8090 \
+              --slot-a blue:18081 --slot-b green:28081 \
+              --legacy-slot blue:18090 --legacy-slot green:18091 \
+              --name-prefix piki-extractor --container-port 8081 \
               --health-path /actuator/health --health-interval 5 --health-attempts 36 --health-expect-body '"status":"UP"' \
-              --verify-cmd "bash /tmp/piki-blocks/healthcheck.sh --url http://localhost:8090/actuator/health --interval 2 --attempts 10 --expect-body '\"status\":\"UP\"'" \
+              --verify-cmd "bash /tmp/piki-blocks/healthcheck.sh --url http://localhost:8081/actuator/health --interval 2 --attempts 10 --expect-body '\"status\":\"UP\"'" \
               -- --image "$IMAGE" --restart unless-stopped --env-file "$ENV_FILE" --pull \
               --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \

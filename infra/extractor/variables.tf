@@ -33,10 +33,13 @@ variable "app_sg_name" {
 # ---------------------------------------------------------------------------
 # 박스 스펙
 # ---------------------------------------------------------------------------
-variable "extractor_port" {
-  description = "추출 API 가 listen 하는 포트(앱→박스). 서비스 구현·배포는 앱 레이어 소관, 여기선 SG 인바운드만 연다."
-  type        = number
-  default     = 8090
+variable "extractor_ports" {
+  description = <<-EOT
+    추출 API 입구 포트(앱→박스). 서비스 구현·배포는 앱 레이어 소관, 여기선 SG 인바운드만 연다.
+    8090 은 옛 입구다. core 의 extractor 주소가 8081 로 옮겨 가면 뺀다(#108).
+  EOT
+  type        = list(number)
+  default     = [8081, 8090]
 }
 
 variable "instance_type" {

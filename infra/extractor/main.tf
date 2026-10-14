@@ -77,8 +77,8 @@ resource "aws_iam_role_policy" "extractor_params" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+      Effect = "Allow"
+      Action = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
       # 관측 자격은 세 서비스가 공유 경로 하나를 읽는다(회전 1곳화, TeamPiKi/core#771).
       Resource = [
         "arn:aws:ssm:ap-northeast-2:*:parameter/${var.name_prefix}/*",
@@ -117,12 +117,15 @@ resource "aws_security_group" "extractor" {
   description = "piki extractor: inbound only from app SG on extractor port, egress all"
   vpc_id      = data.aws_vpc.main.id
 
-  ingress {
-    description     = "extraction API from piki app servers only"
-    from_port       = var.extractor_port
-    to_port         = var.extractor_port
-    protocol        = "tcp"
-    security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
+  dynamic "ingress" {
+    for_each = var.extractor_ports
+    content {
+      description     = "extraction API from piki app servers only"
+      from_port       = ingress.value
+      to_port         = ingress.value
+      protocol        = "tcp"
+      security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
+    }
   }
 
   egress {
@@ -143,9 +146,9 @@ resource "aws_eip" "extractor" {
 }
 
 resource "aws_instance" "extractor" {
-  ami                    = var.ami_id != null ? var.ami_id : data.aws_ami.ubuntu[0].id
-  instance_type          = var.instance_type
-  subnet_id              = data.aws_subnet.public.id
+  ami           = var.ami_id != null ? var.ami_id : data.aws_ami.ubuntu[0].id
+  instance_type = var.instance_type
+  subnet_id     = data.aws_subnet.public.id
   # 비우면 null 로 넘겨 기존처럼 키페어 없이 만든다(공개키는 terraform 밖에서 주입).
   key_name               = var.key_name != "" ? var.key_name : null
   iam_instance_profile   = aws_iam_instance_profile.extractor.name

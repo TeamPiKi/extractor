@@ -1,6 +1,6 @@
 server:
-  # 8080=core, 8000=piki-hb(헤드리스) 와 겹치지 않는 포트. dev 는 본 서버 박스에 컨테이너로 동거한다.
-  port: 8090
+  # 서비스 번호. 번호 체계는 TeamPiKi/infra conventions/infra.md 3절.
+  port: 8081
 
 spring:
   application:
