@@ -270,12 +270,9 @@ jobs:
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
             bash /tmp/piki-blocks/prune_images.sh
 
-            # --legacy-slot: 옛 슬롯(8090 시절 규칙) 중 서빙 중인 쪽을 알아보게 한다(#108). 이 인자가 없으면 옛 blue 가
-            # 서빙 중일 때 새 blue 기동 전에 지워진다. 새 슬롯으로 한 번 배포된 뒤 제거.
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \
               --service-port "$SERVICE_PORT" --name-prefix piki-extractor \
-              --legacy-slot blue:18090 --legacy-slot green:18091 \
               --health-path /actuator/health --health-interval 5 --health-attempts 36 --health-expect-body '"status":"UP"' \
               --verify-cmd "bash /tmp/piki-blocks/healthcheck.sh --url http://localhost:$SERVICE_PORT/actuator/health --interval 2 --attempts 10 --expect-body '\"status\":\"UP\"'" \
               -- --image "$IMAGE" --restart unless-stopped --env-file "$ENV_FILE" --pull \

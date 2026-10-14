@@ -124,8 +124,7 @@ data "http" "ports" {
 }
 
 locals {
-  # 8090 은 옛 입구다. core 가 정본으로 extractor 주소를 계산하게 되면 뺀다(#108).
-  extractor_ports = [jsondecode(data.http.ports.response_body).extractor.port, 8090]
+  extractor_port = jsondecode(data.http.ports.response_body).extractor.port
 }
 
 # --- SG: inbound = piki app SG 에서 추출 포트만, egress = 전체(임의 상품 링크 fetch + Gemini + 헤드리스) ---
@@ -134,15 +133,12 @@ resource "aws_security_group" "extractor" {
   description = "piki extractor: inbound only from app SG on extractor port, egress all"
   vpc_id      = data.aws_vpc.main.id
 
-  dynamic "ingress" {
-    for_each = local.extractor_ports
-    content {
-      description     = "extraction API from piki app servers only"
-      from_port       = ingress.value
-      to_port         = ingress.value
-      protocol        = "tcp"
-      security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
-    }
+  ingress {
+    description     = "extraction API from piki app servers only"
+    from_port       = local.extractor_port
+    to_port         = local.extractor_port
+    protocol        = "tcp"
+    security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
   }
 
   egress {
