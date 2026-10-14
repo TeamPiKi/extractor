@@ -1,6 +1,6 @@
 server:
-  # 8080=core, 8000=piki-hb(헤드리스) 와 겹치지 않는 포트. dev 는 본 서버 박스에 컨테이너로 동거한다.
-  port: 8090
+  # 로컬 기본값. 배포는 정본(TeamPiKi/infra contracts/ports.json) 값을 PORT 로 넘긴다(ListenPortWarning).
+  port: ${PORT:8081}
 
 spring:
   application:

@@ -6,9 +6,8 @@ FROM eclipse-temurin:25-jre
 WORKDIR /app
 COPY build/libs/piki-extractor-*.jar app.jar
 
-# 계약 문서(docs/api-contract.md)의 기본 포트. 시크릿(GEMINI_API_KEY)은 이미지에 안 굽는다 —
+# 리슨 포트는 배포가 env PORT 로 넘긴다. 시크릿(GEMINI_API_KEY)은 이미지에 안 굽는다 —
 # 실행 시점에 SSM Parameter Store 에서 읽어 env 로 주입한다(배포 스크립트 소관).
-EXPOSE 8090
 
 # --enable-native-access: zstd-jni(렌더 응답 해제)의 JNI 로드 허용 — Java 25 는 경고, 미래 JDK 는 차단(JEP 472).
 ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "app.jar"]

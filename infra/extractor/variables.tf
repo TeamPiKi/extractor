@@ -33,12 +33,6 @@ variable "app_sg_name" {
 # ---------------------------------------------------------------------------
 # 박스 스펙
 # ---------------------------------------------------------------------------
-variable "extractor_port" {
-  description = "추출 API 가 listen 하는 포트(앱→박스). 서비스 구현·배포는 앱 레이어 소관, 여기선 SG 인바운드만 연다."
-  type        = number
-  default     = 8090
-}
-
 variable "instance_type" {
   description = <<-EOT
     ARM(Graviton) 인스턴스 타입 — JVM 서비스라 arm64 가 가능하고 저렴하다(본 서버 prod 와 같은 t4g.small=2GiB).
