@@ -22,12 +22,20 @@ variable "public_subnet_cidr" {
 
 variable "app_sg_name" {
   description = <<-EOT
-    piki 앱 EC2 보안그룹 이름. 이 SG 에서만 추출 API 포트 인바운드를 허용한다(외부 노출 0).
-    본 서버 dev/staging/prod 세 인스턴스가 이 SG 하나를 공유하므로 규칙 하나로 세 호출자를 다 덮는다.
-    ※ 참조 계약: piki 팀이 이 SG 를 rename/재생성하면 이 모듈 plan 이 깨진다. 라이브 이름은 plan 으로 확정할 것.
+    piki prod 앱 EC2 보안그룹 이름(core terraform/security_groups.tf). 이름의 team3-dev 는 옛 이름이다.
+    ※ 참조 계약: core 가 이 SG 를 rename/재생성하면 이 모듈 plan 이 깨진다. 라이브 이름은 plan 으로 확정할 것.
   EOT
   type        = string
   default     = "team3-dev-ec2-sg"
+}
+
+variable "dev_app_sg_name" {
+  description = <<-EOT
+    piki dev 앱 EC2 보안그룹 이름(core terraform/security_groups.tf). 이 박스 한 대가 dev·prod 호출을 둘 다 받는다.
+    prod 와 그룹을 나눈 이유는 prod DB 인바운드에서 dev 를 빼기 위해서다(core#1213).
+  EOT
+  type        = string
+  default     = "piki-dev-app-sg"
 }
 
 # ---------------------------------------------------------------------------
