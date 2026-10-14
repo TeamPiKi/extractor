@@ -4,13 +4,10 @@ import com.depromeet.piki.contracts.render.v1.Hop;
 import com.depromeet.piki.contracts.render.v1.RenderProto;
 import com.depromeet.piki.contracts.render.v1.RenderRequest;
 import com.depromeet.piki.contracts.render.v1.RenderResponse;
-import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
-import com.depromeet.piki.extractor.extraction.http.InternalHostGuard;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
-import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
 import com.github.luben.zstd.ZstdInputStream;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.util.JsonFormat;
@@ -20,6 +17,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.regex.Pattern;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -30,9 +28,11 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * renderer 의 렌더 호출 wire 구현(계약 정본: TeamPiKi/infra 의 contracts/render.proto). 응답의 홉 목록을 {@link RenderedHop} 으로 옮기고 매 홉의 host 를
- * SSRF 가드에 통과시킨다 — 렌더 서비스가 대신 따라간 redirect 로 내부망 응답이 상품 HTML 로 흘러드는 것을 막는
- * 마지막 층이다(요청 전의 원본 URL 검증과 이중). 홉의 해석은 하지 않는다.
+ * renderer 의 렌더 호출 wire 구현(계약 정본: TeamPiKi/infra 의 contracts/render.proto). 응답의 홉 목록을 {@link RenderedHop} 으로 옮긴다.
+ * 홉의 해석은 하지 않는다.
+ *
+ * <p>내부 주소 판정은 renderer 가 브라우저의 실제 연결 IP 로 하고 {@code internal_address_hit} 로 알린다. 여기서 홉 URL 을
+ * 다시 이름 해석하면 렌더와 다른 시점의 답이라 브라우저가 실제로 간 IP 와 어긋날 수 있어 하지 않는다.
  *
  * <p>전송: 요청 compress=true 면 응답이 zstd raw 바이트로 온다. 해제 분기는 요청이 아니라 응답 헤더
  * ({@code X-Encoding: zstd}) 기준 — compress 를 모르는 구버전 renderer 는 plain JSON 을 주므로, 헤더 분기여야
@@ -40,6 +40,7 @@ import org.springframework.web.client.RestClientResponseException;
  * 롤아웃 규약 참조.
  */
 @Slf4j
+@RequiredArgsConstructor
 @Component
 public class HttpHeadlessRenderer implements HeadlessRenderer {
 
@@ -60,37 +61,18 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private static final int MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
     private static final Pattern URL_PATTERN = Pattern.compile("https?://\\S+");
 
+    @Qualifier(HeadlessRenderHttpClientConfig.HEADLESS_RENDER_REST_CLIENT)
     private final RestClient restClient;
     private final HeadlessExtractionProperties properties;
-    private final RequestScopedDnsResolver dnsResolver;
-    private final InternalHostGuard internalHostGuard;
     private final ZstdDictionaries dictionaries;
-
-    public HttpHeadlessRenderer(
-        @Qualifier(HeadlessRenderHttpClientConfig.HEADLESS_RENDER_REST_CLIENT) RestClient restClient,
-        HeadlessExtractionProperties properties,
-        RequestScopedDnsResolver dnsResolver,
-        ZstdDictionaries dictionaries
-    ) {
-        this.restClient = restClient;
-        this.properties = properties;
-        this.dnsResolver = dnsResolver;
-        this.internalHostGuard = new InternalHostGuard(dnsResolver);
-        this.dictionaries = dictionaries;
-    }
 
     @Override
     public List<RenderedHop> render(ProductLink link, boolean authorized) {
-        try {
-            internalHostGuard.verify(link);
-            return renderVerified(link, authorized);
-        } finally {
-            dnsResolver.clear();
-        }
-    }
-
-    private List<RenderedHop> renderVerified(ProductLink link, boolean authorized) {
         RenderResponse response = requestRender(link, authorized);
+        if (response.getInternalAddressHit()) {
+            log.error("[SSRF] blocked: render reached internal address url={}", link.safeLogString());
+            throw PageFetchException.blockedHost();
+        }
         List<Hop> hops = response.getHopsList();
         if (hops.isEmpty()) {
             String error = response.hasError() ? maskUrls(response.getError()) : null;
@@ -191,31 +173,19 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     }
 
     /**
-     * 홉 URL 은 Jsoup baseUri 이자 응답 계약의 finalUrl 로 호출자에게 나간다. 형식 위반은 원본 link 로 폴백한다 —
-     * baseUri 부정확은 치명이 아니고, 여기서 INVALID_URL 을 새면 렌더는 성공했는데 확정 실패로 종결되는 오판이 된다.
-     * 단 SSRF 판정은 폴백하지 않고 렌더 전체를 거부한다.
+     * 홉 URL 은 Jsoup baseUri 이자 응답 계약의 finalUrl 로 호출자에게 나간다. 형식 위반(http 홉 포함)은 원본 link 로
+     * 폴백한다 — baseUri 부정확은 치명이 아니고, 여기서 INVALID_URL 을 새면 렌더는 성공했는데 확정 실패로 종결되는
+     * 오판이 된다.
      */
     private ProductLink resolveHopUrl(String url, ProductLink link) {
         if (url == null || url.isBlank()) {
             return link;
         }
-        ProductLink parsed;
         try {
-            parsed = ProductLink.parse(url);
+            return ProductLink.parse(url);
         } catch (ExtractionException e) {
             return link;
         }
-        try {
-            internalHostGuard.verify(parsed);
-        } catch (PageFetchException e) {
-            if (e.code() == ExtractionErrorCode.BLOCKED_HOST) {
-                throw e;
-            }
-            // 그 외(DNS 미해결 등)는 검증 불가일 뿐 내부망 근거가 아니다.
-            log.warn("headless render hop url 검증 실패 code={} url={}", e.code(), link.safeLogString());
-            return link;
-        }
-        return parsed;
     }
 
     /**

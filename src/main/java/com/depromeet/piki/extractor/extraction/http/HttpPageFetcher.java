@@ -316,12 +316,12 @@ public class HttpPageFetcher implements PageFetcher {
         URI location = redirectLocation(current, headers);
         URI target = current.value().resolve(location);
         // https 강제(다운그레이드 차단)와 형식 검증을 ProductLink.parse 가 겸한다 — 둘 중 하나라도 어긋난
-        // redirect 는 따라가지 않는다.
+        // redirect 는 따라가지 않고 헤드리스로 넘긴다. 내부 주소가 아니므로 SSRF 차단(blockedHost)이 아니다.
         try {
             return ProductLink.parse(target.toString());
         } catch (ProductLinkException e) {
             log.warn("link fetch redirect rejected (non-https or malformed) url={}", current.safeLogString());
-            throw PageFetchException.blockedHost();
+            throw PageFetchException.malformedRedirect(e);
         }
     }
 
