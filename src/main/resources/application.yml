@@ -1,6 +1,6 @@
 server:
-  # 서비스 번호. 번호 체계는 TeamPiKi/infra conventions/infra.md 3절.
-  port: 8081
+  # 로컬 기본값. 배포는 정본(TeamPiKi/infra contracts/ports.json) 값을 PORT 로 넘긴다(ListenPortWarning).
+  port: ${PORT:8081}
 
 spring:
   application:
