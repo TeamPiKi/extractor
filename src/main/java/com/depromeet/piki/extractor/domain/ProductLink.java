@@ -7,7 +7,7 @@ import java.util.Set;
 
 /**
  * 미지원 플랫폼 판정은 등록 입력 경계의 정책이라 호출자(core) 소관이다 —
- * 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식)과 안전 로깅만 책임진다.
+ * 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식·host 존재)과 안전 로깅만 책임진다.
  */
 public final class ProductLink {
 
@@ -35,6 +35,9 @@ public final class ProductLink {
         String scheme = uri.getScheme();
         if (scheme == null || !HTTP_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT))) {
             throw ProductLinkException.unsupportedScheme();
+        }
+        if (uri.getHost() == null) {
+            throw ProductLinkException.invalidFormat(null);
         }
         return new ProductLink(uri);
     }

@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -21,7 +22,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 /**
- * redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 차단·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
+ * redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 승격·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
  *
  * <p>DNS 를 가짜 공인 IP 로 주입해 SSRF 가드를 통과시켜 redirect 로직만 격리한다.
  */
@@ -100,16 +101,33 @@ class HttpPageFetcherRedirectTest {
     }
 
     @Test
-    @DisplayName("https 에서 http 로 다운그레이드하는 redirect 는 차단한다")
-    void blocksHttpsToHttpDowngrade() {
+    @DisplayName("https 에서 http 로 다운그레이드하는 redirect 는 따라가지 않고 헤드리스로 넘긴다 — 내부 주소가 아니라 SSRF 차단이 아니다")
+    void handsHttpsToHttpDowngradeToHeadless() {
         HttpPageFetcher fetcher =
             fetcherWith(server ->
                 server.expect(requestTo("https://www.zigzag.kr/p"))
                     .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("http://zigzag.kr/p"))));
 
-        assertThrows(
+        PageFetchException ex = assertThrows(
             PageFetchException.class,
             () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
+        assertTrue(ex.escalatable());
+    }
+
+    @Test
+    @DisplayName("host 가 없는 redirect 위치는 사용자 입력 오류가 아니라 비정상 redirect 로 헤드리스로 넘긴다")
+    void handsHostlessRedirectToHeadless() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server ->
+                server.expect(requestTo("https://www.zigzag.kr/p"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https:///p"))));
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
+        assertTrue(ex.escalatable());
     }
 
     @Test

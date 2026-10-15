@@ -14,12 +14,10 @@ import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
-import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
 import com.github.luben.zstd.ZstdOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -33,42 +31,30 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 /**
- * POST /render 의 wire 계약(요청 필드·홉 변환·SSRF 가드·홉 url 폴백·zstd 해제)을 네트워크 없이 검증한다.
- * 홉의 해석은 HeadlessProductLinkExtractorTest 가 진다. DNS 는 가짜 공인 IP 로 주입해 SSRF 가드를 통과시킨다.
+ * POST /render 의 wire 계약(요청 필드·홉 변환·내부 주소 신호·홉 url 폴백·zstd 해제)을 네트워크 없이 검증한다.
+ * 홉의 해석은 HeadlessProductLinkExtractorTest 가 진다.
  */
 class HttpHeadlessRendererTest {
 
     private static final String BASE_URL = "http://headless.test:8000";
     /** proxied 는 계약에 없는 필드다 - 구버전 renderer 가 실어 보내도 무시되는지를 이 픽스처가 겸해서 본다. */
     private static final String TWO_HOPS =
-        "{\"proxied\":true,\"hops\":["
+        "{\"proxied\":true,\"internal_address_hit\":false,\"hops\":["
             + "{\"url\":\"https://kream.co.kr/products/6963\",\"status\":302,\"headers\":{\"location\":\"/p\"}},"
             + "{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"headers\":{\"content-type\":\"text/html\"},"
             + "\"body\":\"<html>ssr</html>\",\"dom\":\"<html>dom</html>\"}]}";
 
     private final ProductLink link = ProductLink.parse("https://kream.co.kr/products/6963");
 
-    private final RequestScopedDnsResolver.HostResolver publicIp =
-        host -> new InetAddress[] {InetAddress.getByName("93.184.216.34")};
-
-    private HttpHeadlessRenderer rendererWith(
-        RequestScopedDnsResolver.HostResolver hostResolver,
-        ZstdDictionaries dictionaries,
-        Consumer<MockRestServiceServer> configure
-    ) {
+    private HttpHeadlessRenderer rendererWith(ZstdDictionaries dictionaries, Consumer<MockRestServiceServer> configure) {
         RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         configure.accept(server);
-        return new HttpHeadlessRenderer(
-            builder.build(),
-            HeadlessExtractionProperties.of(true),
-            new RequestScopedDnsResolver(hostResolver),
-            dictionaries
-        );
+        return new HttpHeadlessRenderer(builder.build(), HeadlessExtractionProperties.of(true), dictionaries);
     }
 
     private HttpHeadlessRenderer rendererWith(Consumer<MockRestServiceServer> configure) {
-        return rendererWith(publicIp, ZstdDictionaries.none(), configure);
+        return rendererWith(ZstdDictionaries.none(), configure);
     }
 
     @Test
@@ -97,9 +83,9 @@ class HttpHeadlessRendererTest {
     @DisplayName("홉이 없으면(브라우저 오류·빈 응답) 일시 실패(HEADLESS_UPSTREAM)다")
     void noHopsIsTransient() {
         for (String body : List.of(
-            "{\"error\":\"TimeoutError: boom\",\"hops\":[]}",
-            "{\"error\":\"TimeoutError: boom\"}",
-            "{}"
+            "{\"error\":\"TimeoutError: boom\",\"internal_address_hit\":false,\"hops\":[]}",
+            "{\"error\":\"TimeoutError: boom\",\"internal_address_hit\":false}",
+            "{\"internal_address_hit\":false}"
         )) {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
                 .expect(requestTo(BASE_URL + "/render"))
@@ -127,7 +113,7 @@ class HttpHeadlessRendererTest {
     @DisplayName("사전 압축 응답(X-Zstd-Dict: 사전ID)은 보유한 같은 사전으로 해제한다")
     void zstdDictResponseUsesSharedDictionary() {
         byte[] dict = "<html><head><meta charset=\"utf-8\"><title>공용 boilerplate</title>".getBytes(StandardCharsets.UTF_8);
-        HttpHeadlessRenderer renderer = rendererWith(publicIp, ZstdDictionaries.of("mall-v1.dict", dict), server -> server
+        HttpHeadlessRenderer renderer = rendererWith(ZstdDictionaries.of("mall-v1.dict", dict), server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(zstdCompress(TWO_HOPS, dict), MediaType.APPLICATION_OCTET_STREAM)
                 .headers(zstdHeaders("mall-v1.dict"))));
@@ -167,52 +153,51 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("내부망으로 resolve 되는 host 는 렌더 서비스 호출 전에 SSRF 로 차단된다 — 직행 경로의 방어선")
-    void internalHostIsBlockedBeforeRender() {
-        RequestScopedDnsResolver.HostResolver internalIp =
-            host -> new InetAddress[] {InetAddress.getByName("169.254.169.254")};
-        // 서버에 expect 를 하나도 걸지 않는다 — 가드가 먼저 던지므로 렌더 서비스로 요청이 나가면 안 된다.
-        HttpHeadlessRenderer renderer = rendererWith(internalIp, ZstdDictionaries.none(), server -> { });
-
-        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false));
-
-        assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
-        assertTrue(ex.permanent());
-    }
-
-    @Test
-    @DisplayName("홉 url 이 없거나 우리 형식이 아니면 원본 link 로 폴백한다 — 렌더 성공을 실패로 오판하지 않는다")
-    void invalidHopUrlFallsBackToLink() {
-        for (String urlField : List.of("", "\"url\":\"chrome-error://failed\",")) {
-            HttpHeadlessRenderer renderer = rendererWith(server -> server
-                .expect(requestTo(BASE_URL + "/render"))
-                .andRespond(withSuccess(
-                    "{\"hops\":[{" + urlField + "\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
-                    MediaType.APPLICATION_JSON
-                )));
-
-            assertEquals(link, renderer.render(link, false).getFirst().url());
-        }
-    }
-
-    @Test
-    @DisplayName("어느 홉이든 내부망으로 resolve 되면 렌더 전체를 거부한다 — 원본만 검증하면 redirect 로 가드를 우회한다")
-    void internalHopIsBlocked() {
-        RequestScopedDnsResolver.HostResolver byHost = host -> "metadata.internal".equals(host)
-            ? new InetAddress[] {InetAddress.getByName("169.254.169.254")}
-            : new InetAddress[] {InetAddress.getByName("93.184.216.34")};
-        HttpHeadlessRenderer renderer = rendererWith(byHost, ZstdDictionaries.none(), server -> server
+    @DisplayName("내부 주소를 판정하지 않는 renderer(필드 없음)의 홉은 쓰지 않고 일시 실패(HEADLESS_UPSTREAM)다")
+    void rendererWithoutJudgementIsRefused() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withSuccess(
-                "{\"hops\":["
-                    + "{\"url\":\"https://metadata.internal/latest/meta-data/\",\"status\":200,\"dom\":\"<html>secret</html>\"},"
-                    + "{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
+                "{\"hops\":[{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"dom\":\"<html>secret</html>\"}]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("renderer 가 내부 주소 응답을 알리면 SSRF 확정 실패(BLOCKED_HOST)이고 헤드리스 승격 대상이 아니다")
+    void internalAddressHitIsBlockedHost() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"error\":\"internal address response\",\"internal_address_hit\":true,\"hops\":[]}",
                 MediaType.APPLICATION_JSON
             )));
 
         PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false));
 
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
+        assertTrue(ex.permanent());
+        assertFalse(ex.escalatable());
+    }
+
+    @Test
+    @DisplayName("홉 url 이 없거나 우리 형식(https)이 아니면 원본 link 로 폴백한다 — 렌더 성공을 실패로 오판하지 않는다")
+    void invalidHopUrlFallsBackToLink() {
+        for (String urlField : List.of("", "\"url\":\"chrome-error://failed\",", "\"url\":\"http://kream.co.kr/p\",")) {
+            HttpHeadlessRenderer renderer = rendererWith(server -> server
+                .expect(requestTo(BASE_URL + "/render"))
+                .andRespond(withSuccess(
+                    "{\"internal_address_hit\":false,\"hops\":[{" + urlField + "\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
+                    MediaType.APPLICATION_JSON
+                )));
+
+            assertEquals(link, renderer.render(link, false).getFirst().url());
+        }
     }
 
     @Test
