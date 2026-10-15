@@ -21,15 +21,9 @@ public final class InternalHostGuard {
     private final InternalAddressRanges ranges = InternalAddressRanges.CONTRACT_RANGES;
 
     public void verify(ProductLink link) {
-        String host = link.value().getHost();
-        if (host == null) {
-            // https 스킴만 맞고 host 가 없는 주소(https:///p 등). 갈 곳이 없어 형식 위반이다.
-            log.info("link fetch missing host url={}", link.safeLogString());
-            throw PageFetchException.unresolvableHost(null);
-        }
         InetAddress[] addresses;
         try {
-            addresses = dnsResolver.resolve(host);
+            addresses = dnsResolver.resolve(link.value().getHost());
         } catch (UnknownHostException e) {
             log.info("link fetch unknown host url={}", link.safeLogString());
             throw PageFetchException.unresolvableHost(e);

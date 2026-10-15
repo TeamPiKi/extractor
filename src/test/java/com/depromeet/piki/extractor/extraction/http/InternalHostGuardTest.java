@@ -79,18 +79,6 @@ class InternalHostGuardTest {
     }
 
     @Test
-    @DisplayName("host 가 없는 주소는 형식 위반(INVALID_URL)이지 SSRF 차단이 아니다")
-    void missingHostIsInvalidUrl() {
-        InternalHostGuard guard = guardResolvingTo("93.184.216.34");
-
-        PageFetchException thrown = assertThrows(
-            PageFetchException.class,
-            () -> guard.verify(ProductLink.parse("https:///p/1")));
-
-        assertEquals(ExtractionErrorCode.INVALID_URL, thrown.code());
-    }
-
-    @Test
     @DisplayName("host 를 조회하지 못하면 확정 실패로 던져 호출자가 재시도를 태우지 않는다")
     void unresolvableHostFailsPermanently() {
         UnknownHostException resolveFailure = new UnknownHostException("no-such-host.example");

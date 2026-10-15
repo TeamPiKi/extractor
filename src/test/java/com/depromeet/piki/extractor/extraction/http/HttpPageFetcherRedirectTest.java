@@ -116,6 +116,21 @@ class HttpPageFetcherRedirectTest {
     }
 
     @Test
+    @DisplayName("host 가 없는 redirect 위치는 사용자 입력 오류가 아니라 비정상 redirect 로 헤드리스로 넘긴다")
+    void handsHostlessRedirectToHeadless() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server ->
+                server.expect(requestTo("https://www.zigzag.kr/p"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https:///p"))));
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
+        assertTrue(ex.escalatable());
+    }
+
+    @Test
     @DisplayName("redirect 가 상한을 넘으면 tooManyRedirects 로 끊는다")
     void breaksOnTooManyRedirects() {
         HttpPageFetcher fetcher =
