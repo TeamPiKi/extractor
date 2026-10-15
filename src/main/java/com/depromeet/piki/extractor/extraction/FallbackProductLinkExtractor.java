@@ -88,6 +88,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
      */
     private ProductSnapshot escalateToHeadless(ProductLink link, String category, boolean authorized, String model) {
         Objects.requireNonNull(category, "category");
+        ExtractionDeadline.requireNotPassed("headless");
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
             ProductSnapshot snapshot = headless.extract(link, authorized, model);

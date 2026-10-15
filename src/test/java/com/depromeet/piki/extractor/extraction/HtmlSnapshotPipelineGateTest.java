@@ -11,6 +11,7 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -84,5 +85,22 @@ class HtmlSnapshotPipelineGateTest {
 
         assertEquals("하이드레이션 상품", snapshot.name());
         assertEquals(1, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("호출자 기한이 지났으면 볼 게 있는 문서여도 LLM 을 부르지 않는다")
+    void passedDeadlineSkipsLlm() {
+        String hydrationShell = "<html><head><script id=\"__NEXT_DATA__\" type=\"application/json\">"
+            + "{\"props\":{\"product\":{\"name\":\"하이드레이션 상품\",\"price\":12000}}}"
+            + "</script></head><body><div id=\"__next\"></div></body></html>";
+        HtmlSnapshotPipeline pipeline = pipeline(new SimpleMeterRegistry());
+
+        assertThrows(
+            DeadlineExceededException.class,
+            () -> ExtractionDeadline.within(
+                Duration.ZERO, () -> pipeline.extract(PageContent.of(link, hydrationShell), "fetch=0ms", null))
+        );
+
+        assertEquals(0, stubGemini.invocations());
     }
 }
