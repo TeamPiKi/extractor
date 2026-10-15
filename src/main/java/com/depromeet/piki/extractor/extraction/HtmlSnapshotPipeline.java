@@ -118,6 +118,7 @@ public class HtmlSnapshotPipeline {
         String timing,
         String model
     ) {
+        ExtractionDeadline.requireNotPassed("llm");
         long llmStart = System.nanoTime();
         ProductSnapshot snapshot = geminiHtmlExtractor.extract(document, page.link(), model);
         long llmMs = (System.nanoTime() - llmStart) / 1_000_000;
