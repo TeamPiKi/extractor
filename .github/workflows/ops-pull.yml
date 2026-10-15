@@ -1,61 +1,58 @@
-# 루틴이 ops 에 남긴 패치를 사람이 승인하면 PR 로 연다. 검사·CI 승인 로직은 infra 의 ops-pull 정본.
-# 공개 repo 라 브랜치도 승인 전에는 올리지 않는다. 승인은 environment ops-approval 의 required reviewer.
+# 루틴이 ops 에 남긴 패치마다 승인 이슈를 만들고, 쓰기 권한이 있는 사람이 체크하면 그 패치로 PR 을 연다.
+# 로직은 infra 의 ops-pull 정본. renderer·extractor 가 같은 파일을 쓴다.
 name: Ops Pull
 
 on:
-  # 매일 아침 루틴이 끝난 뒤와 오후 한 번. 루틴 시각은 claude.ai 루틴 설정이 정본
+  # KST 12시·24시. 매일 아침 루틴(시각은 claude.ai 루틴 설정이 정본)이 끝난 뒤 승인 이슈를 만든다
   schedule:
-    - cron: '47 0,4 * * *'
+    - cron: '0 3,15 * * *'
   workflow_dispatch:
+  issues:
+    types: [edited]
 
 permissions: {}
 
-# 승인을 기다리는 실행이 있으면 다음 실행은 그 뒤에 줄을 서서, 같은 패치의 승인 요청이 쌓이지 않는다.
-concurrency:
-  group: ops-pull
-  cancel-in-progress: false
-
 jobs:
-  scan:
+  request:
+    if: github.event_name != 'issues'
     runs-on: ubuntu-latest
+    concurrency:
+      group: ops-pull-request
+      cancel-in-progress: false
     permissions:
       contents: read
+      issues: write
       pull-requests: read
-    outputs:
-      pending: ${{ steps.scan.outputs.pending }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - id: scan
-        uses: TeamPiKi/infra/.github/actions/ops-pull@main
-        with:
-          mode: scan
-          ops-deploy-key: ${{ secrets.OPS_DEPLOY_KEY }}
-
-  open:
-    needs: scan
-    if: needs.scan.outputs.pending != '[]'
-    # 승인하는 사람이 ops 이슈의 sha 와 맞춰 볼 수 있게 40자 전체를 둔다. 앞 몇 자리는 루틴이 맞춰 만들 수 있다.
-    name: open ${{ matrix.id }} @ ${{ matrix.commit }}
-    runs-on: ubuntu-latest
-    environment: ops-approval
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.scan.outputs.pending) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: TeamPiKi/infra/.github/actions/ops-pull@main
         with:
-          mode: pr
-          id: ${{ matrix.id }}
-          ops-commit: ${{ matrix.commit }}
+          mode: request
           ops-deploy-key: ${{ secrets.OPS_DEPLOY_KEY }}
+
+  approve:
+    # 봇이 만든 승인 이슈의 편집만 받는다. 승인 여부와 체크한 사람의 권한은 정본이 다시 판정한다
+    if: >-
+      github.event_name == 'issues'
+      && github.event.issue.user.login == 'github-actions[bot]'
+      && startsWith(github.event.issue.title, 'ops 패치 ')
+    runs-on: ubuntu-latest
+    # 제목에 패치 id 가 들어 있어 같은 패치의 승인은 이슈가 달라도 차례로 돈다
+    concurrency:
+      group: ops-pull-approve-${{ github.event.issue.title }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: TeamPiKi/infra/.github/actions/ops-pull@main
+        with:
+          mode: approve
+          ops-deploy-key: ${{ secrets.OPS_DEPLOY_KEY }}
+          # 공개 repo 에서만 필요하다. 비공개 repo 는 이 시크릿이 없어도 된다
           deny-pattern: ${{ secrets.OPS_DENY_PATTERN }}
