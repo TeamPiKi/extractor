@@ -3,9 +3,9 @@
 name: Ops Pull
 
 on:
-  # KST 12시·24시. 매일 아침 루틴(시각은 claude.ai 루틴 설정이 정본)이 끝난 뒤 승인 이슈를 만든다
+  # KST 0시 30분·12시 30분. 0시·12시 루틴(시각은 claude.ai 루틴 설정이 정본)이 끝난 뒤 승인 이슈를 만든다
   schedule:
-    - cron: '0 3,15 * * *'
+    - cron: '30 3,15 * * *'
   workflow_dispatch:
   issues:
     types: [edited]
