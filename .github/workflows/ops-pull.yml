@@ -1,38 +1,61 @@
-# 사람이 ops 이슈에서 확인한 패치 하나를 PR 로 연다. 검사·CI 승인 로직은 infra 의 ops-pull 정본.
-# 공개 repo 라 정본이 URL·금지어 검사를 켠다. 금지어 목록은 공개 코드에 남지 않게 시크릿으로 둔다.
+# 루틴이 ops 에 남긴 패치를 사람이 승인하면 PR 로 연다. 검사·CI 승인 로직은 infra 의 ops-pull 정본.
+# 공개 repo 라 브랜치도 승인 전에는 올리지 않는다. 승인은 environment ops-approval 의 required reviewer.
 name: Ops Pull
 
 on:
+  # 매일 아침 루틴이 끝난 뒤와 오후 한 번. 루틴 시각은 claude.ai 루틴 설정이 정본
+  schedule:
+    - cron: '47 0,4 * * *'
   workflow_dispatch:
-    inputs:
-      id:
-        description: ops 이슈에 적힌 패치 id (YYYYMMDD-N)
-        required: true
-        type: string
-      ops_commit:
-        description: ops 이슈에 적힌 커밋 sha (40자). 확인한 그 커밋의 패치만 올린다
-        required: true
-        type: string
 
 permissions: {}
 
+# 승인을 기다리는 실행이 있으면 다음 실행은 그 뒤에 줄을 서서, 같은 패치의 승인 요청이 쌓이지 않는다.
 concurrency:
   group: ops-pull
   cancel-in-progress: false
 
 jobs:
-  pull:
+  scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pending: ${{ steps.scan.outputs.pending }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - id: scan
+        uses: TeamPiKi/infra/.github/actions/ops-pull@main
+        with:
+          mode: scan
+          ops-deploy-key: ${{ secrets.OPS_DEPLOY_KEY }}
+
+  open:
+    needs: scan
+    if: needs.scan.outputs.pending != '[]'
+    # 승인하는 사람이 ops 이슈의 sha 와 맞춰 볼 수 있게 40자 전체를 둔다. 앞 몇 자리는 루틴이 맞춰 만들 수 있다.
+    name: open ${{ matrix.id }} @ ${{ matrix.commit }}
+    runs-on: ubuntu-latest
+    environment: ops-approval
     permissions:
       contents: write
       pull-requests: write
       actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.scan.outputs.pending) }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: TeamPiKi/infra/.github/actions/ops-pull@main
         with:
-          id: ${{ inputs.id }}
-          ops-commit: ${{ inputs.ops_commit }}
+          mode: pr
+          id: ${{ matrix.id }}
+          ops-commit: ${{ matrix.commit }}
           ops-deploy-key: ${{ secrets.OPS_DEPLOY_KEY }}
           deny-pattern: ${{ secrets.OPS_DENY_PATTERN }}
