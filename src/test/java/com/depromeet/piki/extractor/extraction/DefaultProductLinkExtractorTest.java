@@ -11,9 +11,11 @@ import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
+import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
@@ -43,7 +45,8 @@ class DefaultProductLinkExtractorTest {
                 new StructuredDataExtractor(new ObjectMapper()),
                 new GeminiHtmlExtractor(stubGemini),
                 new SimpleMeterRegistry()
-            )
+            ),
+            new SiteConcurrencyLimiter(2, Duration.ofSeconds(15))
         );
     }
 
