@@ -4,6 +4,7 @@ import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
+import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,11 +21,12 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
 
     private final PageFetcher pageFetcher;
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
+    private final SiteConcurrencyLimiter siteLimiter;
 
     @Override
     public ProductSnapshot extract(ProductLink link, boolean authorized, String model) {
         long fetchStart = System.nanoTime();
-        PageContent page = pageFetcher.fetch(link);
+        PageContent page = siteLimiter.call(link, () -> pageFetcher.fetch(link));
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;
 
         try {
