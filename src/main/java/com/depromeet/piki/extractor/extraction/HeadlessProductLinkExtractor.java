@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
@@ -27,6 +28,9 @@ import org.springframework.stereotype.Component;
  * 구조화 데이터는 그대로 쓰고, 차단으로 보이는 문서는 LLM 후보에서만 뺀다. 아무것도 못 뽑았을 때 실패 코드를
  * 차단과 장애로 가르는 데만 쓴다. 상품 경로가 사이트 루트에 착지한 홉도 같은 취급이다 — 홈 피드를 LLM 에 보내면
  * 확정 실패로 닫혀 버리므로 후보에서 빼고, 그것뿐이면 일시 실패로 남긴다(HttpPageFetcher 의 redirect 판정과 짝).
+ *
+ * <p>마지막 홉이 차단이면 목적지에 닿지 못한 렌더다. 이때 남는 후보는 단축링크 안내 페이지 같은 앞 홉뿐이라, 그 후보의
+ * 확정 실패(상품 아님·읽을 수 없음)는 등록된 링크에 대한 판정이 아니다. 차단으로 답해 호출자가 다시 태우게 한다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -51,6 +55,8 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         String timing = "render=" + renderMs + "ms hops=" + hops.size();
 
         boolean blocked = hops.stream().anyMatch(hop -> HeadlessBlockSignal.isBlocked(hop.status(), hop.headers()));
+        RenderedHop destination = hops.getLast();
+        boolean destinationBlocked = HeadlessBlockSignal.isBlocked(destination.status(), destination.headers());
         boolean rootLanded = false;
         Chosen first = null;      // 차단 신호 없는 첫 후보 — 전부 셸이면 이걸로 게이트가 확정 실패를 닫는다
         Chosen fallback = null;   // 그중 LLM 에 넘길 것이 있는 첫 후보
@@ -59,7 +65,9 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
             // 구조화 추출보다 먼저 거른다 — 홈의 대표 상품 JSON-LD 가 등록 상품으로 채택되지 않게.
             if (!link.isSiteRoot() && candidate.hop().url().isSiteRoot()) {
                 rootLanded = true;
-                blocked |= HeadlessBlockSignal.isChallenge(page.document());
+                boolean rootChallenge = HeadlessBlockSignal.isChallenge(page.document());
+                blocked |= rootChallenge;
+                destinationBlocked |= rootChallenge && candidate.hop() == destination;
                 continue;
             }
             StructuredExtraction result = structuredDataExtractor.extract(page);
@@ -68,6 +76,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
             }
             boolean challenge = HeadlessBlockSignal.isChallenge(page.document());
             blocked |= challenge;
+            destinationBlocked |= challenge && candidate.hop() == destination;
             if (challenge || HeadlessBlockSignal.isBlocked(candidate.hop().status(), candidate.hop().headers())) {
                 continue;
             }
@@ -80,7 +89,20 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         }
         Chosen chosen = fallback != null ? fallback : first;
         if (chosen != null) {
-            return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
+            try {
+                return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
+            } catch (ProductSnapshotException e) {
+                if (!destinationBlocked) {
+                    throw e;
+                }
+                log.warn(
+                    "headless destination blocked, earlier hop closed as {} hops={} url={}",
+                    e.code(),
+                    hops.size(),
+                    link.safeLogString()
+                );
+                throw HeadlessRenderException.blocked();
+            }
         }
         if (blocked) {
             log.warn("headless hops unusable blocked=true hops={} url={}", hops.size(), link.safeLogString());

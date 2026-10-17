@@ -201,6 +201,56 @@ class HeadlessProductLinkExtractorTest {
     }
 
     @Test
+    @DisplayName("마지막 홉이 차단이면 앞 홉의 셸로 확정 실패를 닫지 않는다 — 목적지에 닿지 못한 렌더는 HEADLESS_BLOCKED 다")
+    void blockedDestinationDoesNotCloseOnEarlierShell() {
+        for (RenderedHop destination : List.of(
+            hop(mobile, 403, CHALLENGE, CHALLENGE),
+            hop(mobile, 200, CHALLENGE, CHALLENGE),
+            new RenderedHop(mobile, 200, Map.of("cf-mitigated", "challenge"), TEXT, TEXT)
+        )) {
+            HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, SHELL, ""), destination));
+
+            HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null));
+
+            assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, e.code());
+            assertFalse(e.permanent());
+            assertEquals(0, stubGemini.invocations());
+        }
+    }
+
+    @Test
+    @DisplayName("마지막 홉이 차단이면 앞 홉을 LLM 이 상품 아님으로 판정해도 HEADLESS_BLOCKED 다")
+    void blockedDestinationDoesNotCloseOnEarlierNotProduct() {
+        stubGemini.build = request -> new GeminiExtractionResult(false, null, null, null, null);
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, TEXT, ""), hop(mobile, 403, CHALLENGE, CHALLENGE)));
+
+        HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, e.code());
+        assertEquals(1, stubGemini.invocations());
+    }
+
+    @Test
+    @DisplayName("마지막 홉이 차단이어도 앞 홉에서 LLM 이 상품을 뽑으면 그대로 쓴다")
+    void earlierHopProductSurvivesBlockedDestination() {
+        stubGemini.build = request -> new GeminiExtractionResult(true, "앞 홉 상품", 7_000, "KRW", "https://cdn.example.com/i.png");
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, TEXT, ""), hop(mobile, 403, CHALLENGE, CHALLENGE)));
+
+        assertEquals("앞 홉 상품", extractor.extract(link, false, null).name());
+    }
+
+    @Test
+    @DisplayName("차단 홉을 지나 도착한 문서가 상품이 아니면 확정 실패 그대로다 — 목적지는 본 것이다")
+    void notProductAfterPassingBlockedHopStaysPermanent() {
+        stubGemini.build = request -> new GeminiExtractionResult(false, null, null, null, null);
+        HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 403, CHALLENGE, CHALLENGE), hop(mobile, 200, TEXT, TEXT)));
+
+        ProductSnapshotException e = assertThrows(ProductSnapshotException.class, () -> extractor.extract(link, false, null));
+
+        assertEquals(ExtractionErrorCode.NOT_PRODUCT_PAGE, e.code());
+    }
+
+    @Test
     @DisplayName("챌린지 홉을 지나 실제 상품 홉에 도달했으면 차단이 아니다")
     void challengeThenProductIsNotBlocked() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
