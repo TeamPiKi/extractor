@@ -31,6 +31,11 @@ data "aws_security_group" "app" {
   name   = var.app_sg_name
 }
 
+data "aws_security_group" "dev_app" {
+  vpc_id = data.aws_vpc.main.id
+  name   = var.dev_app_sg_name
+}
+
 # 최신 arm64 Ubuntu 24.04 (var.ami_id 지정 시 그 값 사용). JVM 서비스라 Graviton(arm64) 사용 — 본 서버와 동일 라인.
 data "aws_ami" "ubuntu" {
   count       = var.ami_id == null ? 1 : 0
@@ -138,7 +143,7 @@ resource "aws_security_group" "extractor" {
     from_port       = local.extractor_port
     to_port         = local.extractor_port
     protocol        = "tcp"
-    security_groups = [data.aws_security_group.app.id] # IP 대신 SG 참조 = '우리 서버만'
+    security_groups = [data.aws_security_group.app.id, data.aws_security_group.dev_app.id] # IP 대신 SG 참조 = '우리 서버만'
   }
 
   egress {
