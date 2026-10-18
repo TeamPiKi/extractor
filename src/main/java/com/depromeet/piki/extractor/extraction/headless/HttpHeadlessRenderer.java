@@ -34,10 +34,9 @@ import org.springframework.web.client.RestClientResponseException;
  * <p>내부 주소 판정은 renderer 가 브라우저의 실제 연결 IP 로 하고 {@code internal_address_hit} 로 알린다. 여기서 홉 URL 을
  * 다시 이름 해석하면 렌더와 다른 시점의 답이라 브라우저가 실제로 간 IP 와 어긋날 수 있어 하지 않는다.
  *
- * <p>전송: 요청 compress=true 면 응답이 zstd raw 바이트로 온다. 해제 분기는 요청이 아니라 응답 헤더
- * ({@code X-Encoding: zstd}) 기준 — compress 를 모르는 구버전 renderer 는 plain JSON 을 주므로, 헤더 분기여야
- * renderer 와 어느 쪽이 먼저 배포되든 안전하다. 사전({@code X-Zstd-Dict})은 {@code ZstdDictionaries} 의
- * 롤아웃 규약 참조.
+ * <p>전송: 요청 compress=true 면 응답이 zstd raw 바이트로 온다. 압축 여부의 판별은 응답 헤더
+ * ({@code X-Encoding: zstd}) 기준(render.proto 의 compress 주석). 사전({@code X-Zstd-Dict})은
+ * {@code ZstdDictionaries} 의 롤아웃 규약 참조.
  */
 @Slf4j
 @RequiredArgsConstructor

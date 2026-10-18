@@ -25,7 +25,7 @@ public class ImageExtractionService {
     private final ImageCropper imageCropper;
     private final ImageStorage imageStorage;
 
-    /** @param model 호출자가 지정한 LLM 모델(없으면 null). 해석·대체는 Gemini 클라이언트가 지므로 그대로 넘긴다. */
+    /** @param model 호출자가 지정한 LLM 모델(없으면 빈 문자열). 해석·대체는 Gemini 클라이언트가 지므로 그대로 넘긴다. */
     public ProductSnapshot extract(String bucket, String key, String model) {
         StoredImage stored = imageStorage.download(bucket, key);
         // download 가 S3 content-type 메타를 못 주면(메타 유실 등) 등록 때 key 에 박은 확장자로 mimeType 을 복원한다 —

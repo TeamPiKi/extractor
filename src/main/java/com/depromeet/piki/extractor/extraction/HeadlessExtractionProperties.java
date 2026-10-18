@@ -15,9 +15,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param readTimeout 렌더 서비스 내부 최악(goto + 렌더 정착 대기)을 다 기다리지는 않는다 — 호출자 read 예산 안에
  *     LLM fallback 몫을 남겨야 하기 때문이다. 층별 예산의 정본은 TeamPiKi/infra 의 contracts/extraction-api.md
  *     "타임아웃 예산" 절. 상한을 넘긴 렌더는 일시 실패로 떨어져 호출자 재시도가 진다.
- * @param compress 응답 zstd 압축 전송 요청(서버간 전송량 절감). 해제는 응답 헤더({@code X-Encoding}) 기준이라
- *     compress 필드를 모르는 구버전 renderer(무시하고 plain JSON 으로 답한다)와도 호환된다 — 켜 둔 채로 배포
- *     순서와 무관하게 안전하고, 이 스위치는 압축 경로에 문제가 생겼을 때 끄는 kill-switch 다.
+ * @param compress 응답 zstd 압축 전송 요청(서버간 전송량 절감). 해제는 응답 헤더({@code X-Encoding}) 기준이고,
+ *     이 스위치는 압축 경로에 문제가 생겼을 때 끄는 kill-switch 다.
  * @param zstdDictDir zstd 학습 사전 디렉토리(파일명 = 사전ID, renderer {@code compress.py} 의 DICT_ID 규약).
  *     빈값이면 사전 없음. 롤아웃 순서: 사전 파일을 여기 먼저 배포한 뒤 renderer 쪽 사전 경로를 켠다 — 순서가
  *     뒤집히면 미보유 사전ID 를 받아 해제 불가(일시 실패)가 된다.

@@ -45,7 +45,7 @@ public final class ExtractionResultMapper {
             result.setFinalUrl(snapshot.finalUrl().value().toString());
         }
         if (snapshot.method() != null) {
-            // 이름이 어긋나면 여기서 터진다 - 계약 대조 테스트가 먼저 잡는다.
+            // 이름이 어긋나면 여기서 터진다 - ExtractionMethodContractTest 가 먼저 잡는다.
             result.setMethod(ExtractionMethod.valueOf(snapshot.method().name()));
         }
         return result.build();
