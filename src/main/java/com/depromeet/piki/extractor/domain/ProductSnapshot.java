@@ -40,7 +40,7 @@ public record ProductSnapshot(
     /**
      * 호출자(core)의 READY 불변식(name·imageUrl·currentPrice)을 채우지 못했는가 — currency 는 READY 필수가 아니다.
      * 응답 경계(ExtractionResultMapper)의 성공 게이트와 헤드리스 에스컬레이션 판정(FallbackProductLinkExtractor)이
-     * 이 판정 하나를 공유한다 — 두 곳의 조건이 어긋나면 "승격 없이 확정 실패" 또는 "무의미한 승격"이 생긴다.
+     * 이 판정 하나를 공유한다 — 두 곳의 조건이 어긋나면 "승격 없이 실패" 또는 "무의미한 승격"이 생긴다.
      */
     public boolean missingReadyField() {
         return name == null || name.isBlank() || imageUrl == null || currentPrice == null;
@@ -50,7 +50,7 @@ public record ProductSnapshot(
      * 추출값을 하나도 못 얻었는가 — 호출자에게 내려보낼 것도, 사용자에게 "무엇을 채우라" 할 근거도 없는 상태다.
      *
      * <p>부분값(일부만 채움)은 호출자가 INCOMPLETE 로 수용해 사용자가 나머지를 채우므로(TeamPiKi/core#944)
-     * 성공으로 내려보내고, 이 판정이 참일 때만 확정 실패로 닫는다. currency 는 READY 필수가 아니라 단독으로는
+     * 성공으로 내려보내고, 이 판정이 참일 때만 실패로 닫는다. currency 는 READY 필수가 아니라 단독으로는
      * "건졌다"의 근거가 되지 못하므로 세지 않는다.
      */
     public boolean hasNoExtractedValue() {
@@ -84,7 +84,7 @@ public record ProductSnapshot(
      * imageUrl 을 https 로 좁히는 것은 클라이언트가 {@code <img src>} 로 쓸 때의 XSS 사다리를 끊기 위한 것이다.
      * 다만 좁히는 방식은 스킴에 따라 다르다 — 자세한 근거는 normalizeImageUrl 참조.
      * <p>범위를 벗어난 값은 {@link ProductSnapshotException#untrustworthyValue()} 로 막고, 그 뒤 처리는 호출부가 고른다:
-     * 구조화 경로는 예외를 흡수해 Miss(LLM fallback)로, LLM 경로는 그대로 흘려 확정 실패로 떨어뜨린다.
+     * 구조화 경로는 예외를 흡수해 Miss(LLM fallback)로, LLM 경로는 그대로 흘려 실패로 떨어뜨린다.
      * 같은 검증, 실패 표현만 다르다.
      */
     public static ProductSnapshot fromExtracted(

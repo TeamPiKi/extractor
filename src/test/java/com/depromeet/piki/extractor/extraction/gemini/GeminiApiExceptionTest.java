@@ -17,47 +17,48 @@ class GeminiApiExceptionTest {
 
     @ParameterizedTest
     @ValueSource(ints = {500, 502, 503, 504})
-    @DisplayName("5xx 응답은 재시도 대상(permanent=false·LLM_UPSTREAM)으로 분류된다")
+    @DisplayName("5xx 응답은 즉시 재호출 대상(retryable·LLM_UPSTREAM)으로 분류된다")
     void serverErrorsAreRetryable(int status) {
         HttpServerErrorException responseError = new HttpServerErrorException(HttpStatus.valueOf(status));
 
         GeminiApiException exception = GeminiApiException.fromResponseError(responseError);
 
-        assertFalse(exception.permanent());
+        assertTrue(exception.retryable());
         assertEquals(ExtractionErrorCode.LLM_UPSTREAM, exception.code());
     }
 
     @Test
-    @DisplayName("429 Too Many Requests 는 재시도 대상(permanent=false·LLM_UPSTREAM)으로 분류된다")
+    @DisplayName("429 Too Many Requests 는 즉시 재호출 대상(retryable·LLM_UPSTREAM)으로 분류된다")
     void tooManyRequestsIsRetryable() {
         HttpClientErrorException responseError = new HttpClientErrorException(HttpStatus.TOO_MANY_REQUESTS);
 
         GeminiApiException exception = GeminiApiException.fromResponseError(responseError);
 
-        assertFalse(exception.permanent());
+        assertTrue(exception.retryable());
         assertEquals(ExtractionErrorCode.LLM_UPSTREAM, exception.code());
     }
 
     @Test
-    @DisplayName("408 Request Timeout 은 재시도 대상(permanent=false·LLM_UPSTREAM)으로 분류된다")
+    @DisplayName("408 Request Timeout 은 즉시 재호출 대상(retryable·LLM_UPSTREAM)으로 분류된다")
     void requestTimeoutIsRetryable() {
         HttpClientErrorException responseError = new HttpClientErrorException(HttpStatus.REQUEST_TIMEOUT);
 
         GeminiApiException exception = GeminiApiException.fromResponseError(responseError);
 
-        assertFalse(exception.permanent());
+        assertTrue(exception.retryable());
         assertEquals(ExtractionErrorCode.LLM_UPSTREAM, exception.code());
     }
 
     @ParameterizedTest
     @ValueSource(ints = {400, 401, 403, 404})
-    @DisplayName("429·408 을 제외한 4xx 응답은 확정 실패(permanent=true·LLM_INVALID_RESPONSE)로 분류된다")
-    void otherClientErrorsArePermanent(int status) {
+    @DisplayName("429·408 을 제외한 4xx 응답은 재호출 없는 일시 실패(LLM_INVALID_RESPONSE)로 분류된다")
+    void otherClientErrorsAreNotRetried(int status) {
         HttpClientErrorException responseError = new HttpClientErrorException(HttpStatus.valueOf(status));
 
         GeminiApiException exception = GeminiApiException.fromResponseError(responseError);
 
-        assertTrue(exception.permanent());
+        assertFalse(exception.retryable());
+        assertFalse(exception.permanent());
         assertEquals(ExtractionErrorCode.LLM_INVALID_RESPONSE, exception.code());
     }
 }

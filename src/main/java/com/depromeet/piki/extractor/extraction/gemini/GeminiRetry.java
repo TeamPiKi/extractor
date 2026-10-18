@@ -7,7 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Gemini 호출의 일시 장애를 지수 백오프로 재시도한다. 재시도 여부 판단을 개별 예외 타입이 아니라
- * GeminiApiException 의 일시/확정 구분에 위임하므로, 분류는 GeminiApiException 한 곳에만 있다.
+ * GeminiApiException 의 retryable 에 위임하므로, 분류는 GeminiApiException 한 곳에만 있다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -23,7 +23,7 @@ public class GeminiRetry {
             try {
                 return block.get();
             } catch (GeminiApiException e) {
-                if (e.permanent() || attempt >= config.maxAttempts()) {
+                if (!e.retryable() || attempt >= config.maxAttempts()) {
                     throw e;
                 }
                 long delayMs = backoffMillis(attempt);

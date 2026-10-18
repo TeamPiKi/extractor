@@ -18,8 +18,8 @@ public enum ExtractionErrorCode {
     /** fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸 — 파싱 no-data 를 escalatable 로 재분류한 것(EmptyShellDetector). */
     EMPTY_SHELL,
     /**
-     * 본문에 가시 텍스트도 데이터 script 도 없어 LLM 을 부르지 않고 확정한 것(LlmInputGate) — 빈 입력의 LLM 은
-     * 실존하지 않는 상품을 지어낸다(환각). EMPTY_SHELL 과 확정/일시 축에서는 같고(둘 다 확정), 갈리는 축은
+     * 본문에 가시 텍스트도 데이터 script 도 없어 LLM 을 부르지 않고 실패로 닫은 것(LlmInputGate) — 빈 입력의 LLM 은
+     * 실존하지 않는 상품을 지어낸다(환각). EMPTY_SHELL 과 확정/일시 축에서는 같고(둘 다 일시), 갈리는 축은
      * 에스컬레이션이다 — EMPTY_SHELL 은 브라우저면 뚫릴 수 있어 승격되지만({@code PageFetchException.emptyShell}
      * 의 escalatable 이 정본), 이 code 는 승격 대상이 아니다. plain 경로는 셸 재분류가 선행하므로, 이 code 는
      * 사실상 헤드리스 렌더 결과까지 셸일 때 표면화된다.
