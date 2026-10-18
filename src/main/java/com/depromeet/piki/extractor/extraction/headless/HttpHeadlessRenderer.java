@@ -178,7 +178,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     }
 
     /**
-     * 홉 URL 은 Jsoup baseUri 이자 응답 계약의 finalUrl 로 호출자에게 나간다. 형식 위반(http 홉 포함)은 원본 link 로
+     * 홉 URL 은 Jsoup baseUri 이자 응답 계약의 finalUrl 로 호출자에게 나간다. 형식 위반은 원본 link 로
      * 폴백한다 — baseUri 부정확은 치명이 아니고, 여기서 INVALID_URL 을 새면 렌더는 성공했는데 확정 실패로 종결되는
      * 오판이 된다.
      */
@@ -187,7 +187,7 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             return link;
         }
         try {
-            return ProductLink.parse(url);
+            return ProductLink.parseHop(url);
         } catch (ExtractionException e) {
             return link;
         }

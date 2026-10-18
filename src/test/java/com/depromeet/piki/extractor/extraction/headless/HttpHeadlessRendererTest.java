@@ -186,9 +186,9 @@ class HttpHeadlessRendererTest {
     }
 
     @Test
-    @DisplayName("홉 url 이 없거나 우리 형식(https)이 아니면 원본 link 로 폴백한다 — 렌더 성공을 실패로 오판하지 않는다")
+    @DisplayName("홉 url 이 없거나 홉 형식이 아니면 원본 link 로 폴백한다 — 렌더 성공을 실패로 오판하지 않는다")
     void invalidHopUrlFallsBackToLink() {
-        for (String urlField : List.of("", "\"url\":\"chrome-error://failed\",", "\"url\":\"http://kream.co.kr/p\",")) {
+        for (String urlField : List.of("", "\"url\":\"chrome-error://failed\",", "\"url\":\"http:///p\",")) {
             HttpHeadlessRenderer renderer = rendererWith(server -> server
                 .expect(requestTo(BASE_URL + "/render"))
                 .andRespond(withSuccess(
@@ -198,6 +198,19 @@ class HttpHeadlessRendererTest {
 
             assertEquals(link, renderer.render(link, false).getFirst().url());
         }
+    }
+
+    @Test
+    @DisplayName("브라우저가 따라간 http 홉 url 은 그대로 홉 주소가 된다")
+    void httpHopUrlIsKept() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"internal_address_hit\":false,\"hops\":[{\"url\":\"http://kream.co.kr/p\",\"status\":200,\"dom\":\"<html>ok</html>\"}]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        assertEquals("http://kream.co.kr/p", renderer.render(link, false).getFirst().url().value().toString());
     }
 
     @Test

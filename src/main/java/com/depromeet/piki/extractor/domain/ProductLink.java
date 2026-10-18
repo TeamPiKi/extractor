@@ -7,11 +7,12 @@ import java.util.Set;
 
 /**
  * 미지원 플랫폼 판정은 등록 입력 경계의 정책이라 호출자(core) 소관이다 —
- * 이 서비스의 ProductLink 는 형식 불변식(https·URI 형식·host 존재)과 안전 로깅만 책임진다.
+ * 이 서비스의 ProductLink 는 형식 불변식(scheme·URI 형식·host 존재)과 안전 로깅만 책임진다.
  */
 public final class ProductLink {
 
-    private static final Set<String> HTTP_SCHEMES = Set.of("https");
+    private static final Set<String> ENTRY_SCHEMES = Set.of("https");
+    private static final Set<String> HOP_SCHEMES = Set.of("http", "https");
 
     private final URI value;
 
@@ -20,6 +21,18 @@ public final class ProductLink {
     }
 
     public static ProductLink parse(String raw) {
+        return parse(raw, ENTRY_SCHEMES);
+    }
+
+    /**
+     * redirect·렌더로 도달한 홉 주소. 입력과 달리 http 도 받는다. 내부 주소 판정은 scheme 과 무관하게 매 홉에 걸리고,
+     * 거절해도 헤드리스가 같은 http 홉을 따라가 막는 효과가 없다.
+     */
+    public static ProductLink parseHop(String raw) {
+        return parse(raw, HOP_SCHEMES);
+    }
+
+    private static ProductLink parse(String raw, Set<String> schemes) {
         String trimmed = raw == null ? "" : raw.trim();
         if (trimmed.isBlank()) {
             throw ProductLinkException.blank();
@@ -33,7 +46,7 @@ public final class ProductLink {
         // URI.create 는 스킴 없는 "example.com/product" 도 relative URI 로 통과시키므로 명시 검증.
         // RFC 3986 은 scheme 을 case-insensitive 로 정의하므로 비교 전에 lowercase 정규화한다.
         String scheme = uri.getScheme();
-        if (scheme == null || !HTTP_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT))) {
+        if (scheme == null || !schemes.contains(scheme.toLowerCase(Locale.ROOT))) {
             throw ProductLinkException.unsupportedScheme();
         }
         if (uri.getHost() == null) {

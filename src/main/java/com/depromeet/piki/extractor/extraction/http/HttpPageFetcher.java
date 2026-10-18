@@ -33,7 +33,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 /**
  * fetch 용 RestClient 와 host→IP 해석(dnsResolver)을 생성자로 주입받는다. 둘 다 밖에서 교체할 수 있어야
- * 네트워크 없이 redirect 루프(3xx 따라가기·cross-domain 따라가기·다운그레이드 차단·hop 상한)를 단위 테스트로
+ * 네트워크 없이 redirect 루프(3xx 따라가기·cross-domain 따라가기·hop 상한)를 단위 테스트로
  * 검증할 수 있다.
  *
  * <p>dnsResolver 는 PageFetchHttpClientConfig 의 RestClient 와 같은 인스턴스를 공유한다 — 가드가 검증한 IP 로
@@ -307,7 +307,7 @@ public class HttpPageFetcher implements PageFetcher {
     }
 
     /**
-     * 3xx 응답의 Location 을 절대 URI 로 만들고, https 면 다음 hop 으로 따라간다.
+     * 3xx 응답의 Location 을 절대 URI 로 만들고, http·https 면 다음 hop 으로 따라간다.
      * cross-domain redirect 도 따라간다(무신사 OneLink·bit.ly 등 단축·딥링크가 다른 도메인의 최종 상품 페이지로
      * 보낸다). 사설망 SSRF 는 매 hop 의 {@link InternalHostGuard#verify}(IP 검증)가 막으므로, 도메인 단위 차단
      * 없이도 내부망 접근은 닫혀 있다.
@@ -315,12 +315,11 @@ public class HttpPageFetcher implements PageFetcher {
     private ProductLink nextRedirect(ProductLink current, HttpHeaders headers) {
         URI location = redirectLocation(current, headers);
         URI target = current.value().resolve(location);
-        // https 강제(다운그레이드 차단)와 형식 검증을 ProductLink.parse 가 겸한다 — 둘 중 하나라도 어긋난
-        // redirect 는 따라가지 않고 헤드리스로 넘긴다. 내부 주소가 아니므로 SSRF 차단(blockedHost)이 아니다.
+        // 형식이 어긋난 redirect 는 따라가지 않고 헤드리스로 넘긴다. 내부 주소가 아니므로 SSRF 차단(blockedHost)이 아니다.
         try {
-            return ProductLink.parse(target.toString());
+            return ProductLink.parseHop(target.toString());
         } catch (ProductLinkException e) {
-            log.warn("link fetch redirect rejected (non-https or malformed) url={}", current.safeLogString());
+            log.warn("link fetch redirect rejected (unsupported scheme or malformed) url={}", current.safeLogString());
             throw PageFetchException.malformedRedirect(e);
         }
     }

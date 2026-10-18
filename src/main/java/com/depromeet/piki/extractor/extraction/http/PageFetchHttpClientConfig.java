@@ -69,9 +69,9 @@ public class PageFetchHttpClientConfig {
         CloseableHttpClient httpClient =
             HttpClients.custom()
                 .setConnectionManager(connectionManager)
-                // HttpClient5 는 GET 301/302/307 을 기본 자동 추적한다. 우리는 매 hop SSRF·도메인 검증을 끼우려 수동으로
+                // HttpClient5 는 GET 301/302/307 을 기본 자동 추적한다. 우리는 매 hop 내부 주소 판정을 끼우려 수동으로
                 // 따라가므로(JDK 의 instanceFollowRedirects=false 등가물), 라이브러리 자동 추적을 끈다. 끄지 않으면
-                // HttpPageFetcher.nextRedirect 의 cross-domain·다운그레이드 차단이 우회된다.
+                // HttpPageFetcher 의 매 hop InternalHostGuard 가 우회된다.
                 .disableRedirectHandling()
                 // 재시도는 "플랫폼 서버가 우리 요청을 봤는가" 로 층을 가른다. 못 봤으면 여기서 한 번 복구하고,
                 // 봤으면(429·503·느림) 전부 호출자(core)의 작업 큐가 소유한다. 근거는 PreDeliveryRetryStrategy.

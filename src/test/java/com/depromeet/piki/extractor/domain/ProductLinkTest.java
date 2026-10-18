@@ -68,6 +68,26 @@ class ProductLinkTest {
     }
 
     @Test
+    @DisplayName("홉 주소는 http 와 https 를 받는다")
+    void hopAcceptsHttpAndHttps() {
+        for (String raw : List.of("http://example.com/p", "https://example.com/p", "HTTP://example.com/p")) {
+            assertEquals(raw, ProductLink.parseHop(raw).value().toString());
+        }
+    }
+
+    @Test
+    @DisplayName("홉 주소도 http·https 가 아닌 scheme 과 host 없는 주소는 형식 오류로 거부한다")
+    void hopRejectsOtherSchemesAndMissingHost() {
+        for (String raw : List.of("ftp://example.com", "file:///etc/passwd", "javascript:alert(1)", "http:///p/1", "http:p/1")) {
+            ProductLinkException ex = assertThrows(
+                ProductLinkException.class,
+                () -> ProductLink.parseHop(raw),
+                raw + " 는 거부되어야 함");
+            assertEquals(ExtractionErrorCode.INVALID_URL, ex.code());
+        }
+    }
+
+    @Test
     @DisplayName("예외 메시지에 원본 raw 는 포함되지 않는다")
     void doesNotLeakRawInMessage() {
         // GlobalExceptionHandler 가 message 를 응답 detail · 로그에 그대로 박는 구조라
