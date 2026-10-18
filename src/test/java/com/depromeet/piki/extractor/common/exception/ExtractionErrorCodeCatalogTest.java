@@ -135,6 +135,28 @@ class ExtractionErrorCodeCatalogTest {
         }
     }
 
+    @Test
+    @DisplayName("계약의 probe_only 는 모델 프로브 예외가 만드는 code 에만 붙는다")
+    void probeOnlyMatchesFactories() {
+        // 프로브 code 가 추출 응답으로 새면 호출자가 bucket 없는 확정 실패를 받는다 - 축이 섞이지 않게 양방향으로 묶는다.
+        List<String> mismatches = new ArrayList<>();
+        for (FactoryCase factoryCase : factoryCases()) {
+            ExtractionException exception = factoryCase.exception();
+            boolean declared = com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode
+                .valueOf(exception.code().name())
+                .getValueDescriptor()
+                .getOptions()
+                .getExtension(ExtractionProto.probeOnly);
+            boolean actual = exception instanceof ModelProbeException;
+            if (declared != actual) {
+                mismatches.add(exception.code() + " probe_only: 계약=" + declared + " / " + factoryCase.name() + "=" + actual);
+            }
+        }
+        if (!mismatches.isEmpty()) {
+            fail("계약의 probe_only 와 예외 팩토리가 어긋난다.\n  " + String.join("\n  ", mismatches));
+        }
+    }
+
     /** 이름이 계약에 없으면 여기서 터진다 - 목록 어긋남은 enumMatchesContract 가 먼저 지목한다. */
     private static Disposition declaredDisposition(String code) {
         return com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.valueOf(code)

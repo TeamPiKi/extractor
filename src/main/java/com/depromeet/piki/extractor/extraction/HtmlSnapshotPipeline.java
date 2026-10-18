@@ -43,7 +43,7 @@ public class HtmlSnapshotPipeline {
      * @param timing 호출 전략이 채우는 로그 조각({@code "fetch=123ms"} / {@code "render=5534ms"}) — HTML 획득 비용을
      *     extract 원장 로그 한 줄에 함께 남긴다. 전략 무관 파이프라인이 유일하게 전략을 아는 지점이라 해석하지 않는
      *     문자열로만 받는다.
-     * @param model 호출자가 지정한 LLM 모델(없으면 null). 구조화 파싱으로 끝나면 쓰이지 않고, LLM fallback 으로
+     * @param model 호출자가 지정한 LLM 모델(없으면 빈 문자열). 구조화 파싱으로 끝나면 쓰이지 않고, LLM fallback 으로
      *     내려갈 때만 소비된다.
      */
     public ProductSnapshot extract(PageContent page, String timing, String model) {

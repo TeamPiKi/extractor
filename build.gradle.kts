@@ -37,9 +37,8 @@ dependencyManagement {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
-    implementation("org.springframework.boot:spring-boot-starter-validation")
 
-    // OpenAPI 문서 노출(/v3/api-docs, UI 없음). 계약의 원문은 docs/api-contract.md.
+    // OpenAPI 문서 노출(/v3/api-docs, UI 없음). 계약 정본은 infra 의 contracts/.
     // Spring Boot 4 / Jackson 3 호환 라인 — core 와 동일.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-api:3.0.3")
 

@@ -73,7 +73,7 @@ class ContractWireTest {
     }
 
     @Test
-    @DisplayName("image 요청의 model null 은 생략과 같게 읽힌다 - 전환 전 호출자는 미지정을 null 로 보낸다")
+    @DisplayName("image 요청의 model null 은 생략과 같게 읽힌다 - 호출자가 null 을 보내도 깨지지 않는다")
     void nullModelReadsAsUnset() throws Exception {
         ImageExtractionRequest.Builder builder = ImageExtractionRequest.newBuilder();
         PARSER.merge("{\"bucket\": \"b\", \"key\": \"items/raw/a.png\", \"model\": null}", builder);
