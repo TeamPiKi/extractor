@@ -75,11 +75,11 @@ xhigh 리뷰(파인더 10 앵글 → 검증 → 스윕)로 확정 15건 + 백로
 
 주석을 쓰려면 코드를 정독해야 하므로 부수적으로 드러난 것들이다. 심각도 순.
 
-1. ~~**헤드리스 경로의 redirect SSRF 비대칭**~~ — **부분 해소(#20)**. `final_url` 도 `InternalHostGuard` 를 태워 내부 주소가 최종 귀결점이면 렌더 전체를 거부한다. 다만 이 검증은 **사후**라 내부 주소로의 요청 자체는 못 막고, "외부 → 내부 → 외부" 체인도 못 잡는다(CodeRabbit 지적, 타당). **hop 단위 차단은 renderer repo 몫으로 남았다** — 실측 확인 결과 renderer 에는 SSRF·egress 가드가 전혀 없고(inbound SG 경계만) 브라우저가 redirect 를 자유롭게 따라간다. renderer 의 navigation 계층에서 자동 redirect 를 끄고 Location 마다 판정하거나, 렌더 박스에 egress 정책을 세워야 완결된다.
+1. ~~**헤드리스 경로의 redirect SSRF 비대칭**~~ — **해소(#112)**. #20 의 `final_url` 사후 검증은 "외부 → 내부 → 외부" 체인을 못 잡아 지웠다. 이제 직접 가져오기는 매 홉 보내기 전에 IP 를 검사하고 그 IP 로만 연결한다. renderer 는 이름 풀이와 연결을 브라우저가 직접 해 보내기 전에 막지 못하므로, 응답마다 실제 연결 IP 를 검사해 내부면 결과를 버리고 `internal_address_hit` 로 알린다(TeamPiKi/renderer#69). 그 사이의 요청은 두 서버의 egress 방화벽(infra `blocks/egress_wall.sh`)이 막는다. 내부 주소 목록은 infra `contracts/internal-ranges.txt` 하나를 셋이 읽는다.
 2. ~~**`ProductImage.of(null, ...)` → 500**~~ — **해소(#20)**. — null 검사 전에 `bytes.length` 를 읽어 NPE 가 된다. 계약상 422(IMAGE_UNSUPPORTED)여야 할 입력이 일시 실패로 오분류된다.
 3. ~~**이미지 경로의 정규화 비대칭**~~ — **해소(#20)**. `GeminiImageResult` 가 `ProductSnapshot.fromExtracted` 를 우회해, LLM 이 준 음수 가격·blank name 이 link 경로와 달리 검증 없이 통과한다(주석으로만 경고돼 있었다).
 4. **`ProductImage.mimeTypeOfExtension` 하드코딩 switch** — `MIME_TO_EXTENSION` Javadoc 이 약속한 "포맷 추가는 한 곳"이 실제로는 깨져 있다(포맷 추가 시 두 곳 수정). 앞선 리뷰에서 파생 역맵으로 고쳤으나 그 워킹트리가 폐기돼 미반영.
 5. **`ImageCropper.crop` 의 첫 `catch (IOException)` 이 로그 없이 null 반환** — 디코딩 IO 실패가 관측되지 않는다(두 번째 catch 만 `log.warn`).
 6. **기본값 이중 정본** — `FetchProperties.defaults()`·`HeadlessExtractionProperties.of()` 가 `@DefaultValue` 수치를 코드로 다시 박는다. 한쪽만 바뀌면 바인딩 경로와 테스트 경로 기본값이 조용히 갈린다.
-7. 잔가지: `ProductImage.EXTENSIONS` 가 repo 전체에서 미사용(죽은 public 상수 가능성) · `GeminiApiException.clientError` 와 `parseError` 가 code·permanent·cause 모두 동일해 관측상 구분 불가 · `ProductLink.HTTP_SCHEMES` 는 원소가 `https` 하나인데 이름이 복수형 · `parsePrice` 가 가격 범위 표기("10,000-20,000")를 INVALID_VALUE 로 떨구는 것이 의도인지 미확인.
+7. 잔가지: `ProductImage.EXTENSIONS` 가 repo 전체에서 미사용(죽은 public 상수 가능성) · `GeminiApiException.clientError` 와 `parseError` 가 code·permanent·cause 모두 동일해 관측상 구분 불가 · ~~`ProductLink.HTTP_SCHEMES` 는 원소가 `https` 하나인데 이름이 복수형~~(#112 에서 입력·홉 scheme 집합으로 나뉘어 소멸) · `parsePrice` 가 가격 범위 표기("10,000-20,000")를 INVALID_VALUE 로 떨구는 것이 의도인지 미확인.
 8. 테스트 잔가지: `ProductLinkTest` 가 주석으로 주장했던 `safeLogString` 커버리지가 실제로는 없음(주석은 정정) · `ProductLinkExtractE2ETest` 가 preview 모델을 하드코딩해 "기본값은 GA 만" 정책과 충돌 · `HttpHeadlessRendererTest` 의 `assertEquals(null, ...)` → `assertNull` · `GeminiImageResultTest` 의 `@DisplayName` 이 없는 메서드명(`toProductSnapshot`)을 가리킴 · `ExtractionLinkIntegrationTest` 만 `Assertions` 대신 수동 `throw new AssertionError`.
