@@ -6,3 +6,5 @@ PiKi 의 상품 추출 서비스. 상품 URL(또는 S3 이미지)을 받아 fetc
 
 - **API 계약**: [docs/api-contract.md](docs/api-contract.md). 응답 3갈래(2xx / 422 / 그 외=재시도), additive-only 진화
 - **스택**: Java · Spring Boot · virtual threads · 무상태(DB 없음)
+
+> ops 패치 승인 흐름 시험용 줄. 이 PR 은 머지하지 않음.
