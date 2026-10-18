@@ -230,7 +230,9 @@ jobs:
               exit 1
             fi
             # 튜닝값(비시크릿)은 여기 고정 - 시크릿이 아니라 SSM 에 두지 않는다.
-            echo "JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=70" >> "$ENV_FILE"
+            # 640m 는 JVM 서버급 판정(1792MB) 미만이라 GC 를 비우면 Serial 이 골라지고, 한도만 올려도 G1 으로 조용히 바뀐다.
+            #   스왑 0 이라 힙 밖 몫(약 190m)이 작은 Serial 을 명시로 고정한다. 멈춤이 문제로 측정되면 그때 G1 을 검토한다(#115).
+            echo "JAVA_TOOL_OPTIONS=-XX:+UseSerialGC -XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError" >> "$ENV_FILE"
             # 관측 배선(비시크릿): 트레이스는 박스 로컬 Alloy(4318, 아래 --add-host 의 host-gateway 경유)로
             # push 하고, 로그는 공통 Loki 파이프라인이 전제하는 ECS JSON 으로 낸다. 아래 --label piki.* 와
             # 함께 관측 계약(TeamPiKi/infra contracts/observability.md)을 이룬다.
@@ -265,8 +267,7 @@ jobs:
             # 실패 시 새 슬롯을 정리하고 exit 1, 그동안 트래픽은 구 슬롯이 서빙한다. 값은 전부 여기서 준다.
             # --publish 127.0.0.1 바인딩(nginx 경유로만 노출)·metrics 포트 라벨·PORT env 는 블록이 서비스 포트로 채운다.
             # --memory/--memory-swap: 박스(t4g.small 1.8G)는 swap 0 이라 blue+green overlap 이 RAM 안에 들어야
-            #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙은 MaxRAMPercentage=70 이 cgroup 한도
-            #   기준으로 잡혀 약 448m. 파싱 스파이크 OOM 이 관측되면 실측으로 재조정한다.
+            #   한다. 2x640m + Alloy(약 100m) + nginx·시스템 여유 < 1.8G. 힙 비율은 위 JAVA_TOOL_OPTIONS 가 정본.
             sudo systemctl enable nginx >/dev/null 2>&1 || true
 
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.

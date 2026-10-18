@@ -9,9 +9,11 @@ import com.depromeet.piki.extractor.extraction.http.HttpPageFetcher;
 import com.depromeet.piki.extractor.extraction.http.PageFetchHttpClientConfig;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedCookieStore;
 import com.depromeet.piki.extractor.extraction.http.RequestScopedDnsResolver;
+import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,7 +68,8 @@ class ProductLinkExtractE2ETest {
             new StructuredDataExtractor(objectMapper),
             new GeminiHtmlExtractor(httpClient),
             new SimpleMeterRegistry()
-        )
+        ),
+        new SiteConcurrencyLimiter(2, Duration.ofSeconds(15))
     );
 
     @Test

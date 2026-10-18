@@ -9,6 +9,7 @@ import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -116,6 +117,25 @@ class FallbackProductLinkExtractorTest {
             1.0,
             registry.counter("product.extract.escalation", "outcome", "success", "category", "FETCH_CLIENT_ERROR").count()
         );
+    }
+
+    @Test
+    @DisplayName("호출자 기한이 지났으면 headless 로 넘기지 않고 일시 실패로 끝내며 escalation 으로 세지 않는다")
+    void passedDeadlineSkipsHeadless() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw PageFetchException.clientError(new RuntimeException("403"));
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        FallbackProductLinkExtractor extractor = fallback(true, plain, headless, registry);
+
+        assertThrows(
+            DeadlineExceededException.class,
+            () -> ExtractionDeadline.within(Duration.ZERO, () -> extractor.extract(link, false, null))
+        );
+
+        assertEquals(0, headless.calls);
+        assertEquals(0, registry.find("product.extract.escalation").counters().size());
     }
 
     @Test
