@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -21,7 +22,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 /**
- * redirect 루프(3xx 따라가기·cross-domain 차단·다운그레이드 차단·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
+ * redirect 루프(3xx 따라가기·cross-domain 따라가기·http 따라가기·hop 상한·비-redirect 3xx)를 네트워크 없이 검증한다.
  *
  * <p>DNS 를 가짜 공인 IP 로 주입해 SSRF 가드를 통과시켜 redirect 로직만 격리한다.
  */
@@ -100,16 +101,69 @@ class HttpPageFetcherRedirectTest {
     }
 
     @Test
-    @DisplayName("https 에서 http 로 다운그레이드하는 redirect 는 차단한다")
-    void blocksHttpsToHttpDowngrade() {
+    @DisplayName("https 에서 http 로 가는 redirect 도 따라가 최종 페이지 본문을 받는다")
+    void followsHttpsToHttpRedirect() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                server.expect(requestTo("https://www.zigzag.kr/p"))
+                    .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("http://zigzag.kr/p")));
+                server.expect(requestTo("http://zigzag.kr/p"))
+                    .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
+            });
+
+        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"));
+
+        assertEquals("product", page.document().text());
+        assertEquals("http://zigzag.kr/p", page.finalUrl().value().toString());
+    }
+
+    @Test
+    @DisplayName("http redirect 타깃이 사설 IP 로 resolve 되면 https 와 똑같이 SSRF 로 차단한다")
+    void blocksHttpRedirectToPrivateIp() {
+        RequestScopedDnsResolver.HostResolver resolver = host -> host.equals("internal.attacker.test")
+            ? new InetAddress[] {InetAddress.getByName("169.254.169.254")}
+            : new InetAddress[] {InetAddress.getByName("93.184.216.34")};
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        server.expect(requestTo("https://www.zigzag.kr/p"))
+            .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("http://internal.attacker.test/latest/meta-data")));
+        HttpPageFetcher fetcher =
+            new HttpPageFetcher(builder.build(), new RequestScopedDnsResolver(resolver), new RequestScopedCookieStore(), FetchProperties.defaults());
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
+    }
+
+    @Test
+    @DisplayName("http·https 가 아닌 redirect 는 SSRF 차단이 아니라 비정상 redirect 로 헤드리스로 넘긴다")
+    void handsUnsupportedSchemeRedirectToHeadless() {
         HttpPageFetcher fetcher =
             fetcherWith(server ->
                 server.expect(requestTo("https://www.zigzag.kr/p"))
-                    .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("http://zigzag.kr/p"))));
+                    .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("ftp://zigzag.kr/p"))));
 
-        assertThrows(
+        PageFetchException ex = assertThrows(
             PageFetchException.class,
             () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
+        assertTrue(ex.escalatable());
+    }
+
+    @Test
+    @DisplayName("host 가 없는 redirect 위치는 사용자 입력 오류가 아니라 비정상 redirect 로 헤드리스로 넘긴다")
+    void handsHostlessRedirectToHeadless() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server ->
+                server.expect(requestTo("https://www.zigzag.kr/p"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https:///p"))));
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+        assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
+        assertTrue(ex.escalatable());
     }
 
     @Test

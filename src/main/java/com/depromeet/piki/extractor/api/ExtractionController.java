@@ -5,6 +5,7 @@ import com.depromeet.piki.contracts.extraction.v1.ImageExtractionRequest;
 import com.depromeet.piki.contracts.extraction.v1.LinkExtractionRequest;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.extraction.ExtractionDeadline;
 import com.depromeet.piki.extractor.extraction.ProductLinkExtractor;
 import com.depromeet.piki.extractor.image.ImageExtractionService;
 import lombok.RequiredArgsConstructor;
@@ -48,7 +49,8 @@ public class ExtractionController {
             link.safeLogString()
         );
         // 생략된 model 은 빈 문자열로 읽히고(proto3), 기본 모델 처리는 모델을 실제로 쓰는 GeminiHttpClient 가 한다.
-        ProductSnapshot snapshot = productLinkExtractor.extract(link, request.getAuthorized(), request.getModel());
+        ProductSnapshot snapshot = ExtractionDeadline.withinLinkBudget(
+            () -> productLinkExtractor.extract(link, request.getAuthorized(), request.getModel()));
         return ExtractionResultMapper.from(snapshot);
     }
 
