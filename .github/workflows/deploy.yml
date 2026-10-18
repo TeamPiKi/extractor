@@ -168,6 +168,8 @@ jobs:
         run: |
           ssh -n "$HOST" 'mkdir -p /tmp/piki-blocks'
           scp shared-infra/blocks/deploy_slot.sh \
+            shared-infra/blocks/egress_wall.sh \
+            shared-infra/contracts/internal-ranges.txt \
             shared-infra/blocks/healthcheck.sh \
             shared-infra/blocks/prune_images.sh \
             shared-infra/blocks/run_container.sh \
@@ -270,6 +272,10 @@ jobs:
 
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
             bash /tmp/piki-blocks/prune_images.sh
+
+            # 컨테이너가 내부 대역으로 여는 새 연결을 서버가 거절한다. 새 슬롯보다 먼저 건다. 이 서비스가 부르는 renderer 만 예외다.
+            sudo bash /tmp/piki-blocks/egress_wall.sh --ranges-file /tmp/piki-blocks/internal-ranges.txt \
+              --allow-tcp "${RENDERER_URL#http://}"
 
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \

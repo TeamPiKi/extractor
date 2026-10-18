@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,38 @@ class ProductLinkTest {
             ProductLinkException.class,
             () -> ProductLink.parse("data:text/html,<h1>x</h1>"));
         assertEquals("올바른 링크 형식이 아니에요. 다시 확인해 주세요.", ex.getMessage());
+    }
+
+    @Test
+    @DisplayName("https 스킴만 맞고 host 가 없는 raw 는 형식 오류로 거부한다")
+    void rejectsMissingHost() {
+        for (String raw : List.of("https:///p/1", "https:/p/1", "https:p/1")) {
+            ProductLinkException ex = assertThrows(
+                ProductLinkException.class,
+                () -> ProductLink.parse(raw),
+                raw + " 는 거부되어야 함");
+            assertEquals(ExtractionErrorCode.INVALID_URL, ex.code());
+        }
+    }
+
+    @Test
+    @DisplayName("홉 주소는 http 와 https 를 받는다")
+    void hopAcceptsHttpAndHttps() {
+        for (String raw : List.of("http://example.com/p", "https://example.com/p", "HTTP://example.com/p")) {
+            assertEquals(raw, ProductLink.parseHop(raw).value().toString());
+        }
+    }
+
+    @Test
+    @DisplayName("홉 주소도 http·https 가 아닌 scheme 과 host 없는 주소는 형식 오류로 거부한다")
+    void hopRejectsOtherSchemesAndMissingHost() {
+        for (String raw : List.of("ftp://example.com", "file:///etc/passwd", "javascript:alert(1)", "http:///p/1", "http:p/1")) {
+            ProductLinkException ex = assertThrows(
+                ProductLinkException.class,
+                () -> ProductLink.parseHop(raw),
+                raw + " 는 거부되어야 함");
+            assertEquals(ExtractionErrorCode.INVALID_URL, ex.code());
+        }
     }
 
     @Test

@@ -121,13 +121,16 @@ public final class PageFetchException extends ExtractionException {
         return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.TOO_MANY_REDIRECTS, true, null, true);
     }
 
-    /** 대상 서버가 3xx 를 주면서 Location 이 없거나 깨진 값을 준 비정상 redirect. 확정 실패, escalatable=true. */
+    /**
+     * 대상 서버가 3xx 를 주면서 Location 이 없거나 깨졌거나 https 가 아닌 위치를 준 redirect. 확정 실패,
+     * escalatable=true — 브라우저는 http 위치도 따라간다.
+     */
     public static PageFetchException malformedRedirect(Throwable cause) {
         return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.MALFORMED_REDIRECT, true, cause, true);
     }
 
     /**
-     * host 가 사설/메타데이터/loopback 영역으로 resolve 될 때의 SSRF 차단 신호. escalatable=false — 내부망에
+     * host 가 내부 대역으로 resolve 되거나, 렌더가 그 대역 주소에서 응답을 받았을 때의 SSRF 차단 신호. escalatable=false — 내부망에
      * 헤드리스를 겨누는 것 자체가 SSRF 취약점이라 "무조건 폴백"의 유일한 예외다(recall 트레이드오프가 아니라 보안).
      */
     public static PageFetchException blockedHost() {

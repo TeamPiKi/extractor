@@ -97,6 +97,14 @@ sourceSets {
     }
 }
 
+// 내부 대역 정본도 같은 자리에서 읽어 classpath 에 싣는다(InternalAddressRanges).
+tasks.processResources {
+    from("shared-infra/contracts") {
+        include("internal-ranges.txt")
+        into("contracts")
+    }
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
     // zstd-jni 의 JNI 네이티브 로드 허용 — Java 25 는 경고만 내지만 미래 JDK 는 차단한다(JEP 472).
