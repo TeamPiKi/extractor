@@ -21,11 +21,14 @@ public class ExtractionExceptionHandler {
 
     @ExceptionHandler(ExtractionException.class)
     public ResponseEntity<ExtractionFailure> handleExtraction(ExtractionException e) {
-        // 확정 실패는 계약상 정상 결과라 info, 일시 실패는 외부 의존성 문제라 warn.
+        // 확정 실패는 링크 자체의 사실이라 info. 일시 실패는 warn 이되, 받은 페이지를 보고 내린 판정(상품 아님 등)은
+        // cause 가 없어 스택이 던진 자리만 가리키므로 cause 가 있을 때만 스택을 싣는다.
         if (e.permanent()) {
             log.info("extraction failed permanently code={} message={}", e.code(), e.getMessage());
-        } else {
+        } else if (e.getCause() != null) {
             log.warn("extraction failed transiently code={} message={}", e.code(), e.getMessage(), e);
+        } else {
+            log.warn("extraction failed transiently code={} message={}", e.code(), e.getMessage());
         }
         HttpStatus status = e.permanent() ? HttpStatus.UNPROCESSABLE_ENTITY : HttpStatus.BAD_GATEWAY;
         // body 에 message 같은 내부 정보는 싣지 않는다 — 디버깅 컨텍스트는 위 로그가 책임진다.
