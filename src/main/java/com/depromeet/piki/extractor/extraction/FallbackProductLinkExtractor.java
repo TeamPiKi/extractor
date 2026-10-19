@@ -24,9 +24,8 @@ import org.springframework.stereotype.Component;
  * 일이라 허락을 전제하지 않는다. authorized 를 쓰는 곳은 렌더 서비스뿐이고,
  * 이 클래스는 그 값을 판단 없이 전략에 넘기기만 한다(무상태 — 원장은 호출자에 있다).
  *
- * <p>에스컬레이션 축(plain 확정 → headless)은 호출자 파싱 작업 큐의 재시도 축(일시 오류 → 같은 plain 재시도)과
- * 직교한다. 차단·불완전 결과는 재시도 축에서 이미 확정 실패(422)라 그 슬롯(attemptCount)에 얹을 수 없다. 그래서
- * 여기서 별도로 판정한다.
+ * <p>에스컬레이션 축(plain 실패 → headless)은 호출자 파싱 작업 큐의 재시도 축(같은 plain 재시도)과 직교한다.
+ * 호출자 재시도는 브라우저를 열지 않으므로, 브라우저가 필요한 건은 한 시도 안에서 여기서 승격한다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -67,9 +66,9 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             return escalateToHeadless(link, categoryOf(e), authorized, model);
         }
         if (plainSnapshot.missingReadyField()) {
-            // 이대로 반환하면 응답 경계(ExtractionResultMapper.from)가 확정 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
-            // 확정 전에 브라우저 렌더 DOM 으로 한 번 더 시도한다. 승격은 plain 의 try 바깥이라 headless 실패가
-            // 위 catch 로 새어 재승격되는 일이 없고, 승격 결과가 여전히 불완전하면 그때 경계가 같은 확정 실패로
+            // 이대로 반환하면 응답 경계(ExtractionResultMapper.from)가 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
+            // 닫기 전에 브라우저 렌더 DOM 으로 한 번 더 시도한다. 승격은 plain 의 try 바깥이라 headless 실패가
+            // 위 catch 로 새어 재승격되는 일이 없고, 승격 결과가 여전히 불완전하면 그때 경계가 같은 실패로
             // 닫는다(재승격 없음).
             return escalateToHeadless(link, CATEGORY_INCOMPLETE_SNAPSHOT, authorized, model);
         }
@@ -114,7 +113,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     }
 
     /**
-     * headless 결과의 성공 판정. 예외 없이 반환됐어도 READY 필수 필드가 비면 응답 경계에서 확정 실패로 닫히는
+     * headless 결과의 성공 판정. 예외 없이 반환됐어도 READY 필수 필드가 비면 응답 경계에서 실패로 닫히는
      * 결과다 — 그걸 success 로 세면 구제 성공률(escalation)·직행 성공률(headless_first)이 실제보다 부푼다.
      * outcome 은 예외 여부가 아니라 "요청을 살렸는가"를 센다.
      */

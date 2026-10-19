@@ -3,11 +3,11 @@ package com.depromeet.piki.extractor.domain;
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
 
-/** 전부 호출자가 재시도해도 얻을 것이 없는 사유라 확정 실패로 답한다. */
+/** 전부 받은 문서를 보고 내린 판정이라 일시 실패로 답한다 — 재료가 봇 방어·앱 크래시·빈 셸로 가짜일 수 있다(infra#145). */
 public final class ProductSnapshotException extends ExtractionException {
 
     private ProductSnapshotException(String message, ExtractionErrorCode code) {
-        super(message, code, true, null);
+        super(message, code, false, null);
     }
 
     public static ProductSnapshotException notProductPage() {

@@ -53,7 +53,7 @@ class ExtractionErrorCodeCatalogTest {
     @Test
     @DisplayName("ExtractionErrorCode 상수 집합은 계약 enum 의 code 집합과 정확히 일치한다")
     void enumMatchesContract() {
-        // 핸들러가 도메인 code 이름으로 계약 enum 을 찾으므로, 목록이 어긋나면 그 code 의 422 가 500 으로 샌다.
+        // 핸들러가 도메인 code 이름으로 계약 enum 을 찾으므로, 목록이 어긋나면 그 code 의 실패 응답이 500 으로 샌다.
         Set<String> contractCodes = Arrays.stream(com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.values())
             .filter(value -> value != com.depromeet.piki.contracts.extraction.v1.ExtractionErrorCode.UNRECOGNIZED)
             .filter(value -> value.getNumber() != 0)

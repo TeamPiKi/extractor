@@ -145,8 +145,8 @@ public class HttpPageFetcher implements PageFetcher {
 
     /**
      * 상품 경로를 요청했는데 redirect 가 사이트 루트로 보내는 경우. 몰이 진열 중단·일시 상태로 상품 주소를 홈으로
-     * 돌리는 패턴이라 홈 본문을 받아 LLM 에 넘기면 확정 실패(NOT_PRODUCT_PAGE)로 닫혀 버린다(packnfold 실측,
-     * extractor#82). 본문을 받기 전에 끊어 일시 실패로 남긴다. 루트로 등록된 링크는 판정 대상이 아니다.
+     * 돌리는 패턴이라 홈 본문을 받아 LLM 에 넘기면 상품 아님(NOT_PRODUCT_PAGE)으로 닫혀 버린다(packnfold 실측,
+     * extractor#82). 본문을 받기 전에 끊어 장애 쪽 code 로 남긴다. 루트로 등록된 링크는 판정 대상이 아니다.
      * 헤드리스 쪽의 같은 판정은 HeadlessProductLinkExtractor 가 홉 후보 단계에서 한다.
      */
     private static boolean landsOnSiteRoot(ProductLink link, ProductLink target) {
@@ -229,7 +229,7 @@ public class HttpPageFetcher implements PageFetcher {
 
     /**
      * 상품 페이지가 아닌 것이 확실하면 본문을 읽기 전에 끊는다. 헤드리스로 다시 시도할 여지가 없어(영상은 브라우저로
-     * 열어도 영상이다) escalatable 축을 가진 PageFetchException 이 아니라 "상품 페이지가 아님" 확정 실패로 낸다.
+     * 열어도 영상이다) escalatable 축을 가진 PageFetchException 이 아니라 "상품 페이지가 아님" 실패로 낸다.
      */
     private void rejectBinary(ProductLink current, MediaType contentType) {
         if (contentType == null) {

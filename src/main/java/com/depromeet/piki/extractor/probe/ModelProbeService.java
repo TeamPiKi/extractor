@@ -74,7 +74,7 @@ public class ModelProbeService {
     }
 
     /**
-     * 404 만 "그런 모델이 없다"로 가르고, 나머지 확정 실패는 전부 "이 경로에서 못 쓴다"로 묶는다 — 요청 스키마
+     * 404 만 "그런 모델이 없다"로 가르고, 나머지 재호출 무의미 실패는 전부 "이 경로에서 못 쓴다"로 묶는다 — 요청 스키마
      * 비호환(400)이든 200 인데 스키마를 못 맞춘 응답이든, 운영자가 할 일은 같은 하나(다른 모델을 고른다)라
      * 사유를 더 쪼개도 화면에서 쓸 데가 없다.
      *
@@ -82,7 +82,7 @@ public class ModelProbeService {
      * 흔들린 사이에 멀쩡한 모델이 "쓸 수 없는 모델"로 판정된다.
      */
     private ExtractionException translate(GeminiApiException e, String model, ProbeTarget target) {
-        if (!e.permanent()) {
+        if (e.retryable()) {
             log.warn("model probe transient target={} model={}", target, model);
             return e;
         }

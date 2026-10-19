@@ -203,7 +203,7 @@ public class GeminiHttpClient implements GeminiClient {
                     .body(GeminiGenerateContentResponse.class);
             } catch (RestClientResponseException e) {
                 // 오류 body 는 Google 이 밝힌 실패 사유(키 정지·API 비활성·쿼터 종류)가 실리는 유일한 자리다.
-                // 예외 code 분류로는 사유가 뭉개지고 확정 실패는 상위에서 스택 없이 로깅되므로, body 가 있는 여기서 남긴다.
+                // 예외 code 분류로는 사유가 뭉개지므로, body 가 있는 여기서 남긴다.
                 log.warn(
                     "Gemini 응답 오류 - model={} status={} body={}",
                     model,

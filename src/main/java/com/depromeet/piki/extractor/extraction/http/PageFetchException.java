@@ -69,21 +69,21 @@ public final class PageFetchException extends ExtractionException {
     }
 
     /**
-     * 대상 서버가 결정론적 재실패로 보는 5xx(HttpPageFetcher 의 PERMANENT_SERVER_ERRORS)를 준 경우. 우리가 fetch 하는
-     * 대형 몰은 사실상 상시 가용이라 대개 진짜 장애가 아니라 봇 방어다 — 확정 실패로 보고 escalatable=true(헤드리스면
-     * 뚫릴 수 있다). body 유무로 봇차단/장애를 나누지 않는다: 봇 방어가 body(캡차·차단 페이지)를 실을 수 있어
+     * 대상 서버가 UPSTREAM_ERROR 밖의 5xx(HttpPageFetcher 의 PERMANENT_SERVER_ERRORS)를 준 경우. 우리가 fetch 하는
+     * 대형 몰은 사실상 상시 가용이라 대개 진짜 장애가 아니라 봇 방어다 — 봇 방어는 간헐이라 일시 실패, escalatable=true
+     * (헤드리스면 뚫릴 수 있다). code 이름은 확정이던 때의 잔재다(계약이 additive 라 개명 없음). body 유무로 봇차단/장애를 나누지 않는다: 봇 방어가 body(캡차·차단 페이지)를 실을 수 있어
      * 구분이 불확실하다.
      */
     public static PageFetchException permanentUpstreamError(Throwable cause) {
-        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.PERMANENT_UPSTREAM, true, cause, true);
+        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.PERMANENT_UPSTREAM, false, cause, true);
     }
 
     /**
-     * 4xx (403·404·410·429 등). 입력 URL 문제로 보는 확정 실패이나, 봇 방어가 404("없는 척")·403(차단)·
-     * 429(throttle)로 클로킹할 수 있어 escalatable=true — 실제 브라우저면 뚫릴 수 있다.
+     * 4xx (403·404·410·429 등). 봇 방어가 404("없는 척")·403(차단)·429(throttle)로 클로킹할 수 있어 입력 URL
+     * 문제로 단정하지 않는다 — 일시 실패이고 escalatable=true(실제 브라우저면 뚫릴 수 있다).
      */
     public static PageFetchException clientError(Throwable cause) {
-        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.FETCH_CLIENT_ERROR, true, cause, true);
+        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.FETCH_CLIENT_ERROR, false, cause, true);
     }
 
     /** 응답 body 가 빈 경우. 일시적일 수 있어 일시 실패이되, 봇이 빈 응답으로 막는 것일 수도 있어 escalatable=true. */
@@ -93,14 +93,14 @@ public final class PageFetchException extends ExtractionException {
 
     /**
      * fetch 는 2xx 였지만 본문이 데이터 없는 CSR 셸이라 파싱이 no-data 로 끝난 경우(EmptyShellDetector 판정,
-     * cause 가 원래의 파싱 실패). 정적 fetch 는 몇 번을 받아도 같은 셸이라 확정 실패이되, 실제 브라우저는 JS 를
+     * cause 가 원래의 파싱 실패). 셸인지 차단 페이지인지 본문으로는 못 가르므로 일시 실패이고, 실제 브라우저는 JS 를
      * 실행해 콘텐츠를 그리므로 escalatable=true — "200 이지만 빈 셸" 이 기존 에스컬레이션 축(fetch 예외)의
      * 사각이던 것을 닫는다(카카오 톡딜 실측).
      */
     public static PageFetchException emptyShell(Throwable cause) {
         // 다른 팩토리와 달리 cause 가 필수다 — 재분류 예외라 원래의 파싱 실패 없이 만들어질 수 없다.
         Objects.requireNonNull(cause, "cause");
-        return new PageFetchException("해당 링크에서 정보를 가져오지 못했어요.", ExtractionErrorCode.EMPTY_SHELL, true, cause, true);
+        return new PageFetchException("해당 링크에서 정보를 가져오지 못했어요.", ExtractionErrorCode.EMPTY_SHELL, false, cause, true);
     }
 
     /**
@@ -114,19 +114,19 @@ public final class PageFetchException extends ExtractionException {
     }
 
     /**
-     * redirect 가 hop 상한을 넘어 무한·체인 의심. 대상 페이지의 고정된 비정상 상태라 확정 실패.
-     * redirect 기반 차단(챌린지로 튕김)일 수 있고 헤드리스는 redirect 를 네이티브로 다루므로 escalatable=true.
+     * redirect 가 hop 상한을 넘어 무한·체인 의심. redirect 기반 차단(챌린지로 튕김)일 수 있어 일시 실패이고,
+     * 헤드리스는 redirect 를 네이티브로 다루므로 escalatable=true.
      */
     public static PageFetchException tooManyRedirects() {
-        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.TOO_MANY_REDIRECTS, true, null, true);
+        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.TOO_MANY_REDIRECTS, false, null, true);
     }
 
     /**
-     * 대상 서버가 3xx 를 주면서 Location 이 없거나 깨졌거나 https 가 아닌 위치를 준 redirect. 확정 실패,
+     * 대상 서버가 3xx 를 주면서 Location 이 없거나 깨졌거나 https 가 아닌 위치를 준 redirect. 일시 실패,
      * escalatable=true — 브라우저는 http 위치도 따라간다.
      */
     public static PageFetchException malformedRedirect(Throwable cause) {
-        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.MALFORMED_REDIRECT, true, cause, true);
+        return new PageFetchException(LINK_UNREACHABLE, ExtractionErrorCode.MALFORMED_REDIRECT, false, cause, true);
     }
 
     /**

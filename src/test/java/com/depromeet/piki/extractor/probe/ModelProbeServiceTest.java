@@ -117,6 +117,6 @@ class ModelProbeServiceTest {
 
         GeminiApiException e =
             assertThrows(GeminiApiException.class, () -> serviceThat(stub).probe(MODEL, ProbeTarget.LINK));
-        assertEquals(false, e.permanent());
+        assertEquals(true, e.retryable());
     }
 }

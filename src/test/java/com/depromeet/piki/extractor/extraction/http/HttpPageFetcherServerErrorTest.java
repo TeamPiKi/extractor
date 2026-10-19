@@ -39,9 +39,9 @@ class HttpPageFetcherServerErrorTest {
     }
 
     @Test
-    @DisplayName("500·501 은 영구 실패로 보아 재시도하지 않는다")
-    void status500And501ArePermanent() {
-        // KREAM 처럼 봇 차단을 body 없는 500 으로 응답하는 케이스. 재시도해도 결정론적으로 재실패한다.
+    @DisplayName("500·501 은 PERMANENT_UPSTREAM 이되 일시 실패다")
+    void status500And501AreTransientUpstream() {
+        // KREAM 처럼 봇 차단을 body 없는 500 으로 응답하는 케이스. 봇 차단은 간헐이라 호출자 재시도 대상이다.
         for (HttpStatus status : List.of(HttpStatus.INTERNAL_SERVER_ERROR, HttpStatus.NOT_IMPLEMENTED)) {
             HttpPageFetcher fetcher =
                 fetcherWith(server -> server.expect(requestTo("https://shop.example.com/p")).andRespond(withStatus(status)));
@@ -51,7 +51,7 @@ class HttpPageFetcherServerErrorTest {
                 () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p")));
 
             assertEquals(ExtractionErrorCode.PERMANENT_UPSTREAM, ex.code(), status + " 는 PERMANENT_UPSTREAM 이어야 함");
-            assertTrue(ex.permanent(), status + " 는 확정 실패(재시도 불가)여야 함");
+            assertFalse(ex.permanent(), status + " 는 일시 실패(호출자 재시도)여야 함");
             assertTrue(ex.escalatable(), status + "(no-body 봇차단)는 헤드리스로 escalate 대상이어야 함");
         }
     }
@@ -71,7 +71,7 @@ class HttpPageFetcherServerErrorTest {
                 () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p")));
 
             assertEquals(ExtractionErrorCode.PERMANENT_UPSTREAM, ex.code(), status + " body 있어도 PERMANENT_UPSTREAM");
-            assertTrue(ex.permanent(), status + " body 있어도 확정 실패여야 함");
+            assertFalse(ex.permanent(), status + " body 있어도 일시 실패여야 함");
             assertTrue(ex.escalatable(), status + " body 있어도 escalate 대상이어야 함(봇 방어가 body 를 실을 수 있음)");
         }
     }
@@ -96,8 +96,8 @@ class HttpPageFetcherServerErrorTest {
     }
 
     @Test
-    @DisplayName("4xx 는 확정 실패이되 봇 클로킹 가능성으로 escalatable 이다")
-    void status4xxIsPermanentButEscalatable() {
+    @DisplayName("4xx 는 봇 클로킹 가능성으로 일시 실패이고 escalatable 이다")
+    void status4xxIsTransientAndEscalatable() {
         // 봇 방어가 404("없는 척")·403(차단)·429(throttle)로 클로킹할 수 있어, 4xx 는 헤드리스로 뚫릴 후보로 본다(무조건 폴백).
         for (HttpStatus status : List.of(HttpStatus.FORBIDDEN, HttpStatus.NOT_FOUND, HttpStatus.GONE, HttpStatus.TOO_MANY_REQUESTS)) {
             HttpPageFetcher fetcher =
@@ -108,7 +108,7 @@ class HttpPageFetcherServerErrorTest {
                 () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p")));
 
             assertEquals(ExtractionErrorCode.FETCH_CLIENT_ERROR, ex.code(), status + " 는 FETCH_CLIENT_ERROR 여야 함");
-            assertTrue(ex.permanent(), status + " 는 확정 실패여야 함");
+            assertFalse(ex.permanent(), status + " 는 일시 실패여야 함");
             assertTrue(ex.escalatable(), status + " 는 헤드리스로 escalate 대상이어야 함");
         }
     }

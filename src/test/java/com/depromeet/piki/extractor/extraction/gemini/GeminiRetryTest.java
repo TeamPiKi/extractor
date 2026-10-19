@@ -73,8 +73,8 @@ class GeminiRetryTest {
     }
 
     @Test
-    @DisplayName("확정 실패 예외는 재시도하지 않고 즉시 던진다")
-    void permanentFailureIsNotRetried() {
+    @DisplayName("재호출 무의미 예외(깨진 응답)는 재시도하지 않고 즉시 던진다")
+    void nonRetryableFailureIsNotRetried() {
         AtomicInteger calls = new AtomicInteger();
 
         assertThrows(GeminiApiException.class, () -> retry.execute(() -> {

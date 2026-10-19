@@ -462,7 +462,7 @@ public class StructuredDataExtractor {
             snapshot = ProductSnapshot.fromExtracted(link, name, imageUrl, price, currency);
         } catch (ProductSnapshotException e) {
             // 구조화 경로는 fromExtracted 의 범위 위반을 흡수해 INVALID_VALUE(→LLM fallback)로 보고한다
-            // (LLM 경로는 같은 예외를 그대로 흘려 확정 실패로 떨어뜨린다 — 같은 검증, 실패 표현만 다름).
+            // (LLM 경로는 같은 예외를 그대로 흘려 실패로 떨어뜨린다 — 같은 검증, 실패 표현만 다름).
             return StructuredExtraction.Miss.INVALID_VALUE;
         }
         if (snapshot.name() == null) {

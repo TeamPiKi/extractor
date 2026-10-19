@@ -1,6 +1,7 @@
 package com.depromeet.piki.extractor.extraction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -61,7 +62,7 @@ class DefaultProductLinkExtractorTest {
 
         assertEquals(ExtractionErrorCode.EMPTY_SHELL, e.code());
         assertTrue(e.escalatable());
-        assertTrue(e.permanent());
+        assertFalse(e.permanent());
         // 원래의 파싱 실패를 cause 로 보존한다 — 에스컬레이션 후에도 최초 사유를 로그에서 추적할 수 있어야 한다.
         assertInstanceOf(ProductSnapshotException.class, e.getCause());
         assertEquals(0, stubGemini.invocations());

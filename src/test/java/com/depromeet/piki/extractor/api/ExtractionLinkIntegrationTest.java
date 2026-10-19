@@ -150,7 +150,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("LLM 이 상품 페이지가 아니라고 판정하면 422 NOT_PRODUCT_PAGE 를 반환한다")
+    @DisplayName("LLM 이 상품 페이지가 아니라고 판정하면 502 NOT_PRODUCT_PAGE 를 반환한다 (호출자가 재시도)")
     void notProductPage() throws Exception {
         stubGeminiClient.reset();
         // 본문 텍스트가 충분한 진짜 콘텐츠 페이지 — CSR 셸 재분류(EMPTY_SHELL)에 걸리지 않고 no-data 원형이 나간다.
@@ -161,12 +161,12 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://blog.example.com/post/3")))
-            .andExpect(status().isUnprocessableEntity())
+            .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.code").value("NOT_PRODUCT_PAGE"));
     }
 
     @Test
-    @DisplayName("CSR 셸은 LLM 호출 없이 422 EMPTY_SHELL 로 재분류된다 (헤드리스 꺼진 구성의 표면 계약)")
+    @DisplayName("CSR 셸은 LLM 호출 없이 502 EMPTY_SHELL 로 재분류된다 (헤드리스 꺼진 구성의 표면 계약)")
     void emptyShellReclassified() throws Exception {
         stubGeminiClient.reset();
         // 카카오 톡딜 store.kakao.com 실측 축약형 — script 뿐인 SPA 셸. 게이트(LlmInputGate)가 LLM 호출 전에
@@ -178,7 +178,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://store.kakao.com/kgcmall/products/445653929")))
-            .andExpect(status().isUnprocessableEntity())
+            .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.code").value("EMPTY_SHELL"));
 
         // 빈 입력의 LLM 은 환각을 만든다 — 셸에서 LLM 이 불리지 않는 것 자체가 계약이다.
@@ -205,22 +205,22 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("추출이 값을 하나도 못 채우면 422 UNTRUSTWORTHY_VALUE 를 반환한다")
+    @DisplayName("추출이 값을 하나도 못 채우면 502 UNTRUSTWORTHY_VALUE 를 반환한다 (호출자가 재시도)")
     void noExtractedValue() throws Exception {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
-        // 상품 페이지라고는 하는데 아무 값도 못 뽑은 경우 — 사용자에게 무엇을 채우라 할 근거조차 없어 확정 실패로 닫는다.
+        // 상품 페이지라고는 하는데 아무 값도 못 뽑은 경우 — 사용자에게 무엇을 채우라 할 근거조차 없어 실패로 닫는다.
         stubGeminiClient.build = request -> new GeminiExtractionResult(true, null, null, null, null);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://shop.example.com/p/empty")))
-            .andExpect(status().isUnprocessableEntity())
+            .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.code").value("UNTRUSTWORTHY_VALUE"));
     }
 
     @Test
-    @DisplayName("대상 몰이 4xx 로 막으면 422 FETCH_CLIENT_ERROR 를 반환한다")
+    @DisplayName("대상 몰이 4xx 로 막으면 502 FETCH_CLIENT_ERROR 를 반환한다 (호출자가 재시도)")
     void fetchClientError() throws Exception {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> {
@@ -230,7 +230,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body("https://blocked.example.com/p/5")))
-            .andExpect(status().isUnprocessableEntity())
+            .andExpect(status().isBadGateway())
             .andExpect(jsonPath("$.code").value("FETCH_CLIENT_ERROR"));
     }
 

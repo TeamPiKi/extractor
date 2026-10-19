@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * HTML → ProductSnapshot 의 공통 후반부: 구조화 데이터(JSON-LD/OpenGraph) 우선, 미달이면 같은 HTML 을 Gemini 로
- * 넘긴다(재fetch 없음). 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 확정 실패로
+ * 넘긴다(재fetch 없음). 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 실패로
  * 끊는다 — 빈 입력의 LLM 은 실존하지 않는 상품을 지어내고, 그 값은 형식이 유효해 하류 검증을 전부 통과한다.
  * HTML 을 어디서 얻었는지(정적 fetch, 헤드리스 렌더)와 무관한 파싱 파이프라인이라 두 전략이 공유한다.
  *
