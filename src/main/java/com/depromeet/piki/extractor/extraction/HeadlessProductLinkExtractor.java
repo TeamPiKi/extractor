@@ -95,11 +95,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
     }
 
-    /**
-     * 고른 홉이 파이프라인에서 실패하면 어느 홉이 LLM 에 갔는지 남긴다. 성공 쪽은 extract 원장이 지지만 실패 쪽은
-     * 요청 URL 만 남아, 차단 페이지가 신호를 피해 후보로 남았는지와 상품 홉을 두고 다른 홉을 골랐는지를 가를 수
-     * 없었다. title 은 페이지 본문이라 남기지 않고 경로·status·분량으로만 가른다.
-     */
+    /** title 은 페이지 본문이라 남기지 않는다. */
     private ProductSnapshot extractChosen(
         Chosen chosen,
         ProductLink link,
