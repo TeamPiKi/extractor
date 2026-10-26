@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction;
 
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
@@ -40,7 +41,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
     private record Candidate(RenderedHop hop, String html) {
     }
 
-    private record Chosen(PageContent page, StructuredExtraction result) {
+    private record Chosen(Candidate candidate, PageContent page, StructuredExtraction result) {
     }
 
     @Override
@@ -72,15 +73,15 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
                 continue;
             }
             if (first == null) {
-                first = new Chosen(page, result);
+                first = new Chosen(candidate, page, result);
             }
             if (fallback == null && !LlmInputGate.hasNothingForLlm(page.document())) {
-                fallback = new Chosen(page, result);
+                fallback = new Chosen(candidate, page, result);
             }
         }
         Chosen chosen = fallback != null ? fallback : first;
         if (chosen != null) {
-            return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
+            return extractChosen(chosen, link, hops, timing, model);
         }
         if (blocked) {
             log.warn("headless hops unusable blocked=true hops={} url={}", hops.size(), link.safeLogString());
@@ -92,6 +93,33 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         }
         log.warn("headless hops unusable blocked=false hops={} url={}", hops.size(), link.safeLogString());
         throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
+    }
+
+    /** title 은 페이지 본문이라 남기지 않는다. */
+    private ProductSnapshot extractChosen(
+        Chosen chosen,
+        ProductLink link,
+        List<RenderedHop> hops,
+        String timing,
+        String model
+    ) {
+        try {
+            return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
+        } catch (ProductSnapshotException e) {
+            RenderedHop hop = chosen.candidate().hop();
+            log.info(
+                "headless chosen hop failed code={} hop={}/{} status={} source={} html={}chars hopUrl={} url={}",
+                e.code(),
+                hops.indexOf(hop) + 1,
+                hops.size(),
+                hop.status(),
+                chosen.candidate().html().equals(hop.dom()) ? "dom" : "body",
+                chosen.page().retainedChars(),
+                chosen.page().finalUrl().safeLogString(),
+                link.safeLogString()
+            );
+            throw e;
+        }
     }
 
     private static List<Candidate> candidates(List<RenderedHop> hops) {
