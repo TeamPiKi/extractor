@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * yml 오버라이드로 튜닝 여지만 연다. application.yml 에 fetch 섹션이 없어도 모든 컴포넌트가
  * {@code @DefaultValue} 를 가져 constructor binding 으로 완전한 기본 인스턴스가 만들어진다.
  *
- * @param userAgent 대상 몰에 밝히는 우리 신원. 끝에 붙는 {@code Piki} 토큰이 상대가 우리를 가려낼 수 있게 하는
+ * @param userAgent 대상 몰에 밝히는 우리 신원. 끝에 붙는 {@code PiKi} 토큰이 상대가 우리를 가려낼 수 있게 하는
  *     부분이고, 헤드리스 렌더 서비스가 보내는 것과 같은 토큰이다. 두 경로가 다른 신원으로 나가면 같은 몰이
  *     우리를 둘로 본다. 브라우저 호환 접두를 남기는 이유는 형식이 어긋난 UA 나 기본 RestClient UA 를 거르는
  *     사이트가 있어서다.
@@ -30,8 +30,11 @@ public record FetchProperties(
     @DefaultValue("5") int maxRedirects
 ) {
 
-    /** 렌더 서비스가 UA 와 Sec-CH-UA 에 싣는 것과 같은 값이어야 한다. 한쪽만 바꾸면 신원이 갈린다. */
-    static final String IDENTITY_TOKEN = "Piki/1.0 (+https://piki.day)";
+    /**
+     * 렌더 서비스가 UA 와 Sec-CH-UA 에 싣는 것과 같은 값이어야 한다. 한쪽만 바꾸면 신원이 갈린다.
+     * {@code (+URL)} 형식을 크롤러로 보고 연결을 끊는 몰이 있어 이름만 싣는다.
+     */
+    static final String IDENTITY_TOKEN = "PiKi";
 
     static final String DEFAULT_USER_AGENT =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
