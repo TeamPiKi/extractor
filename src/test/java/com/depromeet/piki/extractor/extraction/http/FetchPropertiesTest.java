@@ -14,7 +14,7 @@ class FetchPropertiesTest {
     void defaultUserAgentDeclaresIdentity() {
         String userAgent = FetchProperties.defaults().userAgent();
 
-        assertEquals("Piki/1.0 (+https://piki.day)", FetchProperties.IDENTITY_TOKEN);
+        assertEquals("PiKi", FetchProperties.IDENTITY_TOKEN);
         assertTrue(userAgent.startsWith("Mozilla/5.0 "), userAgent);
         assertTrue(userAgent.endsWith(" " + FetchProperties.IDENTITY_TOKEN), userAgent);
     }
