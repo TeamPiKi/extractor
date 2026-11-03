@@ -287,6 +287,12 @@ public class StructuredDataExtractor {
      */
     private ResolvedPrice resolvePrice(Document document) {
         String ogCurrency = metaContent(document, "product:price:currency");
+        String ogSaleAmount = metaContent(document, "product:sale_price:amount");
+        // sale_price 가 있는 페이지(cafe24 계열)는 price:amount 가 할인 전 정가다 - 판매가는 sale_price 쪽.
+        if (ogSaleAmount != null) {
+            String saleCurrency = metaContent(document, "product:sale_price:currency");
+            return new ResolvedPrice(ogSaleAmount, saleCurrency != null ? saleCurrency : ogCurrency);
+        }
         String ogAmount = metaContent(document, "product:price:amount");
         if (ogAmount != null) {
             return new ResolvedPrice(ogAmount, ogCurrency);

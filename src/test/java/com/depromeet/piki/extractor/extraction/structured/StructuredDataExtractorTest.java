@@ -335,6 +335,24 @@ class StructuredDataExtractorTest {
     }
 
     @Test
+    @DisplayName("og 에 sale_price 가 있으면 price:amount(정가) 대신 sale_price 를 현재가로 뽑는다")
+    void prefersOpenGraphSalePriceOverListPrice() {
+        String html = """
+            <html><head>
+            <meta property="og:title" content="할인상품"/>
+            <meta property="og:image" content="https://cdn.example.com/og.jpg"/>
+            <meta property="product:price:amount" content="119000"/>
+            <meta property="product:price:currency" content="KRW"/>
+            <meta property="product:sale_price:amount" content="107100"/>
+            </head><body></body></html>""";
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(107_100, snapshot.currentPrice());
+        assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
     @DisplayName("og 에 title 만 있고 가격이 없으면 missing_field 로 fallback 한다")
     void openGraphTitleOnlyFallsBackToMissingField() {
         String html =
