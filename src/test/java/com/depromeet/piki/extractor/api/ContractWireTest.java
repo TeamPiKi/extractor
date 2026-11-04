@@ -28,6 +28,7 @@ class ContractWireTest {
 
         assertFalse(request.getAuthorized());
         assertEquals("", request.getModel());
+        assertEquals("", request.getIdentity());
     }
 
     @Test

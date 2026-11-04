@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
@@ -24,9 +25,9 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
     private final SiteConcurrencyLimiter siteLimiter;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, boolean authorized, String model) {
+    public ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity) {
         long fetchStart = System.nanoTime();
-        PageContent page = siteLimiter.call(link, () -> pageFetcher.fetch(link));
+        PageContent page = siteLimiter.call(link, () -> pageFetcher.fetch(link, identity));
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;
 
         try {

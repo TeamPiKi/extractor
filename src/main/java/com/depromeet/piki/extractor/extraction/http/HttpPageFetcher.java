@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductLinkException;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
@@ -87,6 +88,7 @@ public class HttpPageFetcher implements PageFetcher {
     private final RequestScopedDnsResolver dnsResolver;
     private final RequestScopedCookieStore cookieStore;
     private final InternalHostGuard internalHostGuard;
+    private final FetchProperties properties;
     private final int maxRedirects;
 
     /**
@@ -104,13 +106,14 @@ public class HttpPageFetcher implements PageFetcher {
         this.cookieStore = cookieStore;
         // 가드와 연결이 같은 resolver 를 봐야 IP pin 이 성립한다 — 같은 인스턴스로 직접 조립해 그 계약을 코드로 박는다.
         this.internalHostGuard = new InternalHostGuard(dnsResolver);
+        this.properties = properties;
         this.maxRedirects = properties.maxRedirects();
     }
 
     @Override
-    public PageContent fetch(ProductLink link) {
+    public PageContent fetch(ProductLink link, DeclaredIdentity identity) {
         try {
-            return fetchFollowingRedirects(link);
+            return fetchFollowingRedirects(link, properties.userAgentOf(identity));
         } finally {
             dnsResolver.clear();
             // 이 링크에서 받은 쿠키는 여기서 끝난다 - 다음 fetch 는 빈 손으로 시작한다.
@@ -118,13 +121,13 @@ public class HttpPageFetcher implements PageFetcher {
         }
     }
 
-    private PageContent fetchFollowingRedirects(ProductLink link) {
+    private PageContent fetchFollowingRedirects(ProductLink link, String userAgent) {
         ProductLink current = link;
         for (int hop = 0; hop <= maxRedirects; hop++) {
             // hop 마다 새 host 를 다시 검증해 점프 후 SSRF 를 막는다. 람다가 잡을 수 있게 final 로 뜬다.
             ProductLink target = current;
             internalHostGuard.verify(target);
-            switch (request(target)) {
+            switch (request(target, userAgent)) {
                 case Received.Redirect redirect -> {
                     current = redirect.target();
                     if (landsOnSiteRoot(link, current)) {
@@ -169,11 +172,12 @@ public class HttpPageFetcher implements PageFetcher {
      * uri 의 String 오버로드는 URI 템플릿으로 해석되어 {@code {q}} 같은 쿼리가 변수로 치환될 수 있으므로
      * URI 로 명시 전달한다.
      */
-    private Received request(ProductLink current) {
+    private Received request(ProductLink current, String userAgent) {
         try {
             return restClient
                 .get()
                 .uri(current.value())
+                .header(HttpHeaders.USER_AGENT, userAgent)
                 .exchange((request, response) -> receive(current, response));
         } catch (ResourceAccessException e) {
             // 연결 실패와, 본문을 읽는 중의 IO 실패(연결 끊김 등)가 함께 여기로 온다.

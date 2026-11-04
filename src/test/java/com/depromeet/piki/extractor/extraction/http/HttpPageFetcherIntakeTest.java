@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.PageContent;
@@ -49,7 +50,7 @@ class HttpPageFetcherIntakeTest {
 
             ProductSnapshotException e = assertThrows(
                 ProductSnapshotException.class,
-                () -> fetcher.fetch(ProductLink.parse(URL)),
+                () -> fetcher.fetch(ProductLink.parse(URL), DeclaredIdentity.DEFAULT),
                 binary
             );
 
@@ -83,7 +84,7 @@ class HttpPageFetcherIntakeTest {
         CountingInputStream stream = new CountingInputStream(html(body));
         HttpPageFetcher fetcher = fetcherReturning(stream, MediaType.TEXT_HTML, FetchProperties.defaults());
 
-        PageContent page = fetcher.fetch(ProductLink.parse(URL));
+        PageContent page = fetcher.fetch(ProductLink.parse(URL), DeclaredIdentity.DEFAULT);
 
         // 정확히 상한에서 멈췄음을 본다. <= 로 두면 몇 바이트만 읽고 끝나도 통과해 상한이 걸렸다는 증거가 안 된다.
         assertEquals(16 * 1024 * 1024, stream.getCount(), "상한 지점에서 정확히 끊겨야 한다");
@@ -102,14 +103,14 @@ class HttpPageFetcherIntakeTest {
         };
         HttpPageFetcher fetcher = fetcherReturning(failing, MediaType.TEXT_HTML, FetchProperties.defaults());
 
-        PageFetchException e = assertThrows(PageFetchException.class, () -> fetcher.fetch(ProductLink.parse(URL)));
+        PageFetchException e = assertThrows(PageFetchException.class, () -> fetcher.fetch(ProductLink.parse(URL), DeclaredIdentity.DEFAULT));
 
         assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
         assertFalse(e.permanent());
     }
 
     private PageContent fetch(InputStream body, MediaType contentType) {
-        return fetcherReturning(body, contentType, FetchProperties.defaults()).fetch(ProductLink.parse(URL));
+        return fetcherReturning(body, contentType, FetchProperties.defaults()).fetch(ProductLink.parse(URL), DeclaredIdentity.DEFAULT);
     }
 
     private static InputStream html(String html) {

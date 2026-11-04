@@ -5,6 +5,7 @@ import com.depromeet.piki.contracts.render.v1.RenderProto;
 import com.depromeet.piki.contracts.render.v1.RenderRequest;
 import com.depromeet.piki.contracts.render.v1.RenderResponse;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
@@ -66,8 +67,8 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private final ZstdDictionaries dictionaries;
 
     @Override
-    public List<RenderedHop> render(ProductLink link, boolean authorized) {
-        RenderResponse response = requestRender(link, authorized);
+    public List<RenderedHop> render(ProductLink link, boolean authorized, DeclaredIdentity identity) {
+        RenderResponse response = requestRender(link, authorized, identity);
         if (!response.hasInternalAddressHit()) {
             // 홉 재검사를 하지 않으므로, 내부 주소를 판정하지 않는 renderer(배포 순서가 어긋났거나 롤백됨)의 홉은 쓸 수 없다.
             log.error("headless render without internal address judgement url={}", link.safeLogString());
@@ -102,11 +103,12 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         );
     }
 
-    private RenderResponse requestRender(ProductLink link, boolean authorized) {
+    private RenderResponse requestRender(ProductLink link, boolean authorized, DeclaredIdentity identity) {
         RenderRequest request = RenderRequest.newBuilder()
             .setUrl(link.value().toString())
             .setAuthorized(authorized)
             .setCompress(properties.compress())
+            .setIdentity(identity.value())
             .build();
         ResponseEntity<byte[]> entity;
         try {

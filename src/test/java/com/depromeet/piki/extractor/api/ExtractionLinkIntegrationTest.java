@@ -1,6 +1,7 @@
 package com.depromeet.piki.extractor.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -80,6 +81,34 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         if (stubGeminiClient.invocations() != 0) {
             throw new AssertionError("구조화 파싱 성공 시 LLM 을 호출하면 안 된다");
         }
+    }
+
+    @Test
+    @DisplayName("요청의 identity 가 fetch 경계까지 전달된다")
+    void identityReachesFetchBoundary() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/1\", \"identity\": \"Foo/2.0\"}"))
+            .andExpect(status().isOk());
+
+        assertEquals("Foo/2.0", stubPageFetcher.lastIdentity.value());
+    }
+
+    @Test
+    @DisplayName("형식이 어긋난 identity 는 요청을 실패시키지 않고 기본 신원으로 추출한다")
+    void malformedIdentityFallsBackToDefault() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/1\", \"identity\": \"Foo (+https://x.example)\"}"))
+            .andExpect(status().isOk());
+
+        assertTrue(stubPageFetcher.lastIdentity.isDefault());
     }
 
     @Test

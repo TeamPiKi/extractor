@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.headless;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import java.util.List;
 
@@ -14,5 +15,5 @@ public interface HeadlessRenderer {
      * @param authorized 허락받은 대상인가.
      *     이 경계는 판정하지 않고 전달만 한다 — 원장은 호출자(core)에 있다.
      */
-    List<RenderedHop> render(ProductLink link, boolean authorized);
+    List<RenderedHop> render(ProductLink link, boolean authorized, DeclaredIdentity identity);
 }
