@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.support;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
@@ -21,10 +22,12 @@ public class StubHeadlessRenderer implements HeadlessRenderer {
     };
 
     public Boolean lastAuthorized;
+    public DeclaredIdentity lastIdentity;
 
     @Override
-    public List<RenderedHop> render(ProductLink link, boolean authorized) {
+    public List<RenderedHop> render(ProductLink link, boolean authorized, DeclaredIdentity identity) {
         lastAuthorized = authorized;
+        lastIdentity = identity;
         return build.apply(link);
     }
 }

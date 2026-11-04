@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.support;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import com.depromeet.piki.extractor.extraction.PageFetcher;
@@ -15,8 +16,11 @@ public class StubPageFetcher implements PageFetcher {
         throw new IllegalStateException("stub.build 를 테스트 본문에서 명시 세팅해야 한다. CLAUDE.md '테스트' 절 참고.");
     };
 
+    public DeclaredIdentity lastIdentity;
+
     @Override
-    public PageContent fetch(ProductLink link) {
+    public PageContent fetch(ProductLink link, DeclaredIdentity identity) {
+        lastIdentity = identity;
         return build.apply(link);
     }
 }

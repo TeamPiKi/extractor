@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -9,10 +10,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * yml 오버라이드로 튜닝 여지만 연다. application.yml 에 fetch 섹션이 없어도 모든 컴포넌트가
  * {@code @DefaultValue} 를 가져 constructor binding 으로 완전한 기본 인스턴스가 만들어진다.
  *
- * @param userAgent 대상 몰에 밝히는 우리 신원. 끝에 붙는 {@code PiKi} 토큰이 상대가 우리를 가려낼 수 있게 하는
- *     부분이고, 헤드리스 렌더 서비스가 보내는 것과 같은 토큰이다. 두 경로가 다른 신원으로 나가면 같은 몰이
- *     우리를 둘로 본다. 브라우저 호환 접두를 남기는 이유는 형식이 어긋난 UA 나 기본 RestClient UA 를 거르는
- *     사이트가 있어서다.
+ * @param browserUserAgent UA 에서 신원 앞에 붙는 브라우저 호환 접두. 형식이 어긋난 UA 나 기본 RestClient UA 를
+ *     거르는 사이트가 있어 남긴다.
  * @param connectionRequestTimeout 커넥션 풀에서 커넥션 획득까지의 최대 대기. 미설정 시 HttpClient5 기본이
  *     분 단위라, 풀 고갈·느린 upstream 에서 워커가 오래 붙잡히지 않게 짧게 명시한다(fail-fast).
  * @param maxRedirects 수동 redirect 추적 hop 상한. 단축·딥링크 체인이 실측 2 hop 까지 쓰므로 여유를 두되 무한·과도한
@@ -23,7 +22,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  */
 @ConfigurationProperties("fetch")
 public record FetchProperties(
-    @DefaultValue(DEFAULT_USER_AGENT) String userAgent,
+    @DefaultValue(BROWSER_USER_AGENT) String browserUserAgent,
     @DefaultValue("5s") Duration connectTimeout,
     @DefaultValue("15s") Duration readTimeout,
     @DefaultValue("2s") Duration connectionRequestTimeout,
@@ -36,9 +35,8 @@ public record FetchProperties(
      */
     static final String IDENTITY_TOKEN = "PiKi";
 
-    static final String DEFAULT_USER_AGENT =
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            + "(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36 " + IDENTITY_TOKEN;
+    static final String BROWSER_USER_AGENT =
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
 
     /**
      * Spring 없이 도는 단위·E2E 테스트가 기본값으로 fetcher 를 조립할 수 있게 하는 편의 팩토리 —
@@ -46,11 +44,16 @@ public record FetchProperties(
      */
     public static FetchProperties defaults() {
         return new FetchProperties(
-            DEFAULT_USER_AGENT,
+            BROWSER_USER_AGENT,
             Duration.ofSeconds(5),
             Duration.ofSeconds(15),
             Duration.ofSeconds(2),
             5
         );
+    }
+
+    /** 끝의 신원이 상대가 우리를 가려낼 수 있게 하는 부분이다. 두 추출 경로가 다른 신원으로 나가면 같은 몰이 우리를 둘로 본다. */
+    String userAgentOf(DeclaredIdentity identity) {
+        return browserUserAgent + " " + (identity.isDefault() ? IDENTITY_TOKEN : identity.value());
     }
 }

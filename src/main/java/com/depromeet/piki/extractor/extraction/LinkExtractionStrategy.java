@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 
@@ -23,6 +24,7 @@ public interface LinkExtractionStrategy {
      *     전략만 렌더 서비스로 전달한다. 두 전략이 같은 시그니처를 갖는 편이 호출부(Fallback)가 분기를
      *     들고 있는 것보다 낫다 — 전략이 늘어도 호출부가 안 바뀐다.
      * @param model 호출자가 지정한 LLM 모델(없으면 빈 문자열). 전략은 해석하지 않고 파이프라인까지 흘려보낸다.
+     * @param identity 대상 몰에 밝히는 신원. 전략은 해석하지 않고 몰로 나가는 경계까지 흘려보낸다.
      */
-    ProductSnapshot extract(ProductLink link, boolean authorized, String model);
+    ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity);
 }

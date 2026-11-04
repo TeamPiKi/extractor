@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction.http;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,10 +13,19 @@ class FetchPropertiesTest {
     @Test
     @DisplayName("기본 UA 는 브라우저 호환 형식으로 시작하고 렌더 서비스와 같은 신원 토큰으로 끝난다")
     void defaultUserAgentDeclaresIdentity() {
-        String userAgent = FetchProperties.defaults().userAgent();
+        String userAgent = FetchProperties.defaults().userAgentOf(DeclaredIdentity.DEFAULT);
 
         assertEquals("PiKi", FetchProperties.IDENTITY_TOKEN);
         assertTrue(userAgent.startsWith("Mozilla/5.0 "), userAgent);
         assertTrue(userAgent.endsWith(" " + FetchProperties.IDENTITY_TOKEN), userAgent);
+    }
+
+    @Test
+    @DisplayName("요청 신원이 있으면 기본 신원 자리에 그 값이 실린다")
+    void requestedIdentityReplacesDefault() {
+        String userAgent = FetchProperties.defaults().userAgentOf(DeclaredIdentity.fromRequest("Foo/2.0"));
+
+        assertTrue(userAgent.startsWith("Mozilla/5.0 "), userAgent);
+        assertTrue(userAgent.endsWith(" Foo/2.0"), userAgent);
     }
 }

@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import java.net.InetAddress;
@@ -16,9 +17,11 @@ import java.net.URI;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.test.web.client.RequestMatcher;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -50,7 +53,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT);
 
         assertEquals("product", page.document().text());
         // link 는 사용자 등록 원본, finalUrl 은 redirect 를 따라간 최종 URL(baseUri 용으로 구분).
@@ -71,7 +74,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://musinsa.onelink.me/x"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://musinsa.onelink.me/x"), DeclaredIdentity.DEFAULT);
 
         assertEquals("product", page.document().text());
         assertEquals("https://musinsa.com/p", page.finalUrl().value().toString());
@@ -96,7 +99,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
@@ -111,7 +114,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT);
 
         assertEquals("product", page.document().text());
         assertEquals("http://zigzag.kr/p", page.finalUrl().value().toString());
@@ -132,7 +135,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
@@ -146,7 +149,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
         assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
         assertTrue(ex.escalatable());
     }
@@ -161,7 +164,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p")));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
         assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
         assertTrue(ex.escalatable());
     }
@@ -181,7 +184,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop")));
+            () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop"), DeclaredIdentity.DEFAULT));
         // redirect 루프는 재시도해도 결정론적으로 재실패하므로 확정 실패로 가른다.
         assertEquals(ExtractionErrorCode.TOO_MANY_REDIRECTS, ex.code());
     }
@@ -198,7 +201,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://packnfold.co.kr/product/61/category/42/")));
+            () -> fetcher.fetch(ProductLink.parse("https://packnfold.co.kr/product/61/category/42/"), DeclaredIdentity.DEFAULT));
 
         assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, ex.code());
         assertFalse(ex.permanent());
@@ -215,7 +218,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>goods</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://bit.ly/abc"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://bit.ly/abc"), DeclaredIdentity.DEFAULT);
 
         assertEquals("goods", page.document().text());
     }
@@ -231,7 +234,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>landing</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://toss.shopping/"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://toss.shopping/"), DeclaredIdentity.DEFAULT);
 
         assertEquals("landing", page.document().text());
     }
@@ -247,7 +250,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>moved</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/old"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/old"), DeclaredIdentity.DEFAULT);
 
         assertEquals("moved", page.document().text());
     }
@@ -260,9 +263,31 @@ class HttpPageFetcherRedirectTest {
                 server.expect(requestTo("https://zigzag.kr/p"))
                     .andRespond(withSuccess("<html>direct</html>", MediaType.TEXT_HTML)));
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"), DeclaredIdentity.DEFAULT);
 
         assertEquals("direct", page.document().text());
         assertEquals(page.link(), page.finalUrl());
+    }
+
+    @Test
+    @DisplayName("요청 신원을 redirect 의 모든 hop UA 에 싣는다")
+    void declaresRequestedIdentityOnEveryHop() {
+        RequestMatcher declaresIdentity = request -> {
+            String userAgent = request.getHeaders().getFirst(HttpHeaders.USER_AGENT);
+            assertTrue(userAgent.startsWith("Mozilla/5.0 ") && userAgent.endsWith(" Foo/2.0"), userAgent);
+        };
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                server.expect(requestTo("https://shop.example.com/short"))
+                    .andExpect(declaresIdentity)
+                    .andRespond(withStatus(HttpStatus.MOVED_PERMANENTLY).location(URI.create("https://shop.example.com/p")));
+                server.expect(requestTo("https://shop.example.com/p"))
+                    .andExpect(declaresIdentity)
+                    .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
+            });
+
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/short"), DeclaredIdentity.fromRequest("Foo/2.0"));
+
+        assertEquals("product", page.document().text());
     }
 }

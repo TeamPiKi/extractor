@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 
@@ -15,6 +16,7 @@ public interface ProductLinkExtractor {
      * @param model 호출자가 지정한 LLM 모델 힌트. authorized 와 같은 성질이다 — 정책의 단일 진실은 호출자 쪽
      *     동적 설정(DB, 백오피스)이고 무상태인 이 서비스는 요청 단위로만 받는다. 빈 문자열(null 도 같다)이면 기본 모델을 쓰며,
      *     지정 모델이 사라졌으면 기본 모델로 대체된다.
+     * @param identity 대상 몰에 밝히는 신원. model 과 같은 성질이다 — 값의 단일 진실은 호출자 쪽 동적 설정이다.
      */
-    ProductSnapshot extract(ProductLink link, boolean authorized, String model);
+    ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity);
 }

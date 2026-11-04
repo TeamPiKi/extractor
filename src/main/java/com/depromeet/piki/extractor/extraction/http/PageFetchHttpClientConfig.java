@@ -90,7 +90,6 @@ public class PageFetchHttpClientConfig {
                 .build();
         return RestClient.builder()
             .requestFactory(new HttpComponentsClientHttpRequestFactory(httpClient))
-            .defaultHeader(HttpHeaders.USER_AGENT, properties.userAgent())
             .defaultHeader(HttpHeaders.ACCEPT, "text/html,application/xhtml+xml,*/*;q=0.8")
             .defaultHeader(HttpHeaders.ACCEPT_LANGUAGE, "ko,en;q=0.9")
             .observationRegistry(observationRegistry)
