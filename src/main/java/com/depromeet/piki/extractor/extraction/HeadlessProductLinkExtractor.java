@@ -82,7 +82,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         }
         Chosen chosen = fallback != null ? fallback : first;
         if (chosen != null) {
-            return extractChosen(chosen, link, hops, timing, model);
+            return extractChosen(chosen, link, hops, blocked, timing, model);
         }
         if (blocked) {
             log.warn("headless hops unusable blocked=true hops={} url={}", hops.size(), link.safeLogString());
@@ -96,11 +96,16 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
     }
 
-    /** title 은 페이지 본문이라 남기지 않는다. */
+    /**
+     * title 은 페이지 본문이라 남기지 않는다. 고른 홉 앞의 status 열과 차단 신호를 함께 남기는 이유는 로그인 페이지
+     * 같은 비상품 홉에 착지했을 때, 앞 홉이 서버 리다이렉트로 보냈는지(로그인 요구)와 차단 status 뒤에 넘어갔는지를
+     * 고른 홉 한 줄로는 가를 수 없어서다.
+     */
     private ProductSnapshot extractChosen(
         Chosen chosen,
         ProductLink link,
         List<RenderedHop> hops,
+        boolean blocked,
         String timing,
         String model
     ) {
@@ -109,11 +114,14 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         } catch (ProductSnapshotException e) {
             RenderedHop hop = chosen.candidate().hop();
             log.info(
-                "headless chosen hop failed code={} hop={}/{} status={} source={} html={}chars hopUrl={} url={}",
+                "headless chosen hop failed code={} hop={}/{} status={} statuses={} blocked={} "
+                    + "source={} html={}chars hopUrl={} url={}",
                 e.code(),
                 hops.indexOf(hop) + 1,
                 hops.size(),
                 hop.status(),
+                hops.stream().map(RenderedHop::status).toList(),
+                blocked,
                 chosen.candidate().html().equals(hop.dom()) ? "dom" : "body",
                 chosen.page().retainedChars(),
                 chosen.page().finalUrl().safeLogString(),
