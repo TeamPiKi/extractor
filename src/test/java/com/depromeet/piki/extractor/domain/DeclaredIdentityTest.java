@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -17,12 +19,20 @@ class DeclaredIdentityTest {
 
         assertFalse(identity.isDefault());
         assertEquals(requested, identity.value());
+        assertEquals(requested, identity.toString());
     }
 
     @ParameterizedTest(name = "생략·빈 값 [{0}] 은 기본 신원이다")
     @NullAndEmptySource
     void treatsBlankAsDefault(String requested) {
         assertTrue(DeclaredIdentity.fromRequest(requested).isDefault());
+    }
+
+    @Test
+    @DisplayName("기본 신원은 렌더 요청에 빈 값으로 나가고 로그에는 실제 이름으로 찍힌다")
+    void defaultKeepsEmptyWireValueButLogsActualName() {
+        assertEquals("", DeclaredIdentity.DEFAULT.value());
+        assertEquals("PiKi", DeclaredIdentity.DEFAULT.toString());
     }
 
     /** 헤더에 그대로 실리는 값이다. 줄바꿈·따옴표가 그대로 나가면 헤더가 깨지거나 다른 헤더가 끼어든다. */

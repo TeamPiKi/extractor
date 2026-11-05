@@ -29,12 +29,6 @@ public record FetchProperties(
     @DefaultValue("5") int maxRedirects
 ) {
 
-    /**
-     * 렌더 서비스가 UA 와 Sec-CH-UA 에 싣는 것과 같은 값이어야 한다. 한쪽만 바꾸면 신원이 갈린다.
-     * {@code (+URL)} 형식을 크롤러로 보고 연결을 끊는 몰이 있어 이름만 싣는다.
-     */
-    static final String IDENTITY_TOKEN = "PiKi";
-
     static final String BROWSER_USER_AGENT =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
 
@@ -54,6 +48,6 @@ public record FetchProperties(
 
     /** 끝의 신원이 상대가 우리를 가려낼 수 있게 하는 부분이다. 두 추출 경로가 다른 신원으로 나가면 같은 몰이 우리를 둘로 본다. */
     String userAgentOf(DeclaredIdentity identity) {
-        return browserUserAgent + " " + (identity.isDefault() ? IDENTITY_TOKEN : identity.value());
+        return browserUserAgent + " " + identity.name();
     }
 }
