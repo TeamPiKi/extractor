@@ -78,7 +78,7 @@ class HtmlSnapshotPipelineGateTest {
             + "{\"props\":{\"product\":{\"name\":\"하이드레이션 상품\",\"price\":12000}}}"
             + "</script></head><body><div id=\"__next\"></div></body></html>";
         stubGemini.build = request ->
-            new GeminiExtractionResult(true, "하이드레이션 상품", 12_000, "KRW", "https://cdn.example.com/p.png");
+            new GeminiExtractionResult(true, "하이드레이션 상품", 12_000, null, "KRW", "https://cdn.example.com/p.png");
 
         ProductSnapshot snapshot = pipeline(new SimpleMeterRegistry())
             .extract(PageContent.of(link, hydrationShell), "fetch=0ms", null);

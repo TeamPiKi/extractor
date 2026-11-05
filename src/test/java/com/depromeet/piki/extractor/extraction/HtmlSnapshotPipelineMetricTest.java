@@ -44,7 +44,7 @@ class HtmlSnapshotPipelineMetricTest {
             + "</script></head><body></body></html>";
         pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms", null);
 
-        stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠", 2_000, null, null);
+        stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠", 2_000, null, null, null);
         String textOnlyHtml = "<html><body>"
             + "구조화 데이터 없이 가시 텍스트로만 상품을 설명하는 본문. ".repeat(3)
             + "</body></html>";

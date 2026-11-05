@@ -72,7 +72,7 @@ class DefaultProductLinkExtractorTest {
     @Test
     @DisplayName("본문 텍스트가 충분한 페이지의 no-data 는 NOT_PRODUCT_PAGE 그대로 전파한다")
     void propagatesNoDataOnContentRichPage() {
-        stubGemini.build = request -> new GeminiExtractionResult(false, null, null, null, null);
+        stubGemini.build = request -> new GeminiExtractionResult(false, null, null, null, null, null);
 
         ProductSnapshotException e = assertThrows(
             ProductSnapshotException.class,

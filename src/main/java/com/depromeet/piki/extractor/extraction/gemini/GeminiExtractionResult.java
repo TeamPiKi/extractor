@@ -8,6 +8,7 @@ public record GeminiExtractionResult(
     boolean isProductPage,
     String name,
     Integer currentPrice,
+    Integer originalPrice,
     String currency,
     String imageUrl
 ) {
@@ -20,6 +21,6 @@ public record GeminiExtractionResult(
         if (!isProductPage) {
             throw ProductSnapshotException.notProductPage();
         }
-        return ProductSnapshot.fromExtracted(link, name, imageUrl, currentPrice, currency);
+        return ProductSnapshot.fromExtracted(link, name, imageUrl, currentPrice, originalPrice, currency);
     }
 }
