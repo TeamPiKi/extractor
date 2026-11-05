@@ -95,7 +95,7 @@ class HeadlessProductLinkExtractorTest {
     @Test
     @DisplayName("구조화 데이터가 어디에도 없으면 LLM 에 넘길 것이 있는 첫 후보 한 장으로만 LLM fallback 을 탄다")
     void llmFallbackUsesFirstUsableCandidateOnce() {
-        stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠 상품", 50_000, "KRW", "https://cdn.example.com/i.png");
+        stubGemini.build = request -> new GeminiExtractionResult(true, "엘엘엠 상품", 50_000, null, "KRW", "https://cdn.example.com/i.png");
         // 마지막 홉은 셸(앱 유도), 상품 텍스트는 앞 홉에만 있다 — 셸을 LLM 에 넣어 확정 실패로 닫으면 안 된다.
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, TEXT, TEXT), hop(mobile, 200, SHELL, SHELL)));
 
@@ -166,7 +166,7 @@ class HeadlessProductLinkExtractorTest {
     @Test
     @DisplayName("루트 경로라도 query 로 상품을 싣는 홉은 사이트 루트 착지가 아니다")
     void rootPathWithQueryIsNotSiteRoot() {
-        stubGemini.build = request -> new GeminiExtractionResult(true, "쿼리 상품", 3_000, "KRW", "https://cdn.example.com/i.png");
+        stubGemini.build = request -> new GeminiExtractionResult(true, "쿼리 상품", 3_000, null, "KRW", "https://cdn.example.com/i.png");
         ProductLink goods = ProductLink.parse("https://mobile.a-bly.com/?goodsNo=1");
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(
             hop(link, 302, "", ""),

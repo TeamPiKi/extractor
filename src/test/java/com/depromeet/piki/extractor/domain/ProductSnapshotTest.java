@@ -127,6 +127,33 @@ class ProductSnapshotTest {
     }
 
     @Test
+    @DisplayName("originalPrice 가 음수면 ProductSnapshotException 을 던진다")
+    void negativeOriginalPriceThrows() {
+        assertThrows(
+            ProductSnapshotException.class,
+            () -> ProductSnapshot.fromExtracted(link, "상품", null, 1_000, -1, "KRW"));
+    }
+
+    @Test
+    @DisplayName("originalPrice 가 currentPrice 이상이면 그대로, 작거나 currentPrice 가 없으면 모름(null)으로 내린다")
+    void originalPriceTrustedOnlyWhenNotBelowCurrentPrice() {
+        assertEquals(1_000, ProductSnapshot.fromExtracted(link, "상품", null, 1_000, 1_000, "KRW").originalPrice());
+        assertEquals(1_500, ProductSnapshot.fromExtracted(link, "상품", null, 1_000, 1_500, "KRW").originalPrice());
+        assertNull(ProductSnapshot.fromExtracted(link, "상품", null, 1_000, 900, "KRW").originalPrice());
+        assertNull(ProductSnapshot.fromExtracted(link, "상품", null, null, 900, "KRW").originalPrice());
+        assertEquals(1_000, ProductSnapshot.fromExtracted(link, "상품", null, 1_000, 900, "KRW").currentPrice());
+    }
+
+    @Test
+    @DisplayName("withOrigin 은 originalPrice 를 보존한다")
+    void withOriginKeepsOriginalPrice() {
+        ProductSnapshot snapshot = ProductSnapshot.fromExtracted(link, "상품", null, 1_000, 1_500, "KRW")
+            .withOrigin(link, ExtractionMethod.STRUCTURED);
+
+        assertEquals(1_500, snapshot.originalPrice());
+    }
+
+    @Test
     @DisplayName("READY 필수 필드(name·imageUrl·currentPrice)가 하나라도 비면 missingReadyField 다")
     void missingReadyFieldBranches() {
         String image = "https://cdn.example.com/a.jpg";

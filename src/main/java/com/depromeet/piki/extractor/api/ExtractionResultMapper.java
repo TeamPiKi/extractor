@@ -38,6 +38,9 @@ public final class ExtractionResultMapper {
         if (snapshot.currentPrice() != null) {
             result.setCurrentPrice(snapshot.currentPrice());
         }
+        if (snapshot.originalPrice() != null) {
+            result.setOriginalPrice(snapshot.originalPrice());
+        }
         if (snapshot.currency() != null) {
             result.setCurrency(snapshot.currency());
         }

@@ -118,6 +118,7 @@ public class StructuredDataExtractor {
             textOf(product.get("name")),
             imageUrlOf(product),
             textOf(priceNode(offer)),
+            textOf(originalPriceNode(offer)),
             textOf(offer == null ? null : offer.get("priceCurrency"))
         );
     }
@@ -203,18 +204,53 @@ public class StructuredDataExtractor {
         if (price != null) {
             return price;
         }
-        JsonNode priceSpecification = offer.get("priceSpecification");
-        if (priceSpecification != null) {
-            JsonNode specPrice = priceSpecification.get("price");
-            if (specPrice != null) {
+        JsonNode originalOnly = null;
+        for (JsonNode specification : priceSpecifications(offer)) {
+            JsonNode specPrice = specification.get("price");
+            if (specPrice == null) {
+                continue;
+            }
+            if (!isOriginalPriceSpecification(specification)) {
                 return specPrice;
             }
+            originalOnly = specPrice;
+        }
+        // 정가 유형 spec 만 있는 페이지는 할인 없는 단일가라 그 값이 곧 현재가다.
+        if (originalOnly != null) {
+            return originalOnly;
         }
         JsonNode lowPrice = offer.get("lowPrice");
         if (lowPrice != null) {
             return lowPrice;
         }
         return null;
+    }
+
+    /** 할인 전 정가는 schema.org 에 전용 필드가 없어 priceSpecification 의 유형으로만 구분된다(29CM 이 StrikethroughPrice 로 실음). */
+    private JsonNode originalPriceNode(JsonNode offer) {
+        if (offer == null) {
+            return null;
+        }
+        for (JsonNode specification : priceSpecifications(offer)) {
+            if (isOriginalPriceSpecification(specification)) {
+                return specification.get("price");
+            }
+        }
+        return null;
+    }
+
+    private Iterable<JsonNode> priceSpecifications(JsonNode offer) {
+        JsonNode node = offer.get("priceSpecification");
+        if (node == null) {
+            return List.of();
+        }
+        return node.isArray() ? node : List.of(node);
+    }
+
+    /** priceType 은 schema.org PriceTypeEnumeration 의 URL 이라 접두(https://schema.org/) 유무와 무관하게 이름으로 본다. */
+    private boolean isOriginalPriceSpecification(JsonNode specification) {
+        String type = textOf(specification.get("priceType"));
+        return type != null && (type.contains("StrikethroughPrice") || type.contains("ListPrice"));
     }
 
     /**
@@ -273,11 +309,11 @@ public class StructuredDataExtractor {
         if (name == null && priceText == null && imageUrl == null && currency == null) {
             return StructuredExtraction.Miss.NO_DATA;
         }
-        return toResult(link, name, imageUrl, priceText, currency);
+        return toResult(link, name, imageUrl, priceText, resolved.originalPrice(), currency);
     }
 
-    /** 가격·통화 해석 결과. 통화만 확인된 경우가 있어 price 는 null 일 수 있다. */
-    private record ResolvedPrice(String price, String currency) {
+    /** 가격·통화 해석 결과. 통화만 확인된 경우가 있어 price 는 null 일 수 있고, originalPrice 는 정가 태그가 있을 때만 찬다. */
+    private record ResolvedPrice(String price, String originalPrice, String currency) {
     }
 
     /**
@@ -288,21 +324,28 @@ public class StructuredDataExtractor {
     private ResolvedPrice resolvePrice(Document document) {
         String ogCurrency = metaContent(document, "product:price:currency");
         String ogSaleAmount = metaContent(document, "product:sale_price:amount");
+        String ogAmount = metaContent(document, "product:price:amount");
         // sale_price 가 있는 페이지(cafe24 계열)는 price:amount 가 할인 전 정가다 - 판매가는 sale_price 쪽.
         if (ogSaleAmount != null) {
             String saleCurrency = metaContent(document, "product:sale_price:currency");
-            return new ResolvedPrice(ogSaleAmount, saleCurrency != null ? saleCurrency : ogCurrency);
+            String originalPrice = ogAmount != null ? ogAmount : originalPriceTag(document);
+            return new ResolvedPrice(ogSaleAmount, originalPrice, saleCurrency != null ? saleCurrency : ogCurrency);
         }
-        String ogAmount = metaContent(document, "product:price:amount");
         if (ogAmount != null) {
-            return new ResolvedPrice(ogAmount, ogCurrency);
+            return new ResolvedPrice(ogAmount, originalPriceTag(document), ogCurrency);
         }
         ResolvedPrice embedded = priceFromEmbeddedState(document);
         if (embedded == null) {
-            return new ResolvedPrice(null, ogCurrency);
+            return new ResolvedPrice(null, null, ogCurrency);
         }
         String currency = embedded.currency() != null ? embedded.currency() : ogCurrency;
-        return new ResolvedPrice(embedded.price(), currency);
+        return new ResolvedPrice(embedded.price(), null, currency);
+    }
+
+    /** 정가 태그는 표준(original_price)과 무신사의 비표준(normal_price) 둘 다 실측돼 둘 다 본다. */
+    private String originalPriceTag(Document document) {
+        String standard = metaContent(document, "product:original_price:amount");
+        return standard != null ? standard : metaContent(document, "product:price:normal_price");
     }
 
     /**
@@ -326,7 +369,7 @@ public class StructuredDataExtractor {
         String value = valueNode.asString();
         JsonNode codeNode = base.path("currency").path("code");
         String currency = codeNode.isString() ? codeNode.asString() : null;
-        return new ResolvedPrice(value, currency);
+        return new ResolvedPrice(value, null, currency);
     }
 
     /**
@@ -452,7 +495,14 @@ public class StructuredDataExtractor {
      * fromExtracted 를 통과한 뒤 name 이 null 이면 정규화 결과가 blank 였다는 뜻이라(OG 사이트명 꼬리표 제거로
      * 빈 문자열이 된 경우 등) MISSING_FIELD 로 되돌린다.
      */
-    private StructuredExtraction toResult(ProductLink link, String name, String imageUrl, String priceText, String currency) {
+    private StructuredExtraction toResult(
+        ProductLink link,
+        String name,
+        String imageUrl,
+        String priceText,
+        String originalPriceText,
+        String currency
+    ) {
         if (name == null) {
             return StructuredExtraction.Miss.MISSING_FIELD;
         }
@@ -463,9 +513,11 @@ public class StructuredDataExtractor {
         if (price == null) {
             return StructuredExtraction.Miss.INVALID_VALUE;
         }
+        // 정가는 부가 정보라 해석 실패를 모름(null)으로 내리고, 현재가처럼 LLM fallback 사유로 삼지 않는다.
+        Integer originalPrice = originalPriceText == null ? null : parsePrice(originalPriceText);
         ProductSnapshot snapshot;
         try {
-            snapshot = ProductSnapshot.fromExtracted(link, name, imageUrl, price, currency);
+            snapshot = ProductSnapshot.fromExtracted(link, name, imageUrl, price, originalPrice, currency);
         } catch (ProductSnapshotException e) {
             // 구조화 경로는 fromExtracted 의 범위 위반을 흡수해 INVALID_VALUE(→LLM fallback)로 보고한다
             // (LLM 경로는 같은 예외를 그대로 흘려 실패로 떨어뜨린다 — 같은 검증, 실패 표현만 다름).

@@ -83,17 +83,22 @@ public record GeminiExtractionRequest(
             3. currentPrice (integer): The price a buyer would pay RIGHT NOW. Remove currency symbols, commas, decimals.
                If a discounted/sale price is shown, this is the discounted price. If only a single price is shown,
                this is that price. NEVER report the strikethrough/original/pre-discount price here.
-            4. currency (string): ISO 4217 code (KRW, USD, JPY, EUR, etc.). Infer from page language/locale if ambiguous.
-            5. imageUrl (string): ABSOLUTE URL of the primary product image. Prefer og:image meta tag,
+            4. originalPrice (integer): The pre-discount price (strikethrough / list / regular price), same
+               formatting as currentPrice. If a discount is shown, this is the crossed-out price. If only a single
+               price is shown with no discount indicator, this equals currentPrice. null if unknown or if the
+               page gives no price. Must never be less than currentPrice.
+            5. currency (string): ISO 4217 code (KRW, USD, JPY, EUR, etc.). Infer from page language/locale if ambiguous.
+            6. imageUrl (string): ABSOLUTE URL of the primary product image. Prefer og:image meta tag,
                fallback to the main product image. Resolve relative URLs against the page URL.
                The URL (or the relative path you resolve) must appear in the HTML — do not construct
                or abbreviate image URLs. If no product image URL appears in the HTML, return null.
 
             **Price rules**:
-            - Single price, no discount indicator → that price is currentPrice.
-            - Both original (strikethrough) and sale prices visible → currentPrice = sale price.
-            - JSON-LD with offers.price → that is currentPrice. Ignore priceSpecification entries marked as
-              StrikethroughPrice / ListPrice / original.
+            - Single price, no discount indicator → that price is both currentPrice and originalPrice.
+            - Both original (strikethrough) and sale prices visible → currentPrice = sale price,
+              originalPrice = strikethrough price.
+            - JSON-LD with offers.price → that is currentPrice. priceSpecification entries marked as
+              StrikethroughPrice / ListPrice / original are originalPrice, never currentPrice.
 
             Respond with JSON only, matching the provided schema. Handle any language.\
             """;
@@ -105,6 +110,7 @@ public record GeminiExtractionRequest(
         properties.put("isProductPage", JsonSchema.ofType("boolean"));
         properties.put("name", JsonSchema.ofNullableType("string"));
         properties.put("currentPrice", JsonSchema.ofNullableType("integer"));
+        properties.put("originalPrice", JsonSchema.ofNullableType("integer"));
         properties.put("currency", JsonSchema.ofNullableType("string"));
         properties.put("imageUrl", JsonSchema.ofNullableType("string"));
         return new JsonSchema("object", null, properties, null, List.of("isProductPage"), null);

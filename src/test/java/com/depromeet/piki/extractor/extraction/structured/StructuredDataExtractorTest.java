@@ -349,7 +349,82 @@ class StructuredDataExtractorTest {
         ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
 
         assertEquals(107_100, snapshot.currentPrice());
+        assertEquals(119_000, snapshot.originalPrice());
         assertEquals("KRW", snapshot.currency());
+    }
+
+    @Test
+    @DisplayName("og 의 정가 태그(original_price·normal_price)를 originalPrice 로 뽑고, 없으면 모름(null)이다")
+    void readsOpenGraphOriginalPriceTags() {
+        String standard = ogProduct("<meta property=\"product:original_price:amount\" content=\"50000\"/>");
+        String musinsa = ogProduct("<meta property=\"product:price:normal_price\" content=\"60000\"/>");
+        String none = ogProduct("");
+
+        assertEquals(50_000, snapshotOrNull(extractor.extract(pageOf(standard))).originalPrice());
+        assertEquals(60_000, snapshotOrNull(extractor.extract(pageOf(musinsa))).originalPrice());
+        assertNull(snapshotOrNull(extractor.extract(pageOf(none))).originalPrice());
+    }
+
+    private static String ogProduct(String extraMeta) {
+        return """
+            <html><head>
+            <meta property="og:title" content="상품"/>
+            <meta property="product:price:amount" content="45000"/>
+            <meta property="product:price:currency" content="KRW"/>
+            %s
+            </head><body></body></html>""".formatted(extraMeta);
+    }
+
+    @Test
+    @DisplayName("JSON-LD priceSpecification 배열에서 StrikethroughPrice 는 originalPrice 로, 나머지는 currentPrice 로 읽는다")
+    void readsStrikethroughPriceSpecificationAsOriginalPrice() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"Product","name":"취소선","offers":{"@type":"Offer","priceCurrency":"KRW","priceSpecification":[
+              {"@type":"UnitPriceSpecification","priceType":"https://schema.org/StrikethroughPrice","price":"50000"},
+              {"@type":"UnitPriceSpecification","priceType":"https://schema.org/SalePrice","price":"35000"}]}}"""))));
+
+        assertEquals(35_000, snapshot.currentPrice());
+        assertEquals(50_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 에 정가 유형(ListPrice) spec 만 있으면 그 값이 현재가이자 정가다")
+    void lonePriceSpecificationOfOriginalTypeIsTheSinglePrice() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"Product","name":"정가만","offers":{"@type":"Offer","priceSpecification":{"priceType":"ListPrice","price":"50000"}}}"""))));
+
+        assertEquals(50_000, snapshot.currentPrice());
+        assertEquals(50_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("og 에 sale_price 와 original_price 만 있고 price:amount 가 없어도 정가를 뽑는다")
+    void openGraphSalePriceWithOriginalPriceTag() {
+        String html = """
+            <html><head>
+            <meta property="og:title" content="할인상품"/>
+            <meta property="product:sale_price:amount" content="30000"/>
+            <meta property="product:original_price:amount" content="40000"/>
+            <meta property="product:price:currency" content="KRW"/>
+            </head><body></body></html>""";
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(30_000, snapshot.currentPrice());
+        assertEquals(40_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 에 정가 표기가 없으면 originalPrice 는 모름(null)이다")
+    void jsonLdWithoutOriginalPriceLeavesItNull() {
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(jsonLd(
+            """
+            {"@type":"Product","name":"단일가","offers":{"price":"39000"}}"""))));
+
+        assertEquals(39_000, snapshot.currentPrice());
+        assertNull(snapshot.originalPrice());
     }
 
     @Test

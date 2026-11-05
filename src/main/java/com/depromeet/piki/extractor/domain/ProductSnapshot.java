@@ -14,6 +14,7 @@ public record ProductSnapshot(
     String name,
     String imageUrl,
     Integer currentPrice,
+    Integer originalPrice,
     String currency,
     ProductLink finalUrl,
     ExtractionMethod method
@@ -24,7 +25,7 @@ public record ProductSnapshot(
      * 만들지만, finalUrl 과 method 는 그 바깥(파이프라인·이미지 서비스)만 안다. 출처는 withOrigin 으로 나중에 채운다.
      */
     public ProductSnapshot(ProductLink link, String name, String imageUrl, Integer currentPrice, String currency) {
-        this(link, name, imageUrl, currentPrice, currency, null, null);
+        this(link, name, imageUrl, currentPrice, null, currency, null, null);
     }
 
     /**
@@ -34,7 +35,7 @@ public record ProductSnapshot(
      */
     public ProductSnapshot withOrigin(ProductLink finalUrl, ExtractionMethod method) {
         Objects.requireNonNull(method, "method");
-        return new ProductSnapshot(link, name, imageUrl, currentPrice, currency, finalUrl, method);
+        return new ProductSnapshot(link, name, imageUrl, currentPrice, originalPrice, currency, finalUrl, method);
     }
 
     /**
@@ -79,6 +80,17 @@ public record ProductSnapshot(
     private static final int NAME_MAX_LENGTH = 512;
     private static final int IMAGE_URL_MAX_LENGTH = 2048;
 
+    /** 정가가 없는 이미지 경로({@code GeminiImageResult})용. */
+    public static ProductSnapshot fromExtracted(
+        ProductLink link,
+        String name,
+        String imageUrl,
+        Integer currentPrice,
+        String currency
+    ) {
+        return fromExtracted(link, name, imageUrl, currentPrice, null, currency);
+    }
+
     /**
      * 구조화 파싱과 LLM 추출이 함께 통과하는 정규화·범위검증의 단일 진실 원천.
      * imageUrl 을 https 로 좁히는 것은 클라이언트가 {@code <img src>} 로 쓸 때의 XSS 사다리를 끊기 위한 것이다.
@@ -86,12 +98,16 @@ public record ProductSnapshot(
      * <p>범위를 벗어난 값은 {@link ProductSnapshotException#untrustworthyValue()} 로 막고, 그 뒤 처리는 호출부가 고른다:
      * 구조화 경로는 예외를 흡수해 Miss(LLM fallback)로, LLM 경로는 그대로 흘려 실패로 떨어뜨린다.
      * 같은 검증, 실패 표현만 다르다.
+     * <p>originalPrice 의 뜻(안 채움=모름)은 계약(extraction.proto)이 정본. 현재가보다 작은 정가는 할인 표기를
+     * 거꾸로 읽은 값이라 정가만 모름으로 내린다 — 부가 정보 탓에 상품을 잃지 않기 위해서다. 음수는 추출기 결함 신호라
+     * 현재가와 같이 untrustworthy.
      */
     public static ProductSnapshot fromExtracted(
         ProductLink link,
         String name,
         String imageUrl,
         Integer currentPrice,
+        Integer originalPrice,
         String currency
     ) {
         String normalizedName = normalizeBlankToNull(name);
@@ -101,6 +117,13 @@ public record ProductSnapshot(
         if (currentPrice != null && currentPrice < 0) {
             throw ProductSnapshotException.untrustworthyValue();
         }
+        if (originalPrice != null && originalPrice < 0) {
+            throw ProductSnapshotException.untrustworthyValue();
+        }
+        Integer trustedOriginalPrice = originalPrice;
+        if (originalPrice != null && (currentPrice == null || originalPrice < currentPrice)) {
+            trustedOriginalPrice = null;
+        }
         if (normalizedName != null && normalizedName.length() > NAME_MAX_LENGTH) {
             throw ProductSnapshotException.untrustworthyValue();
         }
@@ -108,7 +131,8 @@ public record ProductSnapshot(
             throw ProductSnapshotException.untrustworthyValue();
         }
 
-        return new ProductSnapshot(link, normalizedName, normalizedImageUrl, currentPrice, normalizedCurrency);
+        return new ProductSnapshot(
+            link, normalizedName, normalizedImageUrl, currentPrice, trustedOriginalPrice, normalizedCurrency, null, null);
     }
 
     private static String normalizeBlankToNull(String value) {

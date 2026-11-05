@@ -65,12 +65,13 @@ class ContractWireTest {
             .setName("상품")
             .setCurrentPrice(0)
             .setMethod(ExtractionMethod.STRUCTURED)
+            .setOriginalPrice(0)
             .build();
 
         String json = PRINTER.omittingInsignificantWhitespace().print(result);
 
         // optional 스칼라는 0 이어도 "채웠다"가 보존된다 — 무료 상품(0원)이 생략으로 사라지지 않는다.
-        assertEquals("{\"name\":\"상품\",\"currentPrice\":0,\"method\":\"STRUCTURED\"}", json);
+        assertEquals("{\"name\":\"상품\",\"currentPrice\":0,\"method\":\"STRUCTURED\",\"originalPrice\":0}", json);
     }
 
     @Test

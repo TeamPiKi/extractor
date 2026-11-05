@@ -33,7 +33,8 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     private static final String STRUCTURED_HTML = """
         <html><head><script type="application/ld+json">
         {"@type":"Product","name":"직접파싱 상품","image":"https://cdn.example.com/p.png",
-         "offers":{"price":"39000","priceCurrency":"KRW"}}
+         "offers":{"price":"39000","priceCurrency":"KRW",
+           "priceSpecification":{"priceType":"https://schema.org/StrikethroughPrice","price":"49000"}}}
         </script></head><body></body></html>
         """;
 
@@ -73,6 +74,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(jsonPath("$.name").value("직접파싱 상품"))
             .andExpect(jsonPath("$.imageUrl").value("https://cdn.example.com/p.png"))
             .andExpect(jsonPath("$.currentPrice").value(39000))
+            .andExpect(jsonPath("$.originalPrice").value(49000))
             .andExpect(jsonPath("$.currency").value("KRW"))
             // additive 계약(core#825): 리다이렉트 없으면 finalUrl == 요청 원본, 구조화 경로는 method=STRUCTURED.
             .andExpect(jsonPath("$.finalUrl").value("https://shop.example.com/p/1"))
@@ -117,7 +119,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
         stubGeminiClient.build = request ->
-            new GeminiExtractionResult(true, "엘엘엠 상품", 12000, "KRW", "https://cdn.example.com/llm.png");
+            new GeminiExtractionResult(true, "엘엘엠 상품", 12000, 15000, "KRW", "https://cdn.example.com/llm.png");
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -125,6 +127,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.name").value("엘엘엠 상품"))
             .andExpect(jsonPath("$.currentPrice").value(12000))
+            .andExpect(jsonPath("$.originalPrice").value(15000))
             // LLM 분기도 withOrigin 을 거친다 — finalUrl 전달 회귀를 method 단언만으로는 못 잡는다.
             .andExpect(jsonPath("$.finalUrl").value("https://shop.example.com/p/2"))
             .andExpect(jsonPath("$.method").value("LLM"));
@@ -185,7 +188,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         // 본문 텍스트가 충분한 진짜 콘텐츠 페이지 — CSR 셸 재분류(EMPTY_SHELL)에 걸리지 않고 no-data 원형이 나간다.
         stubPageFetcher.build = link ->
             PageContent.of(link, "<html><body><article>" + "상품이 아닌 블로그 글의 충분히 긴 본문. ".repeat(20) + "</article></body></html>");
-        stubGeminiClient.build = request -> new GeminiExtractionResult(false, null, null, null, null);
+        stubGeminiClient.build = request -> new GeminiExtractionResult(false, null, null, null, null, null);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -219,7 +222,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     void incompleteExtraction() throws Exception {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
-        stubGeminiClient.build = request -> new GeminiExtractionResult(true, "이미지 없는 상품", 5000, "KRW", null);
+        stubGeminiClient.build = request -> new GeminiExtractionResult(true, "이미지 없는 상품", 5000, null, "KRW", null);
 
         // 예전에는 imageUrl 하나가 비었다고 422 로 닫아 이름·가격까지 버렸다. 이제는 채운 값을 내려보내고
         // 호출자가 INCOMPLETE 로 받아 사용자가 나머지를 채운다(TeamPiKi/core#944).
@@ -239,7 +242,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
         stubGeminiClient.reset();
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
         // 상품 페이지라고는 하는데 아무 값도 못 뽑은 경우 — 사용자에게 무엇을 채우라 할 근거조차 없어 실패로 닫는다.
-        stubGeminiClient.build = request -> new GeminiExtractionResult(true, null, null, null, null);
+        stubGeminiClient.build = request -> new GeminiExtractionResult(true, null, null, null, null, null);
 
         mockMvc().perform(post("/internal/extractions/link")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -312,7 +315,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     void passesModelHint() throws Exception {
         stubGeminiClient.reset();
         stubGeminiClient.build = request -> new GeminiExtractionResult(
-            true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
+            true, "LLM 상품", 12_000, null, "KRW", "https://cdn.example.com/llm.png");
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
 
         mockMvc().perform(post("/internal/extractions/link")
@@ -329,7 +332,7 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
     void allowsMissingModel() throws Exception {
         stubGeminiClient.reset();
         stubGeminiClient.build = request -> new GeminiExtractionResult(
-            true, "LLM 상품", 12_000, "KRW", "https://cdn.example.com/llm.png");
+            true, "LLM 상품", 12_000, null, "KRW", "https://cdn.example.com/llm.png");
         stubPageFetcher.build = link -> PageContent.of(link, NO_STRUCTURED_HTML);
 
         mockMvc().perform(post("/internal/extractions/link")
