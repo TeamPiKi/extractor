@@ -1,6 +1,5 @@
 package com.depromeet.piki.extractor.extraction.http;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
@@ -15,9 +14,8 @@ class FetchPropertiesTest {
     void defaultUserAgentDeclaresIdentity() {
         String userAgent = FetchProperties.defaults().userAgentOf(DeclaredIdentity.DEFAULT);
 
-        assertEquals("PiKi", FetchProperties.IDENTITY_TOKEN);
         assertTrue(userAgent.startsWith("Mozilla/5.0 "), userAgent);
-        assertTrue(userAgent.endsWith(" " + FetchProperties.IDENTITY_TOKEN), userAgent);
+        assertTrue(userAgent.endsWith(" PiKi"), userAgent);
     }
 
     @Test

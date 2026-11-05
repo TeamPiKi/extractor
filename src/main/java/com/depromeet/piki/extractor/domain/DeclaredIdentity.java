@@ -17,6 +17,12 @@ public final class DeclaredIdentity {
     /** 값이 비어 있으면 각 경로의 기본 신원을 쓴다. 렌더 요청에도 빈 값으로 나가 렌더 서비스의 기본값을 탄다. */
     public static final DeclaredIdentity DEFAULT = new DeclaredIdentity("");
 
+    /**
+     * 렌더 서비스가 UA 와 Sec-CH-UA 에 싣는 것과 같은 값이어야 한다. 한쪽만 바꾸면 신원이 갈린다.
+     * {@code (+URL)} 형식을 크롤러로 보고 연결을 끊는 몰이 있어 이름만 싣는다.
+     */
+    private static final String DEFAULT_NAME = "PiKi";
+
     private static final Pattern FORMAT = Pattern.compile("[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?");
     private static final int MAX_LENGTH = 40;
     private static final Pattern CONTROL_CHARS = Pattern.compile("\\p{Cntrl}");
@@ -38,12 +44,17 @@ public final class DeclaredIdentity {
         return value.isEmpty();
     }
 
+    /** 몰에 실제로 밝히는 이름. 렌더 요청에 싣는 {@link #value()} 와 달리 기본 신원이어도 비지 않는다. */
+    public String name() {
+        return isDefault() ? DEFAULT_NAME : value;
+    }
+
     public String value() {
         return value;
     }
 
     @Override
     public String toString() {
-        return isDefault() ? "default" : value;
+        return name();
     }
 }
