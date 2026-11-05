@@ -180,8 +180,12 @@ public class HttpPageFetcher implements PageFetcher {
                 .header(HttpHeaders.USER_AGENT, userAgent)
                 .exchange((request, response) -> receive(current, response));
         } catch (ResourceAccessException e) {
-            // 연결 실패와, 본문을 읽는 중의 IO 실패(연결 끊김 등)가 함께 여기로 온다.
-            log.warn("link fetch upstream error url={}", current.safeLogString());
+            // 연결 실패와 본문 읽기 중 IO 실패는 cause 클래스로만 갈린다. cause 메시지는 URL 을 담을 수 있어 남기지 않는다.
+            log.warn(
+                "link fetch upstream error cause={} url={}",
+                e.getMostSpecificCause().getClass().getSimpleName(),
+                current.safeLogString()
+            );
             throw PageFetchException.upstreamError(e);
         }
     }
