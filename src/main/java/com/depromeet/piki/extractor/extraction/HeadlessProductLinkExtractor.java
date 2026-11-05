@@ -96,11 +96,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
     }
 
-    /**
-     * title 은 페이지 본문이라 남기지 않는다. 고른 홉 앞의 status 열과 차단 신호를 함께 남기는 이유는 로그인 페이지
-     * 같은 비상품 홉에 착지했을 때, 앞 홉이 서버 리다이렉트로 보냈는지(로그인 요구)와 차단 status 뒤에 넘어갔는지를
-     * 고른 홉 한 줄로는 가를 수 없어서다.
-     */
+    /** title 은 페이지 본문이라 남기지 않는다. 비상품 홉 착지가 로그인 요구인지 차단 뒤인지는 앞 홉 status 열로 가른다. */
     private ProductSnapshot extractChosen(
         Chosen chosen,
         ProductLink link,
