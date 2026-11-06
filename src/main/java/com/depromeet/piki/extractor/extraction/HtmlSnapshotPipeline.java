@@ -3,9 +3,11 @@ package com.depromeet.piki.extractor.extraction;
 import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
+import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
@@ -13,7 +15,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * HTML → ProductSnapshot 의 공통 후반부: 구조화 데이터(JSON-LD/OpenGraph) 우선, 미달이면 같은 HTML 을 Gemini 로
- * 넘긴다(재fetch 없음). 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 실패로
+ * 넘긴다(재fetch 없음). 구조화로 끝났어도 정가가 비면 같은 HTML 로 정가만 Gemini 에 보강한다. 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 실패로
  * 끊는다 — 빈 입력의 LLM 은 실존하지 않는 상품을 지어내고, 그 값은 형식이 유효해 하류 검증을 전부 통과한다.
  * HTML 을 어디서 얻었는지(정적 fetch, 헤드리스 렌더)와 무관한 파싱 파이프라인이라 두 전략이 공유한다.
  *
@@ -63,7 +65,7 @@ public class HtmlSnapshotPipeline {
         countExtract(result, nothingForLlm);
 
         return switch (result) {
-            case StructuredExtraction.Extracted extracted -> structuredSnapshot(extracted, page, timing);
+            case StructuredExtraction.Extracted extracted -> structuredSnapshot(extracted, page, timing, model);
             case StructuredExtraction.Miss miss when nothingForLlm -> throw skippedShell(miss, page, timing);
             case StructuredExtraction.Miss miss -> llmSnapshot(miss, document, page, timing, model);
         };
@@ -84,7 +86,12 @@ public class HtmlSnapshotPipeline {
         meterRegistry.counter(EXTRACT_METRIC, TAG_VIA, via, TAG_REASON, reason).increment();
     }
 
-    private ProductSnapshot structuredSnapshot(StructuredExtraction.Extracted extracted, PageContent page, String timing) {
+    private ProductSnapshot structuredSnapshot(
+        StructuredExtraction.Extracted extracted,
+        PageContent page,
+        String timing,
+        String model
+    ) {
         log.info(
             "extract via=structured {} html={}chars url={}",
             timing,
@@ -93,7 +100,51 @@ public class HtmlSnapshotPipeline {
         );
         // 출처 표기는 값 생산자(파서·LLM)가 아니라 여기서 — finalUrl 을 아는 유일한 층이고,
         // 각 분기가 method 를 확정하는 지점이라 표기가 갈라질 수 없다.
-        return extracted.snapshot().withOrigin(page.finalUrl(), ExtractionMethod.STRUCTURED);
+        ProductSnapshot snapshot = extracted.snapshot().withOrigin(page.finalUrl(), ExtractionMethod.STRUCTURED);
+        return enrichOriginalPrice(snapshot, page, model);
+    }
+
+    /**
+     * 정가는 READY 필드가 아니라 비어도 LLM fallback 으로 안 넘어가므로 여기서 따로 묻는다. method 는 STRUCTURED
+     * 그대로 — 판매가의 출처가 구조화 데이터다.
+     */
+    private ProductSnapshot enrichOriginalPrice(ProductSnapshot snapshot, PageContent page, String model) {
+        if (snapshot.currentPrice() == null || snapshot.originalPrice() != null) {
+            return snapshot;
+        }
+        if (ExtractionDeadline.passed()) {
+            log.info("extract originalPrice via=llm result=skipped_deadline url={}", page.link().safeLogString());
+            return snapshot;
+        }
+        long llmStart = System.nanoTime();
+        try {
+            Optional<Integer> enriched = geminiHtmlExtractor.extractOriginalPrice(
+                page.document(), page.link(), model, snapshot.currentPrice());
+            ProductSnapshot enrichedSnapshot = snapshot.withOriginalPrice(enriched.orElse(null));
+            // null(근거 없음)과 rejected(판매가 미만이라 버림)를 갈라 둔다 — 프롬프트 품질은 이 로그로만 본다
+            log.info(
+                "extract originalPrice via=llm result={} llm={}ms url={}",
+                enrichmentResult(enriched, enrichedSnapshot),
+                (System.nanoTime() - llmStart) / 1_000_000,
+                page.link().safeLogString()
+            );
+            return enrichedSnapshot;
+        } catch (GeminiApiException e) {
+            log.warn(
+                "extract originalPrice via=llm result=failed llm={}ms url={} cause={}",
+                (System.nanoTime() - llmStart) / 1_000_000,
+                page.link().safeLogString(),
+                e.toString()
+            );
+            return snapshot;
+        }
+    }
+
+    private static String enrichmentResult(Optional<Integer> enriched, ProductSnapshot enrichedSnapshot) {
+        if (enriched.isEmpty()) {
+            return "null";
+        }
+        return enrichedSnapshot.originalPrice() == null ? "rejected" : "filled";
     }
 
     /**

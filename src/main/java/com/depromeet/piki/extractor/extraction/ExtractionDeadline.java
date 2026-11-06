@@ -34,8 +34,13 @@ public final class ExtractionDeadline {
 
     /** 기한이 묶이지 않은 호출(이미지 경로·단위 테스트)은 막지 않는다. */
     static void requireNotPassed(String stage) {
-        if (DEADLINE_NANOS.isBound() && System.nanoTime() - DEADLINE_NANOS.get() >= 0) {
+        if (passed()) {
             throw DeadlineExceededException.before(stage);
         }
+    }
+
+    /** 필수가 아닌 단계(정가 보강)가 조용히 건너뛸지 판정하는 용도. 필수 단계는 requireNotPassed 로 끊는다. */
+    static boolean passed() {
+        return DEADLINE_NANOS.isBound() && System.nanoTime() - DEADLINE_NANOS.get() >= 0;
     }
 }

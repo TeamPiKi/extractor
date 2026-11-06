@@ -41,10 +41,12 @@ class HeadlessProductLinkExtractorTest {
 
     private final StubGeminiClient stubGemini = new StubGeminiClient();
 
+    /** 정가(ListPrice)까지 채운다 — 비면 정가 보강 LLM 호출이 생겨 "fallback 없음" 단언이 흐려진다. */
     private static String product(String name, int price) {
         return "<html><head><script type=\"application/ld+json\">"
             + "{\"@type\":\"Product\",\"name\":\"" + name + "\",\"image\":\"https://cdn.example.com/p.png\","
-            + "\"offers\":{\"price\":\"" + price + "\",\"priceCurrency\":\"KRW\"}}"
+            + "\"offers\":{\"price\":\"" + price + "\",\"priceCurrency\":\"KRW\","
+            + "\"priceSpecification\":{\"priceType\":\"https://schema.org/ListPrice\",\"price\":\"" + price + "\"}}}"
             + "</script></head><body></body></html>";
     }
 

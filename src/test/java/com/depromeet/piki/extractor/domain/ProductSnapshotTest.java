@@ -154,6 +154,20 @@ class ProductSnapshotTest {
     }
 
     @Test
+    @DisplayName("withOriginalPrice 는 판매가 이상이면 얹고, 낮거나 음수거나 null 이면 모름으로 둔다")
+    void withOriginalPriceAppliesTrustRule() {
+        ProductSnapshot base = ProductSnapshot.fromExtracted(link, "상품", null, 1_000, "KRW")
+            .withOrigin(link, ExtractionMethod.STRUCTURED);
+
+        assertEquals(1_500, base.withOriginalPrice(1_500).originalPrice());
+        assertEquals(1_000, base.withOriginalPrice(1_000).originalPrice());
+        assertNull(base.withOriginalPrice(900).originalPrice());
+        assertNull(base.withOriginalPrice(-1).originalPrice());
+        assertNull(base.withOriginalPrice(null).originalPrice());
+        assertEquals(ExtractionMethod.STRUCTURED, base.withOriginalPrice(1_500).method());
+    }
+
+    @Test
     @DisplayName("READY 필수 필드(name·imageUrl·currentPrice)가 하나라도 비면 missingReadyField 다")
     void missingReadyFieldBranches() {
         String image = "https://cdn.example.com/a.jpg";

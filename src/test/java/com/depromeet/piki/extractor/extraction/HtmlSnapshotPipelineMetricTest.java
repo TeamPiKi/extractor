@@ -40,7 +40,8 @@ class HtmlSnapshotPipelineMetricTest {
         );
 
         String structuredHtml = "<html><head><script type=\"application/ld+json\">"
-            + "{\"@type\":\"Product\",\"name\":\"직접파싱\",\"offers\":{\"price\":\"1000\"}}"
+            + "{\"@type\":\"Product\",\"name\":\"직접파싱\",\"offers\":{\"price\":\"1000\","
+            + "\"priceSpecification\":{\"priceType\":\"https://schema.org/ListPrice\",\"price\":\"1000\"}}}"
             + "</script></head><body></body></html>";
         pipeline.extract(PageContent.of(link, structuredHtml), "fetch=0ms", null);
 
