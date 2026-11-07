@@ -6,7 +6,7 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiClient;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionRequest;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiOriginalPriceResult;
-import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.nodes.Document;
@@ -37,11 +37,12 @@ public class GeminiHtmlExtractor {
     }
 
     /** 값의 신뢰 판정(판매가 이상)은 호출부의 ProductSnapshot 이 진다. */
-    public Optional<Integer> extractOriginalPrice(Document document, ProductLink link, String model, int currentPrice) {
+    public OptionalInt extractOriginalPrice(Document document, ProductLink link, String model, int currentPrice) {
         String html = sanitize(document);
         GeminiExtractionRequest request = GeminiExtractionRequest.forOriginalPrice(link.value(), html, currentPrice);
         GeminiOriginalPriceResult result = geminiClient.generateContent(request, GeminiOriginalPriceResult.class, model);
-        return Optional.ofNullable(result.originalPrice());
+        Integer originalPrice = result.originalPrice();
+        return originalPrice == null ? OptionalInt.empty() : OptionalInt.of(originalPrice);
     }
 
     /**

@@ -39,6 +39,16 @@ class HtmlSnapshotPipelineOriginalPriceTest {
         + "<meta property=\"og:image\" content=\"https://cdn.example.com/p.png\"/>"
         + "</head><body></body></html>";
 
+    private static final String PRICE_HIDDEN_HTML = "<html><head><script type=\"application/ld+json\">"
+        + "{\"@type\":\"Product\",\"name\":\"본문에 가격이 없는 상품\",\"image\":\"https://cdn.example.com/p.png\","
+        + "\"offers\":{\"price\":\"9500\",\"priceCurrency\":\"KRW\"}}"
+        + "</script></head><body>상품 설명만 있고 가격 표시는 스크립트가 그린다</body></html>";
+
+    private static final String NO_IMAGE_HTML = "<html><head><script type=\"application/ld+json\">"
+        + "{\"@type\":\"Product\",\"name\":\"이미지 없는 상품\","
+        + "\"offers\":{\"price\":\"9500\",\"priceCurrency\":\"KRW\"}}"
+        + "</script></head><body>9,500원</body></html>";
+
     private final ProductLink link = ProductLink.parse("https://m.a-bly.com/goods/2242934");
 
     private final StubGeminiClient stubGemini = new StubGeminiClient();
@@ -88,6 +98,43 @@ class HtmlSnapshotPipelineOriginalPriceTest {
         assertEquals(9_500, snapshot.currentPrice());
         assertNull(snapshot.originalPrice());
         assertEquals(ExtractionMethod.STRUCTURED, snapshot.method());
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 보이면 '정가 = 판매가' 응답을 할인 없음으로 받는다")
+    void singlePriceAcceptedWhenVisible() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(9_500);
+
+        assertEquals(9_500, pipeline().extract(PageContent.of(link, PRICE_ONLY_HTML), "fetch=0ms", null).originalPrice());
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 안 보이면 '정가 = 판매가' 응답은 근거 없는 단정이라 모름으로 둔다")
+    void singlePriceRejectedWhenNotVisible() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(9_500);
+
+        ProductSnapshot snapshot = pipeline().extract(PageContent.of(link, PRICE_HIDDEN_HTML), "fetch=0ms", null);
+
+        assertEquals(9_500, snapshot.currentPrice());
+        assertNull(snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 안 보여도 더 높은 정가 응답은 그대로 받는다")
+    void higherPriceAcceptedWhenNotVisible() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(12_500);
+
+        assertEquals(12_500, pipeline().extract(PageContent.of(link, PRICE_HIDDEN_HTML), "fetch=0ms", null).originalPrice());
+    }
+
+    @Test
+    @DisplayName("READY 미달(이미지 없음) 스냅샷은 보강하지 않는다")
+    void skipsEnrichmentWhenNotReady() {
+        ProductSnapshot snapshot = pipeline().extract(PageContent.of(link, NO_IMAGE_HTML), "fetch=0ms", null);
+
+        assertEquals(9_500, snapshot.currentPrice());
+        assertNull(snapshot.originalPrice());
+        assertEquals(0, stubGemini.invocations());
     }
 
     @Test

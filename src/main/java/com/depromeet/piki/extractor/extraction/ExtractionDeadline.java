@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction;
 
 import com.depromeet.piki.contracts.extraction.v1.ExtractionProto;
 import java.time.Duration;
+import java.util.OptionalLong;
 import java.util.function.Supplier;
 
 /**
@@ -42,5 +43,13 @@ public final class ExtractionDeadline {
     /** 필수가 아닌 단계(정가 보강)가 조용히 건너뛸지 판정하는 용도. 필수 단계는 requireNotPassed 로 끊는다. */
     static boolean passed() {
         return DEADLINE_NANOS.isBound() && System.nanoTime() - DEADLINE_NANOS.get() >= 0;
+    }
+
+    /** 기한이 묶이지 않았으면 empty. 부가 단계가 "남은 시간에 비해 긴 호출을 시작했나" 를 로그로 남기는 용도. */
+    static OptionalLong remainingMillis() {
+        if (!DEADLINE_NANOS.isBound()) {
+            return OptionalLong.empty();
+        }
+        return OptionalLong.of((DEADLINE_NANOS.get() - System.nanoTime()) / 1_000_000);
     }
 }

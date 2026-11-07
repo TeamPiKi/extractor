@@ -7,7 +7,7 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.util.Optional;
+import java.util.OptionalInt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
@@ -109,23 +109,36 @@ public class HtmlSnapshotPipeline {
      * 그대로 — 판매가의 출처가 구조화 데이터다.
      */
     private ProductSnapshot enrichOriginalPrice(ProductSnapshot snapshot, PageContent page, String model) {
-        if (snapshot.currentPrice() == null || snapshot.originalPrice() != null) {
+        // READY 미달은 호출 전략이 헤드리스로 승격해 다시 추출하므로 여기서 보강해도 버려진다
+        if (snapshot.missingReadyField() || snapshot.originalPrice() != null) {
             return snapshot;
         }
         if (ExtractionDeadline.passed()) {
             log.info("extract originalPrice via=llm result=skipped_deadline url={}", page.link().safeLogString());
             return snapshot;
         }
+        int currentPrice = snapshot.currentPrice();
+        // sanitize 가 Document 를 변형하기 전에 판정한다
+        boolean priceVisible = VisiblePrices.contains(page.document(), currentPrice);
+        String remaining = ExtractionDeadline.remainingMillis().isPresent()
+            ? ExtractionDeadline.remainingMillis().getAsLong() + "ms"
+            : "none";
         long llmStart = System.nanoTime();
         try {
-            Optional<Integer> enriched = geminiHtmlExtractor.extractOriginalPrice(
-                page.document(), page.link(), model, snapshot.currentPrice());
-            ProductSnapshot enrichedSnapshot = snapshot.withOriginalPrice(enriched.orElse(null));
-            // null(근거 없음)과 rejected(판매가 미만이라 버림)를 갈라 둔다 — 프롬프트 품질은 이 로그로만 본다
+            OptionalInt enriched = geminiHtmlExtractor.extractOriginalPrice(
+                page.document(), page.link(), model, currentPrice);
+            boolean unverifiedSingle = enriched.isPresent() && enriched.getAsInt() == currentPrice && !priceVisible;
+            ProductSnapshot enrichedSnapshot = unverifiedSingle
+                ? snapshot
+                : snapshot.withOriginalPrice(enriched.isPresent() ? enriched.getAsInt() : null);
+            // null(근거 없음)·rejected(판매가 미만)·unverified_single(본문에 안 보이는 판매가를 정가로 단정)을 갈라 둔다 —
+            // 프롬프트 품질은 이 로그로만 본다
             log.info(
-                "extract originalPrice via=llm result={} llm={}ms url={}",
-                enrichmentResult(enriched, enrichedSnapshot),
+                "extract originalPrice via=llm result={} discounted={} llm={}ms remaining={} url={}",
+                unverifiedSingle ? "unverified_single" : enrichmentResult(enriched, enrichedSnapshot),
+                enrichedSnapshot.originalPrice() != null && enrichedSnapshot.originalPrice() > currentPrice,
                 (System.nanoTime() - llmStart) / 1_000_000,
+                remaining,
                 page.link().safeLogString()
             );
             return enrichedSnapshot;
@@ -140,7 +153,7 @@ public class HtmlSnapshotPipeline {
         }
     }
 
-    private static String enrichmentResult(Optional<Integer> enriched, ProductSnapshot enrichedSnapshot) {
+    private static String enrichmentResult(OptionalInt enriched, ProductSnapshot enrichedSnapshot) {
         if (enriched.isEmpty()) {
             return "null";
         }
