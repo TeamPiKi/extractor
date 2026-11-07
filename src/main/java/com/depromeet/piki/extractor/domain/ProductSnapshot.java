@@ -39,6 +39,15 @@ public record ProductSnapshot(
     }
 
     /**
+     * 구조화 파싱 뒤 LLM 이 보강한 정가를 얹은 사본. 신뢰 규칙은 fromExtracted 와 같되 예외를 던지지 않는다 —
+     * 보강은 부가 정보라 그 값이 이상해도 이미 성공한 추출을 잃지 않는다.
+     */
+    public ProductSnapshot withOriginalPrice(Integer enrichedOriginalPrice) {
+        Integer trusted = trustedOriginalPrice(currentPrice, enrichedOriginalPrice);
+        return new ProductSnapshot(link, name, imageUrl, currentPrice, trusted, currency, finalUrl, method);
+    }
+
+    /**
      * 호출자(core)의 READY 불변식(name·imageUrl·currentPrice)을 채우지 못했는가 — currency 는 READY 필수가 아니다.
      * 응답 경계(ExtractionResultMapper)의 성공 게이트와 헤드리스 에스컬레이션 판정(FallbackProductLinkExtractor)이
      * 이 판정 하나를 공유한다 — 두 곳의 조건이 어긋나면 "승격 없이 실패" 또는 "무의미한 승격"이 생긴다.
@@ -120,10 +129,7 @@ public record ProductSnapshot(
         if (originalPrice != null && originalPrice < 0) {
             throw ProductSnapshotException.untrustworthyValue();
         }
-        Integer trustedOriginalPrice = originalPrice;
-        if (originalPrice != null && (currentPrice == null || originalPrice < currentPrice)) {
-            trustedOriginalPrice = null;
-        }
+        Integer trustedOriginalPrice = trustedOriginalPrice(currentPrice, originalPrice);
         if (normalizedName != null && normalizedName.length() > NAME_MAX_LENGTH) {
             throw ProductSnapshotException.untrustworthyValue();
         }
@@ -133,6 +139,13 @@ public record ProductSnapshot(
 
         return new ProductSnapshot(
             link, normalizedName, normalizedImageUrl, currentPrice, trustedOriginalPrice, normalizedCurrency, null, null);
+    }
+
+    private static Integer trustedOriginalPrice(Integer currentPrice, Integer originalPrice) {
+        if (originalPrice != null && (currentPrice == null || originalPrice < currentPrice)) {
+            return null;
+        }
+        return originalPrice;
     }
 
     private static String normalizeBlankToNull(String value) {

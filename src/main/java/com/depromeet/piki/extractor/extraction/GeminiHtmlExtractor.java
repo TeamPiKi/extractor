@@ -5,6 +5,8 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiClient;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionRequest;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
+import com.depromeet.piki.extractor.extraction.gemini.GeminiOriginalPriceResult;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.nodes.Document;
@@ -12,8 +14,8 @@ import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
 
 /**
- * 구조화 우선 파싱이 실패했을 때의 fallback. 파이프라인이 이미 파싱해 둔 Document 를 공유받아 LLM 입력으로
- * 직렬화한다. 구조화 파서가 먼저 읽기를 끝낸 뒤 호출되므로, 이 단계에서 Document 를 직접 변형(불필요 노드
+ * 구조화 우선 파싱이 실패했을 때의 fallback 과, 성공했어도 정가가 빈 경우의 정가 보강. 파이프라인이 이미 파싱해 둔
+ * Document 를 공유받아 LLM 입력으로 직렬화한다. 구조화 파서가 먼저 읽기를 끝낸 뒤 호출되므로, 이 단계에서 Document 를 직접 변형(불필요 노드
  * 제거)해도 안전하다.
  */
 @RequiredArgsConstructor
@@ -32,6 +34,15 @@ public class GeminiHtmlExtractor {
         GeminiExtractionRequest request = GeminiExtractionRequest.forHtmlExtraction(link.value(), html);
         GeminiExtractionResult result = geminiClient.generateContent(request, GeminiExtractionResult.class, model);
         return result.toProductSnapshot(link);
+    }
+
+    /** 값의 신뢰 판정(판매가 이상)은 호출부의 ProductSnapshot 이 진다. */
+    public OptionalInt extractOriginalPrice(Document document, ProductLink link, String model, int currentPrice) {
+        String html = sanitize(document);
+        GeminiExtractionRequest request = GeminiExtractionRequest.forOriginalPrice(link.value(), html, currentPrice);
+        GeminiOriginalPriceResult result = geminiClient.generateContent(request, GeminiOriginalPriceResult.class, model);
+        Integer originalPrice = result.originalPrice();
+        return originalPrice == null ? OptionalInt.empty() : OptionalInt.of(originalPrice);
     }
 
     /**

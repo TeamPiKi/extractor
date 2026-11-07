@@ -116,6 +116,54 @@ public record GeminiExtractionRequest(
         return new JsonSchema("object", null, properties, null, List.of("isProductPage"), null);
     }
 
+    /**
+     * 구조화 파싱이 판매가는 찾았지만 정가 태그가 없을 때의 보강 질의. 전체 추출 프롬프트를 재사용하지 않는 이유는
+     * 판매가·이름·이미지가 이미 구조화 데이터로 확정됐는데 LLM 이 그 값들을 다시 내놓으면 두 출처가 어긋날 수
+     * 있어서다 — 묻는 건 정가 하나, 판매가는 입력으로 못 박는다.
+     */
+    private static final String ORIGINAL_PRICE_PROMPT = """
+            You are a product price reader. Given the URL and the HTML of a product page, and the CURRENT
+            PRICE (the price a buyer pays right now, already known), find the product's ORIGINAL PRICE:
+            the pre-discount, strikethrough, list or regular price shown for the MAIN product.
+
+            **Grounding rule (highest priority)**: the value MUST be taken from the provided HTML. If the HTML
+            shows no original/strikethrough price and no discount indicator, the product is not discounted:
+            return the current price itself. If the page gives no price information at all, return null.
+            NEVER invent a value.
+
+            **Rules**:
+            - A strikethrough / list / regular price is shown next to the current price → that is the answer.
+            - Only the current price is shown, with no discount badge or crossed-out price → answer = current price.
+            - If several variants or options show different prices, answer with the original price that pairs
+              with the given CURRENT PRICE.
+            - Ignore related products, recommendations, coupons that require login, and membership-only prices.
+            - Remove currency symbols, commas and decimals. The answer must never be less than the current price.
+
+            Respond with JSON only, matching the provided schema. Handle any language.\
+            """;
+
+    private static final JsonSchema ORIGINAL_PRICE_SCHEMA = originalPriceSchema();
+
+    private static JsonSchema originalPriceSchema() {
+        Map<String, JsonSchema> properties = new LinkedHashMap<>();
+        properties.put("originalPrice", JsonSchema.ofNullableType("integer"));
+        return new JsonSchema("object", null, properties, null, null, null);
+    }
+
+    public static GeminiExtractionRequest forOriginalPrice(URI url, String html, int currentPrice) {
+        return new GeminiExtractionRequest(
+            new GenerationConfig("application/json", ORIGINAL_PRICE_SCHEMA),
+            List.of(
+                new Content(
+                    List.of(
+                        new Part(ORIGINAL_PRICE_PROMPT),
+                        new Part("URL: " + url + "\nCURRENT PRICE: " + currentPrice + "\n\nHTML:\n" + html)
+                    )
+                )
+            )
+        );
+    }
+
     public static GeminiExtractionRequest forHtmlExtraction(URI url, String html) {
         return new GeminiExtractionRequest(
             new GenerationConfig("application/json", EXTRACTION_SCHEMA),
