@@ -8,6 +8,7 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import java.net.InetAddress;
@@ -49,7 +50,7 @@ class HttpPageFetcherServerErrorTest {
 
             PageFetchException ex = assertThrows(
                 PageFetchException.class,
-                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT));
+                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.PERMANENT_UPSTREAM, ex.code(), status + " 는 PERMANENT_UPSTREAM 이어야 함");
             assertFalse(ex.permanent(), status + " 는 일시 실패(호출자 재시도)여야 함");
@@ -69,7 +70,7 @@ class HttpPageFetcherServerErrorTest {
 
             PageFetchException ex = assertThrows(
                 PageFetchException.class,
-                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT));
+                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.PERMANENT_UPSTREAM, ex.code(), status + " body 있어도 PERMANENT_UPSTREAM");
             assertFalse(ex.permanent(), status + " body 있어도 일시 실패여야 함");
@@ -88,7 +89,7 @@ class HttpPageFetcherServerErrorTest {
 
             PageFetchException ex = assertThrows(
                 PageFetchException.class,
-                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT));
+                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, ex.code(), status + " 는 UPSTREAM_ERROR 여야 함");
             assertFalse(ex.permanent(), status + " 는 일시 실패(재시도 가능)여야 함");
@@ -106,7 +107,7 @@ class HttpPageFetcherServerErrorTest {
 
             PageFetchException ex = assertThrows(
                 PageFetchException.class,
-                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT));
+                () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.FETCH_CLIENT_ERROR, ex.code(), status + " 는 FETCH_CLIENT_ERROR 여야 함");
             assertFalse(ex.permanent(), status + " 는 일시 실패여야 함");

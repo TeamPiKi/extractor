@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
@@ -51,27 +52,33 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private final HeadlessExtractionProperties headlessProperties;
 
     @Override
-    public ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity) {
+    public ProductSnapshot extract(
+        ProductLink link,
+        boolean authorized,
+        String model,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
         // 이 서비스의 운영 비상 차단. 꺼져 있으면 승격 자체가 없어 정적 fetch 결과가 그대로 나간다.
         if (!headlessProperties.enabled()) {
-            return plain.extract(link, authorized, model, identity);
+            return plain.extract(link, authorized, model, identity, blockedDomains);
         }
 
         ProductSnapshot plainSnapshot;
         try {
-            plainSnapshot = plain.extract(link, authorized, model, identity);
+            plainSnapshot = plain.extract(link, authorized, model, identity, blockedDomains);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
             }
-            return escalateToHeadless(link, categoryOf(e), authorized, model, identity);
+            return escalateToHeadless(link, categoryOf(e), authorized, model, identity, blockedDomains);
         }
         if (plainSnapshot.missingReadyField()) {
             // 이대로 반환하면 응답 경계(ExtractionResultMapper.from)가 실패(UNTRUSTWORTHY_VALUE)로 닫는다 —
             // 닫기 전에 브라우저 렌더 DOM 으로 한 번 더 시도한다. 승격은 plain 의 try 바깥이라 headless 실패가
             // 위 catch 로 새어 재승격되는 일이 없고, 승격 결과가 여전히 불완전하면 그때 경계가 같은 실패로
             // 닫는다(재승격 없음).
-            return escalateToHeadless(link, CATEGORY_INCOMPLETE_SNAPSHOT, authorized, model, identity);
+            return escalateToHeadless(link, CATEGORY_INCOMPLETE_SNAPSHOT, authorized, model, identity, blockedDomains);
         }
         return plainSnapshot;
     }
@@ -91,13 +98,14 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
         String category,
         boolean authorized,
         String model,
-        DeclaredIdentity identity
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
     ) {
         Objects.requireNonNull(category, "category");
         ExtractionDeadline.requireNotPassed("headless");
         log.info("extract escalate=headless plainCategory={} url={}", category, link.safeLogString());
         try {
-            ProductSnapshot snapshot = headless.extract(link, authorized, model, identity);
+            ProductSnapshot snapshot = headless.extract(link, authorized, model, identity, blockedDomains);
             escalationCounter(outcomeOf(snapshot), category).increment();
             return snapshot;
         } catch (Throwable headlessFailure) {

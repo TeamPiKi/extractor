@@ -14,6 +14,7 @@ import com.depromeet.piki.extractor.support.IntegrationTestSupport;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import com.depromeet.piki.extractor.support.StubPageFetcher;
 import java.net.UnknownHostException;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -111,6 +112,36 @@ class ExtractionLinkIntegrationTest extends IntegrationTestSupport {
             .andExpect(status().isOk());
 
         assertTrue(stubPageFetcher.lastIdentity.isDefault());
+    }
+
+    @Test
+    @DisplayName("요청의 차단 도메인은 형식에 맞는 값만 fetch 경계까지 전달된다")
+    void blockedDomainsReachFetchBoundary() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> PageContent.of(link, STRUCTURED_HTML);
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"url\": \"https://shop.example.com/p/1\","
+                    + " \"blockedDomains\": [\"search.shopping.naver.com\", \"bad one\"]}"))
+            .andExpect(status().isOk());
+
+        assertEquals(List.of("search.shopping.naver.com"), stubPageFetcher.lastBlockedDomains.values());
+    }
+
+    @Test
+    @DisplayName("차단 도메인으로 끝나면 422 BLOCKED_DOMAIN 을 반환한다 (호출자가 재시도하지 않게)")
+    void blockedDomain() throws Exception {
+        stubGeminiClient.reset();
+        stubPageFetcher.build = link -> {
+            throw PageFetchException.blockedDomain();
+        };
+
+        mockMvc().perform(post("/internal/extractions/link")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("https://naver.me/abc")))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("BLOCKED_DOMAIN"));
     }
 
     @Test

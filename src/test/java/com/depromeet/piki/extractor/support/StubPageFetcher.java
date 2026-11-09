@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.support;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
@@ -17,10 +18,12 @@ public class StubPageFetcher implements PageFetcher {
     };
 
     public DeclaredIdentity lastIdentity;
+    public BlockedDomains lastBlockedDomains;
 
     @Override
-    public PageContent fetch(ProductLink link, DeclaredIdentity identity) {
+    public PageContent fetch(ProductLink link, DeclaredIdentity identity, BlockedDomains blockedDomains) {
         lastIdentity = identity;
+        lastBlockedDomains = blockedDomains;
         return build.apply(link);
     }
 }

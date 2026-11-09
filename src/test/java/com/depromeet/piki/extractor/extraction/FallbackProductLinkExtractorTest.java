@@ -3,6 +3,8 @@ package com.depromeet.piki.extractor.extraction;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
@@ -11,6 +13,7 @@ import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Function;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,12 +47,20 @@ class FallbackProductLinkExtractorTest {
 
         Boolean lastAuthorized;
         DeclaredIdentity lastIdentity;
+        BlockedDomains lastBlockedDomains;
 
         @Override
-        public ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity) {
+        public ProductSnapshot extract(
+            ProductLink link,
+            boolean authorized,
+            String model,
+            DeclaredIdentity identity,
+            BlockedDomains blockedDomains
+        ) {
             calls++;
             lastAuthorized = authorized;
             lastIdentity = identity;
+            lastBlockedDomains = blockedDomains;
             return fn.apply(link);
         }
     }
@@ -80,7 +91,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -95,7 +106,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(PageFetchException.class, () -> fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(0, headless.calls);
     }
 
@@ -110,7 +121,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
@@ -134,7 +145,7 @@ class FallbackProductLinkExtractorTest {
 
         assertThrows(
             DeadlineExceededException.class,
-            () -> ExtractionDeadline.within(Duration.ZERO, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT))
+            () -> ExtractionDeadline.within(Duration.ZERO, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE))
         );
 
         assertEquals(0, headless.calls);
@@ -149,7 +160,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(snapshot, result);
         assertEquals(1, plain.calls);
@@ -169,7 +180,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(Error.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(
             1.0,
             registry.counter("product.extract.escalation", "outcome", "failed", "category", "FETCH_CLIENT_ERROR").count()
@@ -189,7 +200,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(RuntimeException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(1, plain.calls);
         assertEquals(1, headless.calls);
         assertEquals(
@@ -210,7 +221,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(0, headless.calls);
     }
 
@@ -226,7 +237,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> headlessSnapshot);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(headlessSnapshot, result);
         assertEquals(1, plain.calls);
@@ -246,7 +257,7 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> incomplete);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(incomplete, result);
         assertEquals(1, headless.calls);
@@ -267,7 +278,7 @@ class FallbackProductLinkExtractorTest {
         });
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(1, headless.calls);
         assertEquals(
             1.0,
@@ -283,7 +294,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(incomplete, result);
         assertEquals(0, headless.calls);
@@ -300,7 +311,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        assertThrows(ProductSnapshotException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(ProductSnapshotException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(0, headless.calls);
     }
 
@@ -317,7 +328,7 @@ class FallbackProductLinkExtractorTest {
             throw new IllegalStateException("headless 는 호출되면 안 됨");
         });
 
-        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(PageFetchException.class, () -> fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(0, headless.calls);
     }
 
@@ -331,7 +342,7 @@ class FallbackProductLinkExtractorTest {
             new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", 23_900, null);
         FakeStrategy headless = new FakeStrategy(l -> rescued);
 
-        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(rescued, result);
         assertEquals(1, headless.calls);
@@ -347,7 +358,7 @@ class FallbackProductLinkExtractorTest {
         });
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
 
-        fallback(true, plain, headless).extract(link, true, null, DeclaredIdentity.DEFAULT);
+        fallback(true, plain, headless).extract(link, true, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(Boolean.TRUE, headless.lastAuthorized);
     }
@@ -362,9 +373,40 @@ class FallbackProductLinkExtractorTest {
         FakeStrategy headless = new FakeStrategy(l -> snapshot);
         DeclaredIdentity identity = DeclaredIdentity.fromRequest("Foo/2.0");
 
-        fallback(true, plain, headless).extract(link, false, null, identity);
+        fallback(true, plain, headless).extract(link, false, null, identity, BlockedDomains.NONE);
 
         assertEquals(identity, plain.lastIdentity);
         assertEquals(identity, headless.lastIdentity);
+    }
+
+    @Test
+    @DisplayName("차단 도메인은 plain 과 승격된 headless 전략에 같은 값으로 전달된다")
+    void blockedDomainsReachBothStrategies() {
+        // 한쪽만 끊기면 정적 fetch 가 막은 곳으로 브라우저가 요청을 보낸다.
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw PageFetchException.clientError(new RuntimeException("403"));
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        BlockedDomains blockedDomains = BlockedDomains.fromRequest(List.of("search.shopping.naver.com"));
+
+        fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, blockedDomains);
+
+        assertEquals(blockedDomains, plain.lastBlockedDomains);
+        assertEquals(blockedDomains, headless.lastBlockedDomains);
+    }
+
+    @Test
+    @DisplayName("plain 이 차단 도메인으로 끝나면 headless 로 승격하지 않는다")
+    void blockedDomainIsNotEscalated() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw PageFetchException.blockedDomain();
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> fallback(true, plain, headless)
+            .extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.fromRequest(List.of("kakao.com"))));
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+        assertEquals(0, headless.calls);
     }
 }

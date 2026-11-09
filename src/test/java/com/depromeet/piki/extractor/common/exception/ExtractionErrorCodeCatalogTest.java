@@ -38,13 +38,15 @@ class ExtractionErrorCodeCatalogTest {
 
     /**
      * 정적 fetch 실패를 렌더로 재시도하는 대상인지. extractor 내부 축이라 계약이 아니라 여기에 둔다.
-     * BLOCKED_HOST 만 false 인 이유는 내부망 대상의 재시도 자체가 SSRF 라서다. 표에 없는 code 는 이 축 밖이다.
+     * BLOCKED_HOST 가 false 인 이유는 내부망 대상의 재시도 자체가 SSRF 라서고, BLOCKED_DOMAIN 은 호출자가 가지 않기로 한
+     * 곳이라 브라우저도 같은 곳으로 가서다. 표에 없는 code 는 이 축 밖이다.
      */
     private static final Map<ExtractionErrorCode, Boolean> ESCALATABLE = Map.of(
         ExtractionErrorCode.EMPTY_SHELL, true,
         ExtractionErrorCode.FETCH_CLIENT_ERROR, true,
         ExtractionErrorCode.PERMANENT_UPSTREAM, true,
         ExtractionErrorCode.BLOCKED_HOST, false,
+        ExtractionErrorCode.BLOCKED_DOMAIN, false,
         ExtractionErrorCode.TOO_MANY_REDIRECTS, true,
         ExtractionErrorCode.MALFORMED_REDIRECT, true,
         ExtractionErrorCode.UPSTREAM_ERROR, true
@@ -188,6 +190,7 @@ class ExtractionErrorCodeCatalogTest {
             new FactoryCase("PageFetchException.redirectedToSiteRoot", PageFetchException.redirectedToSiteRoot()),
             new FactoryCase("PageFetchException.malformedRedirect", PageFetchException.malformedRedirect(cause)),
             new FactoryCase("PageFetchException.blockedHost", PageFetchException.blockedHost()),
+            new FactoryCase("PageFetchException.blockedDomain", PageFetchException.blockedDomain()),
 
             new FactoryCase("ProductSnapshotException.notProductPage", ProductSnapshotException.notProductPage()),
             new FactoryCase("ProductSnapshotException.untrustworthyValue", ProductSnapshotException.untrustworthyValue()),

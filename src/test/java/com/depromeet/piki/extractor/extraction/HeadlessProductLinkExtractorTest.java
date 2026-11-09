@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
@@ -55,7 +56,7 @@ class HeadlessProductLinkExtractorTest {
     }
 
     private HeadlessProductLinkExtractor extractorWith(Function<ProductLink, List<RenderedHop>> render) {
-        return extractorWith((target, authorized, identity) -> render.apply(target));
+        return extractorWith((target, authorized, identity, blockedDomains) -> render.apply(target));
     }
 
     private HeadlessProductLinkExtractor extractorWith(HeadlessRenderer renderer) {
@@ -75,7 +76,7 @@ class HeadlessProductLinkExtractorTest {
             hop(mobile, 200, SHELL, product("가죽 벨트", 6_380))
         ));
 
-        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("가죽 벨트", snapshot.name());
         assertEquals(6_380, snapshot.currentPrice());
@@ -91,7 +92,7 @@ class HeadlessProductLinkExtractorTest {
             hop(feed, 200, product("피드 대표 상품", 1), SHELL)
         ));
 
-        assertEquals("앞 홉 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT).name());
+        assertEquals("앞 홉 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).name());
     }
 
     @Test
@@ -101,7 +102,7 @@ class HeadlessProductLinkExtractorTest {
         // 마지막 홉은 셸(앱 유도), 상품 텍스트는 앞 홉에만 있다 — 셸을 LLM 에 넣어 확정 실패로 닫으면 안 된다.
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 200, TEXT, TEXT), hop(mobile, 200, SHELL, SHELL)));
 
-        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("엘엘엠 상품", snapshot.name());
         assertEquals(link, snapshot.finalUrl());
@@ -113,7 +114,7 @@ class HeadlessProductLinkExtractorTest {
     void shellEverywhereFailsWithoutLlm() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(mobile, 200, SHELL, SHELL)));
 
-        ProductSnapshotException e = assertThrows(ProductSnapshotException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+        ProductSnapshotException e = assertThrows(ProductSnapshotException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.NO_EXTRACTABLE_CONTENT, e.code());
         assertEquals(0, stubGemini.invocations());
@@ -128,7 +129,7 @@ class HeadlessProductLinkExtractorTest {
             hop(home, 200, TEXT, TEXT)
         ));
 
-        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
         assertFalse(e.permanent());
@@ -144,7 +145,7 @@ class HeadlessProductLinkExtractorTest {
             hop(home, 200, TEXT, TEXT)
         ));
 
-        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("가죽 벨트", snapshot.name());
         assertEquals(0, stubGemini.invocations());
@@ -159,7 +160,7 @@ class HeadlessProductLinkExtractorTest {
             hop(home, 200, SHELL, product("홈 대표 상품", 1_000))
         ));
 
-        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+        PageFetchException e = assertThrows(PageFetchException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, e.code());
         assertEquals(0, stubGemini.invocations());
@@ -175,7 +176,7 @@ class HeadlessProductLinkExtractorTest {
             hop(goods, 200, TEXT, TEXT)
         ));
 
-        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT);
+        ProductSnapshot snapshot = extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("쿼리 상품", snapshot.name());
         assertEquals(1, stubGemini.invocations());
@@ -186,7 +187,7 @@ class HeadlessProductLinkExtractorTest {
     void structuredDataBehindBlockStatusStillExtracts() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 403, product("위장 403 상품", 1_000), "")));
 
-        assertEquals("위장 403 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT).name());
+        assertEquals("위장 403 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).name());
     }
 
     @Test
@@ -199,7 +200,7 @@ class HeadlessProductLinkExtractorTest {
         )) {
             HeadlessProductLinkExtractor extractor = extractorWith(l -> hops);
 
-            HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+            HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.HEADLESS_BLOCKED, e.code());
             assertFalse(e.permanent());
@@ -215,7 +216,7 @@ class HeadlessProductLinkExtractorTest {
             hop(mobile, 200, "", product("통과한 상품", 2_000))
         ));
 
-        assertEquals("통과한 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT).name());
+        assertEquals("통과한 상품", extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).name());
     }
 
     @Test
@@ -223,7 +224,7 @@ class HeadlessProductLinkExtractorTest {
     void hopsWithoutHtmlAreTransient() {
         HeadlessProductLinkExtractor extractor = extractorWith(l -> List.of(hop(link, 302, "", ""), hop(mobile, 200, "", " ")));
 
-        HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+        HeadlessRenderException e = assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, e.code());
     }
@@ -235,7 +236,7 @@ class HeadlessProductLinkExtractorTest {
             throw HeadlessRenderException.upstream("boom", null);
         });
 
-        assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(HeadlessRenderException.class, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
     }
 
     @Test
@@ -245,7 +246,7 @@ class HeadlessProductLinkExtractorTest {
         renderer.build = l -> List.of(hop(mobile, 200, "", product("상품", 1_000)));
         DeclaredIdentity identity = DeclaredIdentity.fromRequest("Foo/2.0");
 
-        extractorWith(renderer).extract(link, false, null, identity);
+        extractorWith(renderer).extract(link, false, null, identity, BlockedDomains.NONE);
 
         assertEquals(identity, renderer.lastIdentity);
     }

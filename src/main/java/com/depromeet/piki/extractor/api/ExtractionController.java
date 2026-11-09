@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.api;
 import com.depromeet.piki.contracts.extraction.v1.ExtractionResult;
 import com.depromeet.piki.contracts.extraction.v1.ImageExtractionRequest;
 import com.depromeet.piki.contracts.extraction.v1.LinkExtractionRequest;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
@@ -44,17 +45,19 @@ public class ExtractionController {
         // authorized 도 원장에 남긴다 — 허락받은 요청이었는지를 사후에 되짚을 수 있는 유일한 근거다.
         // identity 도 원장에 남긴다 — 값을 바꾼 뒤의 차단이 어느 값에서 났는지를 되짚는 근거다.
         DeclaredIdentity identity = DeclaredIdentity.fromRequest(request.getIdentity());
+        BlockedDomains blockedDomains = BlockedDomains.fromRequest(request.getBlockedDomainsList());
         log.info(
-            "extract request correlationId={} authorized={} model={} identity={} url={}",
+            "extract request correlationId={} authorized={} model={} identity={} blockedDomains={} url={}",
             correlationId,
             request.getAuthorized(),
             request.getModel(),
             identity,
+            blockedDomains.values().size(),
             link.safeLogString()
         );
         // 생략된 model 은 빈 문자열로 읽히고(proto3), 기본 모델 처리는 모델을 실제로 쓰는 GeminiHttpClient 가 한다.
-        ProductSnapshot snapshot = ExtractionDeadline.withinLinkBudget(
-            () -> productLinkExtractor.extract(link, request.getAuthorized(), request.getModel(), identity));
+        ProductSnapshot snapshot = ExtractionDeadline.withinLinkBudget(() -> productLinkExtractor.extract(
+            link, request.getAuthorized(), request.getModel(), identity, blockedDomains));
         return ExtractionResultMapper.from(snapshot);
     }
 
