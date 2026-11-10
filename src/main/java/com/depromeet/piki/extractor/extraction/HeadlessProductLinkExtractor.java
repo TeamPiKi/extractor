@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
@@ -46,9 +47,15 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
     }
 
     @Override
-    public ProductSnapshot extract(ProductLink link, boolean authorized, String model, DeclaredIdentity identity) {
+    public ProductSnapshot extract(
+        ProductLink link,
+        boolean authorized,
+        String model,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
         long renderStart = System.nanoTime();
-        List<RenderedHop> hops = headlessRenderer.render(link, authorized, identity);
+        List<RenderedHop> hops = headlessRenderer.render(link, authorized, identity, blockedDomains);
         long renderMs = (System.nanoTime() - renderStart) / 1_000_000;
         String timing = "render=" + renderMs + "ms hops=" + hops.size();
 

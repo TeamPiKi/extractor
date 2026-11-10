@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction.http;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
@@ -34,7 +35,7 @@ class HttpPageFetcherRedirectE2ETest {
         // 회귀: 보강 전엔 www.zigzag.kr 의 301 을 따라가지 못해 emptyBody 로 실패했다.
         ProductLink link = ProductLink.parse("https://www.zigzag.kr/catalog/products/136677613");
 
-        PageContent page = fetcher.fetch(link, DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(link, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertTrue(page.retainedChars() > 1_000, "redirect 를 따라가 실제 본문을 받았어야 한다");
     }
@@ -47,7 +48,7 @@ class HttpPageFetcherRedirectE2ETest {
         // PC UA 로 요청하는 우리 fetch 는 이 301 경로를 받는다. cross-domain 허용 후 따라가 최종 무신사 페이지에 도달해야 한다.
         ProductLink link = ProductLink.parse("https://musinsa.onelink.me/PvkC/lx16ha0g");
 
-        PageContent page = fetcher.fetch(link, DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(link, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         // endsWith("musinsa.com") 만으로는 evilmusinsa.com 같은 호스트도 통과해 회귀 검출이 약하므로 정확 매칭한다.
         String host = page.finalUrl().value().getHost();
@@ -77,7 +78,7 @@ class HttpPageFetcherRedirectE2ETest {
             .build();
         HttpPageFetcher bouncing = new HttpPageFetcher(clientHints, resolver, cookies, FetchProperties.defaults());
 
-        PageContent page = bouncing.fetch(ProductLink.parse("https://al.wconcept.co.kr/8xpg78c"), DeclaredIdentity.DEFAULT);
+        PageContent page = bouncing.fetch(ProductLink.parse("https://al.wconcept.co.kr/8xpg78c"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         String host = page.finalUrl().value().getHost();
         assertTrue(host != null && host.endsWith("wconcept.co.kr"), "최종 호스트가 W컨셉이어야 한다");

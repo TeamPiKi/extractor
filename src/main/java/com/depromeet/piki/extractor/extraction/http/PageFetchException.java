@@ -15,13 +15,13 @@ public final class PageFetchException extends ExtractionException {
 
     /**
      * 정적 fetch 실패를 실제 브라우저(헤드리스)로 재시도(escalate)할지 표시한다. FallbackProductLinkExtractor 가
-     * 이 값으로 정한다(에스컬레이션 축은 호출자의 파싱 작업 큐 재시도 축과 직교). 정책은 "무조건 폴백": 예외는 둘뿐이고
+     * 이 값으로 정한다(에스컬레이션 축은 호출자의 파싱 작업 큐 재시도 축과 직교). 정책은 "무조건 폴백": 예외는 셋뿐이고
      * 나머지 fetch 실패는 전부 escalatable 이다 — 봇 방어가 어떤 status 로도 위장해 status·body 로 차단/genuine 을
      * 못 가른다.
      *
-     * <p>false 인 둘은 서로 다른 이유로 그렇다. blockedHost 는 보안 판단(내부망에 브라우저를 겨누는 것 자체가 SSRF)이고,
-     * unresolvableHost 는 성립 불가 판단(주소가 없으면 브라우저도 갈 곳이 없다)이다. 앞은 recall 을 포기한 것이지만
-     * 뒤는 포기할 recall 자체가 없다.
+     * <p>false 인 셋은 서로 다른 이유로 그렇다. blockedHost 는 보안 판단(내부망에 브라우저를 겨누는 것 자체가 SSRF)이고,
+     * unresolvableHost 는 성립 불가 판단(주소가 없으면 브라우저도 갈 곳이 없다)이며, blockedDomain 은 호출자의 정책
+     * 판단(가지 않기로 한 곳이라 브라우저도 같은 곳으로 간다)이다.
      *
      * <p>기본 false(fail-closed): 각 팩토리가 명시적으로 true 를 줘야 escalate 된다.
      */
@@ -135,5 +135,13 @@ public final class PageFetchException extends ExtractionException {
      */
     public static PageFetchException blockedHost() {
         return new PageFetchException("등록할 수 없는 링크예요.", ExtractionErrorCode.BLOCKED_HOST, true, null, false);
+    }
+
+    /**
+     * 옮겨 갈 주소가 요청의 차단 도메인에 걸려 요청하지 않았거나, 렌더가 같은 이유로 메인 문서 이동을 끊었을 때. 다시 시도해도
+     * 같은 곳으로 가므로 확정 실패다.
+     */
+    public static PageFetchException blockedDomain() {
+        return new PageFetchException("지원하지 않는 쇼핑몰이에요.", ExtractionErrorCode.BLOCKED_DOMAIN, true, null, false);
     }
 }

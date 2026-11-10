@@ -9,14 +9,18 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
 import java.net.InetAddress;
 import java.net.URI;
+import java.util.List;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -53,7 +57,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("product", page.document().text());
         // link 는 사용자 등록 원본, finalUrl 은 redirect 를 따라간 최종 URL(baseUri 용으로 구분).
@@ -74,7 +78,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://musinsa.onelink.me/x"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://musinsa.onelink.me/x"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("product", page.document().text());
         assertEquals("https://musinsa.com/p", page.finalUrl().value().toString());
@@ -99,7 +103,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
@@ -114,7 +118,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("product", page.document().text());
         assertEquals("http://zigzag.kr/p", page.finalUrl().value().toString());
@@ -135,7 +139,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
@@ -149,7 +153,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
         assertTrue(ex.escalatable());
     }
@@ -164,7 +168,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://www.zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         assertEquals(ExtractionErrorCode.MALFORMED_REDIRECT, ex.code());
         assertTrue(ex.escalatable());
     }
@@ -184,7 +188,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://zigzag.kr/loop"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
         // redirect 루프는 재시도해도 결정론적으로 재실패하므로 확정 실패로 가른다.
         assertEquals(ExtractionErrorCode.TOO_MANY_REDIRECTS, ex.code());
     }
@@ -201,7 +205,7 @@ class HttpPageFetcherRedirectTest {
 
         PageFetchException ex = assertThrows(
             PageFetchException.class,
-            () -> fetcher.fetch(ProductLink.parse("https://packnfold.co.kr/product/61/category/42/"), DeclaredIdentity.DEFAULT));
+            () -> fetcher.fetch(ProductLink.parse("https://packnfold.co.kr/product/61/category/42/"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.UPSTREAM_ERROR, ex.code());
         assertFalse(ex.permanent());
@@ -218,7 +222,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>goods</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://bit.ly/abc"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://bit.ly/abc"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("goods", page.document().text());
     }
@@ -234,7 +238,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>landing</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://toss.shopping/"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://toss.shopping/"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("landing", page.document().text());
     }
@@ -250,7 +254,7 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>moved</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/old"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/old"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("moved", page.document().text());
     }
@@ -263,7 +267,7 @@ class HttpPageFetcherRedirectTest {
                 server.expect(requestTo("https://zigzag.kr/p"))
                     .andRespond(withSuccess("<html>direct</html>", MediaType.TEXT_HTML)));
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://zigzag.kr/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("direct", page.document().text());
         assertEquals(page.link(), page.finalUrl());
@@ -286,8 +290,111 @@ class HttpPageFetcherRedirectTest {
                     .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
             });
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/short"), DeclaredIdentity.fromRequest("Foo/2.0"));
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/short"), DeclaredIdentity.fromRequest("Foo/2.0"), BlockedDomains.NONE);
 
         assertEquals("product", page.document().text());
+    }
+
+    private static final BlockedDomains PRICE_COMPARISON = BlockedDomains.fromRequest(List.of("search.shopping.naver.com"));
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "https://search.shopping.naver.com/catalog/1",
+        "https://m.search.shopping.naver.com/catalog/1",
+        "https://M.Search.Shopping.Naver.COM./catalog/1",
+        // 루트 착지 판정은 승격 대상이라 먼저 돌면 렌더가 같은 곳으로 간다.
+        "https://search.shopping.naver.com/",
+    })
+    @DisplayName("redirect 목적지가 차단 도메인이면 그 주소로 요청하지 않고 확정 실패한다")
+    void doesNotRequestRedirectTargetOnBlockedDomain(String location) {
+        // 목적지에 기대 요청을 두지 않는다 - 요청이 나가면 MockRestServiceServer 가 AssertionError 로 깨뜨린다.
+        MockRestServiceServer[] server = new MockRestServiceServer[1];
+        HttpPageFetcher fetcher =
+            fetcherWith(s -> {
+                server[0] = s;
+                s.expect(requestTo("https://naver.me/abc"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create(location)));
+            });
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://naver.me/abc"), DeclaredIdentity.DEFAULT, PRICE_COMPARISON)
+        );
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+        assertTrue(ex.permanent());
+        assertFalse(ex.escalatable());
+        server[0].verify();
+    }
+
+    @Test
+    @DisplayName("이름만 비슷한 도메인은 차단 도메인이 아니다")
+    void followsLookalikeDomain() {
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                server.expect(requestTo("https://naver.me/abc"))
+                    .andRespond(withStatus(HttpStatus.FOUND).location(URI.create("https://notsearch.shopping.naver.com/p")));
+                server.expect(requestTo("https://notsearch.shopping.naver.com/p"))
+                    .andRespond(withSuccess("<html>product</html>", MediaType.TEXT_HTML));
+            });
+
+        PageContent page = fetcher.fetch(ProductLink.parse("https://naver.me/abc"), DeclaredIdentity.DEFAULT, PRICE_COMPARISON);
+
+        assertEquals("product", page.document().text());
+    }
+
+    @Test
+    @DisplayName("입력 링크가 차단 도메인이면 첫 요청도 보내지 않는다")
+    void doesNotRequestBlockedInputLink() {
+        HttpPageFetcher fetcher = fetcherWith(server -> { });
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(
+                ProductLink.parse("https://search.shopping.naver.com/catalog/1"), DeclaredIdentity.DEFAULT, PRICE_COMPARISON)
+        );
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+    }
+
+    @Test
+    @DisplayName("hop 상한에 닿는 마지막 redirect 의 목적지가 차단 도메인이어도 차단으로 닫는다")
+    void blockedTargetAtHopCapIsBlockedDomain() {
+        // 상한 초과(TOO_MANY_REDIRECTS)는 승격 대상이라 먼저 닫히면 렌더가 같은 곳으로 간다.
+        int maxRedirects = FetchProperties.defaults().maxRedirects();
+        HttpPageFetcher fetcher =
+            fetcherWith(server -> {
+                for (int hop = 0; hop <= maxRedirects; hop++) {
+                    String next = hop < maxRedirects
+                        ? "https://shop.example.com/" + (hop + 1)
+                        : "https://search.shopping.naver.com/catalog/1";
+                    server.expect(requestTo("https://shop.example.com/" + hop))
+                        .andRespond(withStatus(HttpStatus.FOUND).location(URI.create(next)));
+                }
+            });
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(ProductLink.parse("https://shop.example.com/0"), DeclaredIdentity.DEFAULT, PRICE_COMPARISON)
+        );
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+    }
+
+    @Test
+    @DisplayName("차단 도메인은 내부 주소 검사의 이름 해석보다 먼저 닫아 이름도 풀지 않는다")
+    void blockedDomainIsRefusedBeforeNameResolution() {
+        RequestScopedDnsResolver.HostResolver internal = host -> new InetAddress[] {InetAddress.getByName("169.254.169.254")};
+        HttpPageFetcher fetcher = new HttpPageFetcher(
+            RestClient.builder().build(), new RequestScopedDnsResolver(internal), new RequestScopedCookieStore(),
+            FetchProperties.defaults());
+
+        PageFetchException ex = assertThrows(
+            PageFetchException.class,
+            () -> fetcher.fetch(
+                ProductLink.parse("https://search.shopping.naver.com/catalog/1"), DeclaredIdentity.DEFAULT, PRICE_COMPARISON)
+        );
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
     }
 }

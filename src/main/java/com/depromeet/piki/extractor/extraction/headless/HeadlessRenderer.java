@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.headless;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import java.util.List;
@@ -7,7 +8,8 @@ import java.util.List;
 /**
  * 헤드리스 브라우저 렌더(renderer 의 POST /render) 외부 경계 — 테스트 stub 지점 (PageFetcher 와 같은 역할).
  * 거쳐 간 홉을 순서대로 돌려주고, 렌더 서비스 실패는 {@link HeadlessRenderException}, SSRF 차단 host 는
- * PageFetchException.blockedHost 로 번역해 던진다. 홉의 해석(상품·차단 판정)은 소비자 몫이다.
+ * PageFetchException.blockedHost, 차단 도메인에서 끊긴 이동은 PageFetchException.blockedDomain 으로 번역해 던진다.
+ * 홉의 해석(상품·차단 판정)은 소비자 몫이다.
  */
 public interface HeadlessRenderer {
 
@@ -15,5 +17,10 @@ public interface HeadlessRenderer {
      * @param authorized 허락받은 대상인가.
      *     이 경계는 판정하지 않고 전달만 한다 — 원장은 호출자(core)에 있다.
      */
-    List<RenderedHop> render(ProductLink link, boolean authorized, DeclaredIdentity identity);
+    List<RenderedHop> render(
+        ProductLink link,
+        boolean authorized,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    );
 }

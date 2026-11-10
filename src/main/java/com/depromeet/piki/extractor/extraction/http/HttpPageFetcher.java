@@ -1,5 +1,6 @@
 package com.depromeet.piki.extractor.extraction.http;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductLinkException;
@@ -111,9 +112,9 @@ public class HttpPageFetcher implements PageFetcher {
     }
 
     @Override
-    public PageContent fetch(ProductLink link, DeclaredIdentity identity) {
+    public PageContent fetch(ProductLink link, DeclaredIdentity identity, BlockedDomains blockedDomains) {
         try {
-            return fetchFollowingRedirects(link, properties.userAgentOf(identity));
+            return fetchFollowingRedirects(link, properties.userAgentOf(identity), blockedDomains);
         } finally {
             dnsResolver.clear();
             // 이 링크에서 받은 쿠키는 여기서 끝난다 - 다음 fetch 는 빈 손으로 시작한다.
@@ -121,8 +122,9 @@ public class HttpPageFetcher implements PageFetcher {
         }
     }
 
-    private PageContent fetchFollowingRedirects(ProductLink link, String userAgent) {
+    private PageContent fetchFollowingRedirects(ProductLink link, String userAgent, BlockedDomains blockedDomains) {
         ProductLink current = link;
+        refuseBlocked(current, blockedDomains, link);
         for (int hop = 0; hop <= maxRedirects; hop++) {
             // hop 마다 새 host 를 다시 검증해 점프 후 SSRF 를 막는다. 람다가 잡을 수 있게 final 로 뜬다.
             ProductLink target = current;
@@ -130,6 +132,8 @@ public class HttpPageFetcher implements PageFetcher {
             switch (request(target, userAgent)) {
                 case Received.Redirect redirect -> {
                     current = redirect.target();
+                    // 루트 착지·hop 상한보다 먼저 닫는다. 그 둘은 승격 대상이라 렌더가 같은 곳으로 간다.
+                    refuseBlocked(current, blockedDomains, link);
                     if (landsOnSiteRoot(link, current)) {
                         log.info("link fetch redirected to site root url={}", link.safeLogString());
                         throw PageFetchException.redirectedToSiteRoot();
@@ -144,6 +148,14 @@ public class HttpPageFetcher implements PageFetcher {
         }
         log.warn("link fetch too many redirects url={}", link.safeLogString());
         throw PageFetchException.tooManyRedirects();
+    }
+
+    /** 응답을 받은 뒤 거르면 차단한 곳에 요청이 이미 나간 뒤라 요청 전에 본다. 이름 해석(가드)보다도 먼저다. */
+    private static void refuseBlocked(ProductLink target, BlockedDomains blockedDomains, ProductLink link) {
+        if (blockedDomains.blocks(target)) {
+            log.info("link fetch blocked domain target={} url={}", target.safeLogString(), link.safeLogString());
+            throw PageFetchException.blockedDomain();
+        }
     }
 
     /**

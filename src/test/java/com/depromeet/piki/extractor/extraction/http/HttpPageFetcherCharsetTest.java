@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.PageContent;
@@ -42,7 +43,7 @@ class HttpPageFetcherCharsetTest {
         String html = "<html><head><meta property=\"og:title\" content=\"나이키 운동화\"></head><body></body></html>";
         HttpPageFetcher fetcher = fetcherReturning(html.getBytes(StandardCharsets.UTF_8), MediaType.TEXT_HTML);
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(
             "나이키 운동화",
@@ -58,7 +59,7 @@ class HttpPageFetcherCharsetTest {
         String html = "<html><body>운동화</body></html>";
         HttpPageFetcher fetcher = fetcherReturning(html.getBytes(euckr), MediaType.parseMediaType("text/html;charset=EUC-KR"));
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("운동화", page.document().text(), "응답 Content-Type 의 EUC-KR charset 으로 디코딩돼야 한다");
     }
@@ -70,7 +71,7 @@ class HttpPageFetcherCharsetTest {
         String html = "<html><head><meta charset=\"euc-kr\"></head><body>장바구니</body></html>";
         HttpPageFetcher fetcher = fetcherReturning(html.getBytes(euckr), MediaType.TEXT_HTML);
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("장바구니", page.document().text(), "헤더 charset 이 없으면 HTML meta charset(euc-kr)으로 디코딩돼야 한다");
     }
@@ -83,7 +84,7 @@ class HttpPageFetcherCharsetTest {
         HttpPageFetcher fetcher =
             fetcherReturning(html.getBytes(StandardCharsets.UTF_8), MediaType.parseMediaType("text/html;charset=UTF-8"));
 
-        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT);
+        PageContent page = fetcher.fetch(ProductLink.parse("https://shop.example.com/p"), DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals("운동화", page.document().text(), "Content-Type charset(UTF-8)이 HTML meta charset(euc-kr)보다 우선해야 한다");
     }

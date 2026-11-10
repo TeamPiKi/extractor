@@ -11,6 +11,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
@@ -44,6 +45,8 @@ class HttpHeadlessRendererTest {
             + "{\"url\":\"https://kream.co.kr/products/6963\",\"status\":302,\"headers\":{\"location\":\"/p\"}},"
             + "{\"url\":\"https://kream.co.kr/p\",\"status\":200,\"headers\":{\"content-type\":\"text/html\"},"
             + "\"body\":\"<html>ssr</html>\",\"dom\":\"<html>dom</html>\"}]}";
+    /** 차단 도메인을 판정하는 renderer 의 같은 응답. 목록을 보낸 렌더는 이 판정이 있어야 홉을 쓴다. */
+    private static final String JUDGED_TWO_HOPS = TWO_HOPS.replace("{\"proxied\":true,", "{\"blocked_domain_hit\":false,");
 
     private final ProductLink link = ProductLink.parse("https://kream.co.kr/products/6963");
 
@@ -69,7 +72,7 @@ class HttpHeadlessRendererTest {
             .andExpect(jsonPath("$.compress").value(true))
             .andRespond(withSuccess(TWO_HOPS, MediaType.APPLICATION_JSON)));
 
-        List<RenderedHop> hops = renderer.render(link, false, DeclaredIdentity.DEFAULT);
+        List<RenderedHop> hops = renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
 
         assertEquals(2, hops.size());
         assertEquals(new RenderedHop(link, 302, Map.of("location", "/p"), "", ""), hops.getFirst());
@@ -92,7 +95,7 @@ class HttpHeadlessRendererTest {
                 .expect(requestTo(BASE_URL + "/render"))
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON)));
 
-            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
             assertFalse(ex.permanent());
@@ -107,7 +110,7 @@ class HttpHeadlessRendererTest {
             .andRespond(withSuccess(zstdCompress(TWO_HOPS, null), MediaType.APPLICATION_OCTET_STREAM)
                 .headers(zstdHeaders(""))));
 
-        assertEquals("<html>dom</html>", renderer.render(link, false, DeclaredIdentity.DEFAULT).getLast().dom());
+        assertEquals("<html>dom</html>", renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).getLast().dom());
     }
 
     @Test
@@ -119,7 +122,7 @@ class HttpHeadlessRendererTest {
             .andRespond(withSuccess(zstdCompress(TWO_HOPS, dict), MediaType.APPLICATION_OCTET_STREAM)
                 .headers(zstdHeaders("mall-v1.dict"))));
 
-        assertEquals("<html>dom</html>", renderer.render(link, false, DeclaredIdentity.DEFAULT).getLast().dom());
+        assertEquals("<html>dom</html>", renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).getLast().dom());
     }
 
     @Test
@@ -130,7 +133,7 @@ class HttpHeadlessRendererTest {
             .andRespond(withSuccess(zstdCompress(TWO_HOPS, null), MediaType.APPLICATION_OCTET_STREAM)
                 .headers(zstdHeaders("future-v2.dict"))));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
     }
@@ -146,7 +149,7 @@ class HttpHeadlessRendererTest {
         )) {
             HttpHeadlessRenderer renderer = rendererWith(configure);
 
-            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+            HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
             assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
             assertFalse(ex.permanent());
@@ -163,7 +166,7 @@ class HttpHeadlessRendererTest {
                 MediaType.APPLICATION_JSON
             )));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -179,11 +182,89 @@ class HttpHeadlessRendererTest {
                 MediaType.APPLICATION_JSON
             )));
 
-        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
         assertTrue(ex.permanent());
         assertFalse(ex.escalatable());
+    }
+
+    @Test
+    @DisplayName("차단 도메인은 렌더 요청에 그대로 싣고, 없으면 빈 목록으로 보낸다")
+    void blockedDomainsAreSentToRenderer() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> {
+            server.expect(jsonPath("$.blocked_domains[0]").value("search.shopping.naver.com"))
+                .andExpect(jsonPath("$.blocked_domains[1]").value("tb.cn"))
+                .andRespond(withSuccess(JUDGED_TWO_HOPS, MediaType.APPLICATION_JSON));
+            server.expect(jsonPath("$.blocked_domains").isEmpty())
+                .andRespond(withSuccess(TWO_HOPS, MediaType.APPLICATION_JSON));
+        });
+
+        renderer.render(link, false, DeclaredIdentity.DEFAULT,
+            BlockedDomains.fromRequest(List.of("search.shopping.naver.com", "tb.cn")));
+        renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+    }
+
+    @Test
+    @DisplayName("renderer 가 차단 도메인에서 이동을 끊었다고 알리면 확정 실패(BLOCKED_DOMAIN)이고 승격 대상이 아니다")
+    void blockedDomainHitIsBlockedDomain() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"error\":\"blocked domain navigation\",\"internal_address_hit\":false,"
+                    + "\"blocked_domain_hit\":true,\"hops\":[]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(
+            link, false, DeclaredIdentity.DEFAULT, BlockedDomains.fromRequest(List.of("search.shopping.naver.com"))));
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+        assertTrue(ex.permanent());
+        assertFalse(ex.escalatable());
+    }
+
+    @Test
+    @DisplayName("목록을 보냈는데 차단 도메인 판정이 없는 응답(목록을 모르는 renderer)은 홉을 쓰지 않고 일시 실패다")
+    void responseWithoutBlockedDomainJudgementIsNotUsed() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(TWO_HOPS, MediaType.APPLICATION_JSON)));
+
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(
+            link, false, DeclaredIdentity.DEFAULT, BlockedDomains.fromRequest(List.of("search.shopping.naver.com"))));
+
+        assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
+        assertFalse(ex.permanent());
+    }
+
+    @Test
+    @DisplayName("renderer 가 차단을 알리지 않았어도 차단 도메인 홉이 있으면 그 홉을 쓰지 않고 차단으로 닫는다")
+    void blockedDomainHopIsNotUsedEvenWithoutHit() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(JUDGED_TWO_HOPS, MediaType.APPLICATION_JSON)));
+
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(
+            link, false, DeclaredIdentity.DEFAULT, BlockedDomains.fromRequest(List.of("kream.co.kr"))));
+
+        assertEquals(ExtractionErrorCode.BLOCKED_DOMAIN, ex.code());
+    }
+
+    @Test
+    @DisplayName("내부 주소와 차단 도메인이 함께 오면 SSRF 판정(BLOCKED_HOST)이 앞선다")
+    void internalAddressHitWinsOverBlockedDomainHit() {
+        HttpHeadlessRenderer renderer = rendererWith(server -> server
+            .expect(requestTo(BASE_URL + "/render"))
+            .andRespond(withSuccess(
+                "{\"internal_address_hit\":true,\"blocked_domain_hit\":true,\"hops\":[]}",
+                MediaType.APPLICATION_JSON
+            )));
+
+        PageFetchException ex = assertThrows(PageFetchException.class, () -> renderer.render(
+            link, false, DeclaredIdentity.DEFAULT, BlockedDomains.fromRequest(List.of("kream.co.kr"))));
+
+        assertEquals(ExtractionErrorCode.BLOCKED_HOST, ex.code());
     }
 
     @Test
@@ -197,7 +278,7 @@ class HttpHeadlessRendererTest {
                     MediaType.APPLICATION_JSON
                 )));
 
-            assertEquals(link, renderer.render(link, false, DeclaredIdentity.DEFAULT).getFirst().url());
+            assertEquals(link, renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).getFirst().url());
         }
     }
 
@@ -211,7 +292,7 @@ class HttpHeadlessRendererTest {
                 MediaType.APPLICATION_JSON
             )));
 
-        assertEquals("http://kream.co.kr/p", renderer.render(link, false, DeclaredIdentity.DEFAULT).getFirst().url().value().toString());
+        assertEquals("http://kream.co.kr/p", renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).getFirst().url().value().toString());
     }
 
     @Test
@@ -221,7 +302,7 @@ class HttpHeadlessRendererTest {
             .expect(requestTo(BASE_URL + "/render"))
             .andRespond(withServerError()));
 
-        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT));
+        HeadlessRenderException ex = assertThrows(HeadlessRenderException.class, () -> renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
 
         assertEquals(ExtractionErrorCode.HEADLESS_UPSTREAM, ex.code());
         assertFalse(ex.permanent());
@@ -263,8 +344,8 @@ class HttpHeadlessRendererTest {
                 .andRespond(withSuccess(TWO_HOPS, MediaType.APPLICATION_JSON));
         });
 
-        renderer.render(link, false, DeclaredIdentity.fromRequest("Foo/2.0"));
-        renderer.render(link, false, DeclaredIdentity.DEFAULT);
+        renderer.render(link, false, DeclaredIdentity.fromRequest("Foo/2.0"), BlockedDomains.NONE);
+        renderer.render(link, false, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
     }
 
     private static HttpHeaders zstdHeaders(String dictId) {

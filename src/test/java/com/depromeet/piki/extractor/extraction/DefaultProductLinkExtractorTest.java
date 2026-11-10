@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
@@ -40,7 +41,7 @@ class DefaultProductLinkExtractorTest {
     private final StubGeminiClient stubGemini = new StubGeminiClient();
 
     private DefaultProductLinkExtractor extractorFetching(String html) {
-        PageFetcher fetcher = (l, identity) -> PageContent.of(l, html);
+        PageFetcher fetcher = (l, identity, blockedDomains) -> PageContent.of(l, html);
         return new DefaultProductLinkExtractor(
             fetcher,
             new HtmlSnapshotPipeline(
@@ -58,7 +59,7 @@ class DefaultProductLinkExtractorTest {
         // 게이트(LlmInputGate)가 LLM 전에 끊으므로 stub 세팅이 없어야 정상 — LLM 이 불리면 default throw 로 드러난다.
         PageFetchException e = assertThrows(
             PageFetchException.class,
-            () -> extractorFetching(SHELL_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT)
+            () -> extractorFetching(SHELL_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
         );
 
         assertEquals(ExtractionErrorCode.EMPTY_SHELL, e.code());
@@ -76,7 +77,7 @@ class DefaultProductLinkExtractorTest {
 
         ProductSnapshotException e = assertThrows(
             ProductSnapshotException.class,
-            () -> extractorFetching(CONTENT_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT)
+            () -> extractorFetching(CONTENT_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
         );
 
         assertEquals(ExtractionErrorCode.NOT_PRODUCT_PAGE, e.code());
@@ -93,6 +94,6 @@ class DefaultProductLinkExtractorTest {
             throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
         };
 
-        assertThrows(GeminiApiException.class, () -> extractorFetching(dataIslandShell).extract(link, false, null, DeclaredIdentity.DEFAULT));
+        assertThrows(GeminiApiException.class, () -> extractorFetching(dataIslandShell).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
     }
 }

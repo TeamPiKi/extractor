@@ -5,6 +5,7 @@ import com.depromeet.piki.contracts.render.v1.RenderProto;
 import com.depromeet.piki.contracts.render.v1.RenderRequest;
 import com.depromeet.piki.contracts.render.v1.RenderResponse;
 import com.depromeet.piki.extractor.common.exception.ExtractionException;
+import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
@@ -67,8 +68,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
     private final ZstdDictionaries dictionaries;
 
     @Override
-    public List<RenderedHop> render(ProductLink link, boolean authorized, DeclaredIdentity identity) {
-        RenderResponse response = requestRender(link, authorized, identity);
+    public List<RenderedHop> render(
+        ProductLink link,
+        boolean authorized,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
+        RenderResponse response = requestRender(link, authorized, identity, blockedDomains);
         if (!response.hasInternalAddressHit()) {
             // 홉 재검사를 하지 않으므로, 내부 주소를 판정하지 않는 renderer(배포 순서가 어긋났거나 롤백됨)의 홉은 쓸 수 없다.
             log.error("headless render without internal address judgement url={}", link.safeLogString());
@@ -77,6 +83,15 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         if (response.getInternalAddressHit()) {
             log.error("[SSRF] blocked: render reached internal address url={}", link.safeLogString());
             throw PageFetchException.blockedHost();
+        }
+        if (!blockedDomains.values().isEmpty() && !response.hasBlockedDomainHit()) {
+            // 목록을 모르는 renderer(배포 순서가 어긋났거나 롤백됨)는 차단 도메인으로 요청을 보냈을 수 있다.
+            log.error("headless render without blocked domain judgement url={}", link.safeLogString());
+            throw HeadlessRenderException.upstream("renderer 가 차단 도메인을 판정하지 않는다", null);
+        }
+        if (response.getBlockedDomainHit()) {
+            log.info("headless render blocked domain url={}", link.safeLogString());
+            throw PageFetchException.blockedDomain();
         }
         List<Hop> hops = response.getHopsList();
         if (hops.isEmpty()) {
@@ -90,7 +105,13 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
             hops.getLast().getStatus(),
             link.safeLogString()
         );
-        return hops.stream().map(hop -> toRendered(hop, link)).toList();
+        List<RenderedHop> rendered = hops.stream().map(hop -> toRendered(hop, link)).toList();
+        // renderer 판정을 비켜 간 차단 도메인 문서가 추출 결과가 되지 않게 한다. 요청은 이미 나갔으므로 경보로 남긴다.
+        if (rendered.stream().anyMatch(hop -> blockedDomains.blocks(hop.url()))) {
+            log.error("headless render returned a blocked domain hop url={}", link.safeLogString());
+            throw PageFetchException.blockedDomain();
+        }
+        return rendered;
     }
 
     private RenderedHop toRendered(Hop hop, ProductLink link) {
@@ -103,12 +124,18 @@ public class HttpHeadlessRenderer implements HeadlessRenderer {
         );
     }
 
-    private RenderResponse requestRender(ProductLink link, boolean authorized, DeclaredIdentity identity) {
+    private RenderResponse requestRender(
+        ProductLink link,
+        boolean authorized,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
         RenderRequest request = RenderRequest.newBuilder()
             .setUrl(link.value().toString())
             .setAuthorized(authorized)
             .setCompress(properties.compress())
             .setIdentity(identity.value())
+            .addAllBlockedDomains(blockedDomains.values())
             .build();
         ResponseEntity<byte[]> entity;
         try {
