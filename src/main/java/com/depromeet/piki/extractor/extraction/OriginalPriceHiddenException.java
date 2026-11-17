@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction;
 
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * plain 이 READY 로 끝냈지만 판매가가 본문 가시 텍스트에 없는 페이지 — 가격을 스크립트가 그리므로 취소선 정가도
@@ -14,18 +15,25 @@ import java.util.Objects;
 final class OriginalPriceHiddenException extends RuntimeException {
 
     private final ProductSnapshot plainSnapshot;
+    private final Supplier<ProductSnapshot> lastResort;
 
-    private OriginalPriceHiddenException(ProductSnapshot plainSnapshot) {
+    private OriginalPriceHiddenException(ProductSnapshot plainSnapshot, Supplier<ProductSnapshot> lastResort) {
         // 흐름 제어 신호라 스택이 필요 없다
         super("정가는 렌더 뒤에야 보인다", null, false, false);
         this.plainSnapshot = Objects.requireNonNull(plainSnapshot, "plainSnapshot");
+        this.lastResort = Objects.requireNonNull(lastResort, "lastResort");
     }
 
-    static OriginalPriceHiddenException behindRender(ProductSnapshot plainSnapshot) {
-        return new OriginalPriceHiddenException(plainSnapshot);
+    /** @param lastResort 렌더가 정가를 못 보탰을 때 plain 문서로 정가를 얻는 마지막 수단(미뤄 둔 LLM). */
+    static OriginalPriceHiddenException behindRender(ProductSnapshot plainSnapshot, Supplier<ProductSnapshot> lastResort) {
+        return new OriginalPriceHiddenException(plainSnapshot, lastResort);
     }
 
     ProductSnapshot plainSnapshot() {
         return plainSnapshot;
+    }
+
+    ProductSnapshot lastResort() {
+        return lastResort.get();
     }
 }

@@ -11,6 +11,7 @@ import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
+import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
@@ -94,10 +95,9 @@ class DefaultProductLinkExtractorTest {
     }
 
     @Test
-    @DisplayName("판매가가 본문에 없고 정가를 모르면 plain 결과를 실어 렌더 승격을 제안한다")
-    void proposesRenderWhenPriceIsNotVisibleAndOriginalPriceUnknown() {
-        stubGemini.build = request -> new GeminiOriginalPriceResult(9_500);
-
+    @DisplayName("판매가가 본문에 없고 정가를 모르면 LLM 을 묻지 않고 plain 결과를 실어 렌더 승격을 제안한다")
+    void proposesRenderWithoutAskingLlmWhenPriceIsNotVisible() {
+        // stub 세팅이 없어야 정상 — 정가 LLM 이 렌더보다 먼저 불리면 default throw 로 드러난다.
         OriginalPriceHiddenException e = assertThrows(
             OriginalPriceHiddenException.class,
             () -> extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
@@ -105,45 +105,55 @@ class DefaultProductLinkExtractorTest {
 
         assertEquals(9_500, e.plainSnapshot().currentPrice());
         assertNull(e.plainSnapshot().originalPrice());
+        assertEquals(0, stubGemini.invocations());
     }
 
     @Test
-    @DisplayName("판매가가 본문에 없어도 정가를 채웠으면 승격을 제안하지 않는다")
-    void doesNotProposeRenderWhenOriginalPriceFilled() {
+    @DisplayName("미뤄 둔 정가 LLM 은 마지막 수단으로 불렸을 때 plain 문서로 묻는다")
+    void lastResortAsksDeferredLlm() {
+        OriginalPriceHiddenException e = assertThrows(
+            OriginalPriceHiddenException.class,
+            () -> extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
+        );
         stubGemini.build = request -> new GeminiOriginalPriceResult(12_500);
 
-        assertEquals(
-            12_500,
-            extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).originalPrice()
-        );
+        assertEquals(12_500, e.lastResort().originalPrice());
+        assertEquals(1, stubGemini.invocations());
     }
 
     @Test
-    @DisplayName("정가 LLM 이 실패했으면 판매가가 본문에 없어도 승격을 제안하지 않는다")
-    void doesNotProposeRenderWhenEnrichmentFailed() {
-        // 렌더해도 같은 LLM 을 다시 묻는다 — Gemini 장애가 렌더 폭주로 번지지 않아야 한다.
+    @DisplayName("마지막 수단의 정가 LLM 이 실패해도 plain 결과는 유지된다")
+    void lastResortKeepsSnapshotWhenLlmFails() {
+        OriginalPriceHiddenException e = assertThrows(
+            OriginalPriceHiddenException.class,
+            () -> extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
+        );
         stubGemini.build = request -> {
             throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
         };
 
-        assertNull(
-            extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).originalPrice()
-        );
+        ProductSnapshot snapshot = e.lastResort();
+
+        assertEquals(9_500, snapshot.currentPrice());
+        assertNull(snapshot.originalPrice());
     }
 
     @Test
-    @DisplayName("LLM 추출로 끝난 결과도 판매가가 본문에 없고 정가를 모르면 승격을 제안한다")
-    void proposesRenderOnLlmPathToo() {
+    @DisplayName("LLM 추출로 끝난 결과도 판매가가 본문에 없고 정가를 모르면 승격을 제안하되 LLM 을 다시 묻지 않는다")
+    void proposesRenderOnLlmPathWithoutSecondLlmCall() {
         String dataIslandOnly = "<html><head><script type=\"application/json\">"
             + "{\"product\":{\"name\":\"상품\",\"price\":9500}}</script></head>"
             + "<body>" + "가격 표시는 스크립트가 그리는 상품 설명 본문. ".repeat(20) + "</body></html>";
         stubGemini.build = request ->
             new GeminiExtractionResult(true, "상품", 9_500, null, "KRW", "https://cdn.example.com/p.png");
 
-        assertThrows(
+        OriginalPriceHiddenException e = assertThrows(
             OriginalPriceHiddenException.class,
             () -> extractorFetching(dataIslandOnly).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
         );
+
+        assertEquals(e.plainSnapshot(), e.lastResort());
+        assertEquals(1, stubGemini.invocations());
     }
 
     @Test

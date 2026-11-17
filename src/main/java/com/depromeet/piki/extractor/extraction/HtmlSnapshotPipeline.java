@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * HTML → ProductSnapshot 의 공통 후반부: 구조화 데이터(JSON-LD/OpenGraph) 우선, 미달이면 같은 HTML 을 Gemini 로
- * 넘긴다(재fetch 없음). 구조화로 끝났어도 정가가 비면 같은 HTML 로 정가만 Gemini 에 보강한다. 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 실패로
+ * 넘긴다(재fetch 없음). 구조화로 끝났어도 정가가 비면 같은 HTML 로 정가만 Gemini 에 보강한다(정적 fetch 전략은
+ * 렌더로 볼 수 있는 페이지면 이 보강을 렌더 뒤로 미룬다). 단 LLM 이 볼 게 아무것도 없는 문서({@link LlmInputGate})는 넘기지 않고 실패로
  * 끊는다 — 빈 입력의 LLM 은 실존하지 않는 상품을 지어내고, 그 값은 형식이 유효해 하류 검증을 전부 통과한다.
  * HTML 을 어디서 얻었는지(정적 fetch, 헤드리스 렌더)와 무관한 파싱 파이프라인이라 두 전략이 공유한다.
  *
@@ -49,28 +50,42 @@ public class HtmlSnapshotPipeline {
      *     내려갈 때만 소비된다.
      */
     public ProductSnapshot extract(PageContent page, String timing, String model) {
-        return extractWithHint(page, timing, model).snapshot();
+        return extract(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model);
     }
 
     /** 호출 전략이 후보 선별에 쓴 구조화 결과를 그대로 받는다 — 같은 Document 를 두 번 파싱하지 않는다. */
     public ProductSnapshot extract(PageContent page, StructuredExtraction result, String timing, String model) {
-        return run(page, result, timing, model).snapshot();
+        return run(page, result, timing, model, false).snapshot();
     }
 
     /**
-     * @param originalPriceHidden LLM 이 답했는데도 정가를 모르고, 판매가가 본문 가시 텍스트에 없다 — 가격을 스크립트가
-     *     그리는 페이지라 렌더 뒤에야 정가가 보인다. LLM 을 못 물은 경우(실패·기한)는 거짓이다: 렌더해도 같은 LLM 을
-     *     다시 묻게 돼 얻는 것 없이 renderer 만 쓴다.
+     * @param originalPriceHidden 정가를 모르고 판매가가 본문 가시 텍스트에 없다 — 가격을 스크립트가 그리는 페이지라
+     *     렌더 뒤에야 정가가 보인다.
+     * @param originalPriceLlmDeferred 그래서 정가 LLM 을 아직 묻지 않았다. LLM 은 렌더까지 해 본 뒤의 마지막 수단이다.
      */
-    record Result(ProductSnapshot snapshot, boolean originalPriceHidden) {
+    record Result(ProductSnapshot snapshot, boolean originalPriceHidden, boolean originalPriceLlmDeferred) {
+        private static Result settled(ProductSnapshot snapshot) {
+            return new Result(snapshot, false, false);
+        }
     }
 
-    /** 정적 fetch 전략용 — 결과와 함께 렌더 승격 근거를 돌려준다. */
-    Result extractWithHint(PageContent page, String timing, String model) {
-        return run(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model);
+    /** 정적 fetch 전략용 — 렌더로 정가를 볼 수 있는 페이지면 정가 LLM 을 미루고 그 사실을 함께 돌려준다. */
+    Result extractDeferringHiddenOriginalPrice(PageContent page, String timing, String model) {
+        return run(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model, true);
     }
 
-    private Result run(PageContent page, StructuredExtraction result, String timing, String model) {
+    /** 미뤄 둔 정가 LLM 을 지금 묻는다 — 렌더가 정가를 못 보탰을 때의 마지막 수단. */
+    ProductSnapshot enrichDeferredOriginalPrice(ProductSnapshot snapshot, PageContent page, String model) {
+        return enrichOriginalPrice(snapshot, page, model, false).snapshot();
+    }
+
+    private Result run(
+        PageContent page,
+        StructuredExtraction result,
+        String timing,
+        String model,
+        boolean deferHiddenOriginalPrice
+    ) {
         // 수신 단계가 이미 파싱해 둔 Document 를 구조화 파서·게이트·Gemini fallback 이 그대로 공유한다.
         // baseUri 는 html 의 출처인 최종 URL 기준 — redirect 를 따라갔으면 원본 link 와 host 가 다를 수 있다.
         Document document = page.document();
@@ -82,7 +97,8 @@ public class HtmlSnapshotPipeline {
         countExtract(result, nothingForLlm);
 
         return switch (result) {
-            case StructuredExtraction.Extracted extracted -> structuredSnapshot(extracted, page, timing, model);
+            case StructuredExtraction.Extracted extracted ->
+                structuredSnapshot(extracted, page, timing, model, deferHiddenOriginalPrice);
             case StructuredExtraction.Miss miss when nothingForLlm -> throw skippedShell(miss, page, timing);
             case StructuredExtraction.Miss miss -> llmResult(llmSnapshot(miss, document, page, timing, model), document);
         };
@@ -107,14 +123,15 @@ public class HtmlSnapshotPipeline {
         boolean hidden = !snapshot.missingReadyField()
             && snapshot.originalPrice() == null
             && !VisiblePrices.contains(document, snapshot.currentPrice());
-        return new Result(snapshot, hidden);
+        return new Result(snapshot, hidden, false);
     }
 
     private Result structuredSnapshot(
         StructuredExtraction.Extracted extracted,
         PageContent page,
         String timing,
-        String model
+        String model,
+        boolean deferHiddenOriginalPrice
     ) {
         log.info(
             "extract via=structured {} html={}chars url={}",
@@ -125,25 +142,34 @@ public class HtmlSnapshotPipeline {
         // 출처 표기는 값 생산자(파서·LLM)가 아니라 여기서 — finalUrl 을 아는 유일한 층이고,
         // 각 분기가 method 를 확정하는 지점이라 표기가 갈라질 수 없다.
         ProductSnapshot snapshot = extracted.snapshot().withOrigin(page.finalUrl(), ExtractionMethod.STRUCTURED);
-        return enrichOriginalPrice(snapshot, page, model);
+        return enrichOriginalPrice(snapshot, page, model, deferHiddenOriginalPrice);
     }
 
     /**
      * 정가는 READY 필드가 아니라 비어도 LLM fallback 으로 안 넘어가므로 여기서 따로 묻는다. method 는 STRUCTURED
      * 그대로 — 판매가의 출처가 구조화 데이터다.
      */
-    private Result enrichOriginalPrice(ProductSnapshot snapshot, PageContent page, String model) {
+    private Result enrichOriginalPrice(
+        ProductSnapshot snapshot,
+        PageContent page,
+        String model,
+        boolean deferHiddenOriginalPrice
+    ) {
         // READY 미달은 호출 전략이 헤드리스로 승격해 다시 추출하므로 여기서 보강해도 버려진다
         if (snapshot.missingReadyField() || snapshot.originalPrice() != null) {
-            return new Result(snapshot, false);
-        }
-        if (ExtractionDeadline.passed()) {
-            log.info("extract originalPrice via=llm result=skipped_deadline url={}", page.link().safeLogString());
-            return new Result(snapshot, false);
+            return Result.settled(snapshot);
         }
         int currentPrice = snapshot.currentPrice();
         // sanitize 가 Document 를 변형하기 전에 판정한다
         boolean priceVisible = VisiblePrices.contains(page.document(), currentPrice);
+        if (deferHiddenOriginalPrice && !priceVisible) {
+            log.info("extract originalPrice via=llm result=deferred_render url={}", page.link().safeLogString());
+            return new Result(snapshot, true, true);
+        }
+        if (ExtractionDeadline.passed()) {
+            log.info("extract originalPrice via=llm result=skipped_deadline url={}", page.link().safeLogString());
+            return Result.settled(snapshot);
+        }
         String remaining = ExtractionDeadline.remainingMillis().isPresent()
             ? ExtractionDeadline.remainingMillis().getAsLong() + "ms"
             : "none";
@@ -166,7 +192,7 @@ public class HtmlSnapshotPipeline {
                 remaining,
                 page.link().safeLogString()
             );
-            return new Result(enrichedSnapshot, !priceVisible && enrichedSnapshot.originalPrice() == null);
+            return Result.settled(enrichedSnapshot);
         } catch (GeminiApiException e) {
             log.warn(
                 "extract originalPrice via=llm result=failed llm={}ms url={} cause={}",
@@ -174,7 +200,7 @@ public class HtmlSnapshotPipeline {
                 page.link().safeLogString(),
                 e.toString()
             );
-            return new Result(snapshot, false);
+            return Result.settled(snapshot);
         }
     }
 

@@ -39,7 +39,7 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
 
         HtmlSnapshotPipeline.Result result;
         try {
-            result = htmlSnapshotPipeline.extractWithHint(page, "fetch=" + fetchMs + "ms", model);
+            result = htmlSnapshotPipeline.extractDeferringHiddenOriginalPrice(page, "fetch=" + fetchMs + "ms", model);
         } catch (ProductSnapshotException e) {
             // 파싱 no-data 인데 본문이 CSR 셸이면 원인은 "정적 fetch 로는 콘텐츠를 얻을 수 없음"이다 — fetch 차단과
             // 같은 축으로 재분류해(escalatable) 헤드리스가 이어받게 한다. 본문 텍스트가 충분한 페이지의 no-data 는
@@ -50,9 +50,15 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
             }
             throw e;
         }
-        if (result.originalPriceHidden()) {
-            throw OriginalPriceHiddenException.behindRender(result.snapshot());
+        if (!result.originalPriceHidden()) {
+            return result.snapshot();
         }
-        return result.snapshot();
+        ProductSnapshot snapshot = result.snapshot();
+        throw OriginalPriceHiddenException.behindRender(
+            snapshot,
+            result.originalPriceLlmDeferred()
+                ? () -> htmlSnapshotPipeline.enrichDeferredOriginalPrice(snapshot, page, model)
+                : () -> snapshot
+        );
     }
 }

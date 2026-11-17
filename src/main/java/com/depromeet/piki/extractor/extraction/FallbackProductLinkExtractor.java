@@ -26,7 +26,8 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p>plain 이 READY 로 끝냈어도 정가가 렌더 뒤에만 보이는 페이지({@link OriginalPriceHiddenException})는 headless 로
- * 정가만 보탠다. 이 승격은 부가 정보를 위한 것이라 실패해도 plain 결과가 그대로 응답이다.
+ * 정가만 보탠다. 부가 정보를 위한 승격이라 실패해도 plain 결과는 잃지 않는다. 정가 LLM 은 렌더까지 해 본 뒤의
+ * 마지막 수단이다 — 렌더가 같은 판매가로 답을 못 냈을 때만 plain 문서로 묻는다.
  *
  * <p>추출 경로는 요청의 authorized 와 무관하게 항상 같다 — 브라우저로 여는 것 자체는 우리 신원을 밝히고 하는
  * 일이라 허락을 전제하지 않는다. authorized 를 쓰는 곳은 렌더 서비스뿐이고,
@@ -72,7 +73,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             try {
                 return plain.extract(link, authorized, model, identity, blockedDomains);
             } catch (OriginalPriceHiddenException e) {
-                return e.plainSnapshot();
+                return e.lastResort();
             }
         }
 
@@ -80,7 +81,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
         try {
             plainSnapshot = plain.extract(link, authorized, model, identity, blockedDomains);
         } catch (OriginalPriceHiddenException e) {
-            return revealOriginalPrice(e.plainSnapshot(), link, authorized, model, identity, blockedDomains);
+            return revealOriginalPrice(e, link, authorized, model, identity, blockedDomains);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
@@ -139,21 +140,23 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
 
     /**
      * 렌더 결과에서 정가만 가져온다 — 판매가가 plain 과 다르면 다른 옵션의 가격 쌍일 수 있어 버린다. 이름·이미지·
-     * 판매가·출처는 이미 성공한 plain 것을 유지한다. escalation 카운터에는 세지 않는다: 그 카운터의 outcome 은
-     * "요청을 살렸는가" 인데 이 요청은 이미 살아 있다.
+     * 판매가·출처는 이미 성공한 plain 것을 유지한다. 렌더가 같은 판매가로 끝났으면 그쪽 파이프라인이 정가 LLM 까지
+     * 물은 것이라 거기서 멈추고, 그 밖에는 plain 문서로 마지막 수단을 쓴다. escalation 카운터에는 세지 않는다:
+     * 그 카운터의 outcome 은 "요청을 살렸는가" 인데 이 요청은 이미 살아 있다.
      */
     private ProductSnapshot revealOriginalPrice(
-        ProductSnapshot plainSnapshot,
+        OriginalPriceHiddenException hidden,
         ProductLink link,
         boolean authorized,
         String model,
         DeclaredIdentity identity,
         BlockedDomains blockedDomains
     ) {
+        ProductSnapshot plainSnapshot = hidden.plainSnapshot();
         if (!fitsRemainingBudget()) {
             log.info("extract escalate=headless outcome=skipped_deadline plainCategory={} url={}",
                 CATEGORY_ORIGINAL_PRICE_HIDDEN, link.safeLogString());
-            return plainSnapshot;
+            return hidden.lastResort();
         }
         log.info("extract escalate=headless plainCategory={} url={}", CATEGORY_ORIGINAL_PRICE_HIDDEN, link.safeLogString());
         ProductSnapshot rendered;
@@ -168,7 +171,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
                     : headlessFailure.getClass().getSimpleName(),
                 link.safeLogString()
             );
-            return plainSnapshot;
+            return hidden.lastResort();
         }
         boolean samePrice = Objects.equals(rendered.currentPrice(), plainSnapshot.currentPrice());
         ProductSnapshot revealed = samePrice ? plainSnapshot.withOriginalPrice(rendered.originalPrice()) : plainSnapshot;
@@ -179,7 +182,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             revealed.originalPrice() != null && revealed.originalPrice() > revealed.currentPrice(),
             link.safeLogString()
         );
-        return revealed;
+        return samePrice ? revealed : hidden.lastResort();
     }
 
     /**
