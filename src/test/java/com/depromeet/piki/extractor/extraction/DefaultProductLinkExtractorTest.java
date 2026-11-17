@@ -3,6 +3,7 @@ package com.depromeet.piki.extractor.extraction;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,6 +14,7 @@ import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
+import com.depromeet.piki.extractor.extraction.gemini.GeminiOriginalPriceResult;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
@@ -35,6 +37,14 @@ class DefaultProductLinkExtractorTest {
     private static final String CONTENT_HTML = "<html><body><article>"
         + "상품이 아닌 콘텐츠 페이지의 충분히 긴 본문 텍스트. ".repeat(20)
         + "</article></body></html>";
+
+    private static final String PRODUCT_JSON_LD = "<script type=\"application/ld+json\">"
+        + "{\"@type\":\"Product\",\"name\":\"상품\",\"image\":\"https://cdn.example.com/p.png\","
+        + "\"offers\":{\"price\":\"9500\",\"priceCurrency\":\"KRW\"}}</script>";
+    private static final String PRICE_HIDDEN_HTML = "<html><head>" + PRODUCT_JSON_LD + "</head>"
+        + "<body>가격 표시는 스크립트가 그린다</body></html>";
+    private static final String PRICE_VISIBLE_HTML = "<html><head>" + PRODUCT_JSON_LD + "</head>"
+        + "<body>9,500원</body></html>";
 
     private final ProductLink link = ProductLink.parse("https://store.kakao.com/kgcmall/products/445653929");
 
@@ -81,6 +91,69 @@ class DefaultProductLinkExtractorTest {
         );
 
         assertEquals(ExtractionErrorCode.NOT_PRODUCT_PAGE, e.code());
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 없고 정가를 모르면 plain 결과를 실어 렌더 승격을 제안한다")
+    void proposesRenderWhenPriceIsNotVisibleAndOriginalPriceUnknown() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(9_500);
+
+        OriginalPriceHiddenException e = assertThrows(
+            OriginalPriceHiddenException.class,
+            () -> extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
+        );
+
+        assertEquals(9_500, e.plainSnapshot().currentPrice());
+        assertNull(e.plainSnapshot().originalPrice());
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 없어도 정가를 채웠으면 승격을 제안하지 않는다")
+    void doesNotProposeRenderWhenOriginalPriceFilled() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(12_500);
+
+        assertEquals(
+            12_500,
+            extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).originalPrice()
+        );
+    }
+
+    @Test
+    @DisplayName("정가 LLM 이 실패했으면 판매가가 본문에 없어도 승격을 제안하지 않는다")
+    void doesNotProposeRenderWhenEnrichmentFailed() {
+        // 렌더해도 같은 LLM 을 다시 묻는다 — Gemini 장애가 렌더 폭주로 번지지 않아야 한다.
+        stubGemini.build = request -> {
+            throw GeminiApiException.upstreamError(new RuntimeException("gemini 503"));
+        };
+
+        assertNull(
+            extractorFetching(PRICE_HIDDEN_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).originalPrice()
+        );
+    }
+
+    @Test
+    @DisplayName("LLM 추출로 끝난 결과도 판매가가 본문에 없고 정가를 모르면 승격을 제안한다")
+    void proposesRenderOnLlmPathToo() {
+        String dataIslandOnly = "<html><head><script type=\"application/json\">"
+            + "{\"product\":{\"name\":\"상품\",\"price\":9500}}</script></head>"
+            + "<body>" + "가격 표시는 스크립트가 그리는 상품 설명 본문. ".repeat(20) + "</body></html>";
+        stubGemini.build = request ->
+            new GeminiExtractionResult(true, "상품", 9_500, null, "KRW", "https://cdn.example.com/p.png");
+
+        assertThrows(
+            OriginalPriceHiddenException.class,
+            () -> extractorFetching(dataIslandOnly).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
+        );
+    }
+
+    @Test
+    @DisplayName("판매가가 본문에 보이면 정가를 못 찾아도 승격을 제안하지 않는다")
+    void doesNotProposeRenderWhenPriceIsVisible() {
+        stubGemini.build = request -> new GeminiOriginalPriceResult(null);
+
+        assertNull(
+            extractorFetching(PRICE_VISIBLE_HTML).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE).originalPrice()
+        );
     }
 
     @Test
