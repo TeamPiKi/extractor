@@ -36,6 +36,8 @@ class FallbackProductLinkExtractorTest {
     private final ProductSnapshot snapshot =
         new ProductSnapshot(null, "나이키", "https://cdn.example.com/nike.png", 99_000, null);
     private final ProductSnapshot incomplete = new ProductSnapshot(null, "톡딜 상품", "https://cdn.example.com/p.png", null, null);
+    // 정가 승격에서 렌더가 답을 못 냈을 때 plain 문서로 얻는 마지막 수단(미뤄 둔 LLM)의 결과
+    private final ProductSnapshot lastResort = snapshot.withOriginalPrice(119_000);
 
     private static class FakeStrategy implements LinkExtractionStrategy {
         private final Function<ProductLink, ProductSnapshot> fn;
@@ -393,6 +395,157 @@ class FallbackProductLinkExtractorTest {
 
         assertEquals(blockedDomains, plain.lastBlockedDomains);
         assertEquals(blockedDomains, headless.lastBlockedDomains);
+    }
+
+    @Test
+    @DisplayName("plain 이 정가를 렌더 뒤로 미루면 headless 결과에서 정가만 가져와 plain 결과에 얹는다")
+    void revealsOriginalPriceFromHeadless() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        ProductSnapshot rendered = new ProductSnapshot(
+            null, "렌더된 다른 이름", "https://cdn.example.com/rendered.png", 99_000, 129_000, null, null, null);
+        FakeStrategy headless = new FakeStrategy(l -> rendered);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+        ProductSnapshot result = fallback(true, plain, headless, registry).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(snapshot.withOriginalPrice(129_000), result);
+        assertEquals(1, headless.calls);
+        // 이미 살아 있는 요청이라 구제 성공률 카운터에 섞이면 안 된다
+        assertEquals(0, registry.find("product.extract.escalation").counters().size());
+    }
+
+    @Test
+    @DisplayName("렌더 결과의 판매가가 plain 과 다르면 그 정가는 버리고 plain 문서로 마지막 수단을 쓴다")
+    void ignoresRenderedOriginalPriceWhenPriceDiffers() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        ProductSnapshot rendered =
+            new ProductSnapshot(null, "나이키", "https://cdn.example.com/nike.png", 109_000, 129_000, null, null, null);
+        FakeStrategy headless = new FakeStrategy(l -> rendered);
+
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(lastResort, result);
+    }
+
+    @Test
+    @DisplayName("렌더가 같은 판매가로 끝냈는데도 정가가 없으면 LLM 을 다시 묻지 않고 plain 결과로 끝낸다")
+    void keepsPlainSnapshotWhenRenderedHasNoOriginalPrice() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+
+        assertEquals(snapshot, fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
+    }
+
+    @Test
+    @DisplayName("렌더 결과가 판매가를 못 채웠으면 그 정가는 버리고 plain 문서로 마지막 수단을 쓴다")
+    void ignoresRenderedOriginalPriceWhenRenderedIsIncomplete() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        ProductSnapshot rendered =
+            new ProductSnapshot(null, "나이키", "https://cdn.example.com/nike.png", null, 129_000, null, null, null);
+        FakeStrategy headless = new FakeStrategy(l -> rendered);
+
+        assertEquals(lastResort, fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
+    }
+
+    @Test
+    @DisplayName("정가를 보태러 가는 headless 에도 authorized·신원·차단 도메인이 그대로 전달된다")
+    void originalPriceEscalationPassesRequestContextToHeadless() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        BlockedDomains blockedDomains = BlockedDomains.fromRequest(List.of("search.shopping.naver.com"));
+
+        fallback(true, plain, headless).extract(link, true, null, DeclaredIdentity.DEFAULT, blockedDomains);
+
+        assertEquals(Boolean.TRUE, headless.lastAuthorized);
+        assertEquals(DeclaredIdentity.DEFAULT, headless.lastIdentity);
+        assertEquals(blockedDomains, headless.lastBlockedDomains);
+    }
+
+    @Test
+    @DisplayName("남은 기한에 렌더와 정가 LLM 의 최악 합이 안 들어가면 렌더 없이 마지막 수단을 쓴다")
+    void skipsOriginalPriceEscalationWhenBudgetIsShort() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        FallbackProductLinkExtractor extractor = fallback(true, plain, headless);
+
+        ProductSnapshot result = ExtractionDeadline.within(
+            Duration.ofSeconds(10), () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
+
+        assertEquals(lastResort, result);
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("정가를 보태려던 headless 가 실패하면 plain 문서로 마지막 수단을 쓴다")
+    void headlessFailureKeepsPlainSnapshotOnOriginalPriceEscalation() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> {
+            throw PageFetchException.clientError(new RuntimeException("403"));
+        });
+
+        ProductSnapshot result = fallback(true, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(lastResort, result);
+        assertEquals(1, headless.calls);
+    }
+
+    @Test
+    @DisplayName("headless 가 꺼져 있으면 정가가 렌더 뒤에 있어도 렌더 없이 마지막 수단을 쓴다")
+    void headlessOffKeepsPlainSnapshotOnOriginalPriceEscalation() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+
+        ProductSnapshot result = fallback(false, plain, headless).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(lastResort, result);
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("호출자 기한이 지났으면 정가를 보태러 headless 로 가지 않는다")
+    void passedDeadlineKeepsPlainSnapshotOnOriginalPriceEscalation() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        FallbackProductLinkExtractor extractor = fallback(true, plain, headless);
+
+        ProductSnapshot result = ExtractionDeadline.within(
+            Duration.ZERO, () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
+
+        assertEquals(lastResort, result);
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("기한이 넉넉하면 정가를 보태러 headless 로 간다")
+    void escalatesForOriginalPriceWhenBudgetFits() {
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw OriginalPriceHiddenException.behindRender(snapshot, () -> lastResort);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        FallbackProductLinkExtractor extractor = fallback(true, plain, headless);
+
+        ExtractionDeadline.within(
+            Duration.ofSeconds(80), () -> extractor.extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE));
+
+        assertEquals(1, headless.calls);
     }
 
     @Test

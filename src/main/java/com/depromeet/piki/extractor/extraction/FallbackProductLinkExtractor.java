@@ -1,13 +1,16 @@
 package com.depromeet.piki.extractor.extraction;
 
+import com.depromeet.piki.extractor.common.exception.ExtractionException;
 import com.depromeet.piki.extractor.domain.BlockedDomains;
 import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
+import com.depromeet.piki.extractor.extraction.gemini.GeminiHttpClient;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Objects;
+import java.util.OptionalLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -15,12 +18,16 @@ import org.springframework.stereotype.Component;
 
 /**
  * 상품 URL 추출의 공개 진입점. 두 전략을 "plain 먼저, plain 으로 못 끝내면 headless" 로 엮는다 — headless 는
- * 비싸고 느려 plain 으로 끝나지 않는 경우에만 탄다. "못 끝냄"은 두 축이다:
+ * 비싸고 느려 plain 으로 부족한 경우에만 탄다. "못 끝냄"은 두 축이다:
  * <ul>
  *   <li>fetch 가 막힘 — escalatable 차단({@code PageFetchException.escalatable} 이 단일 진실).</li>
  *   <li>fetch 는 성공했지만 결과가 READY 필수 필드를 못 채움 — 부분 SSR SPA(이름·이미지 OG 만 SSR 에 싣고
  *       가격은 JS 렌더 뒤에만 존재, 카카오 톡딜 실측)는 문서에 없는 값이라 LLM 도 못 뽑는다.</li>
  * </ul>
+ *
+ * <p>plain 이 READY 로 끝냈어도 정가가 렌더 뒤에만 보이는 페이지({@link OriginalPriceHiddenException})는 headless 로
+ * 정가만 보탠다. 부가 정보를 위한 승격이라 실패해도 plain 결과는 잃지 않는다. 정가 LLM 은 렌더까지 해 본 뒤의
+ * 마지막 수단이다 — 렌더가 같은 판매가로 답을 못 냈을 때만 plain 문서로 묻는다.
  *
  * <p>추출 경로는 요청의 authorized 와 무관하게 항상 같다 — 브라우저로 여는 것 자체는 우리 신원을 밝히고 하는
  * 일이라 허락을 전제하지 않는다. authorized 를 쓰는 곳은 렌더 서비스뿐이고,
@@ -40,8 +47,10 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private static final String OUTCOME_SUCCESS = "success";
     private static final String OUTCOME_FAILED = "failed";
     private static final String CATEGORY_UNKNOWN = "unknown";
-    /** fetch 실패 코드가 아닌 유일한 category — plain 은 성공했지만 READY 필수 필드를 못 채워 승격된 경우. */
+    /** 메트릭 category 중 fetch 실패 코드가 아닌 유일한 값 — plain 은 성공했지만 READY 필수 필드를 못 채워 승격된 경우. */
     private static final String CATEGORY_INCOMPLETE_SNAPSHOT = "INCOMPLETE_SNAPSHOT";
+    /** 로그 전용 — 이 경로는 escalation 카운터에 세지 않는다({@link #revealOriginalPrice}). */
+    private static final String CATEGORY_ORIGINAL_PRICE_HIDDEN = "ORIGINAL_PRICE_HIDDEN";
 
     /** 필드의 {@code @Qualifier} 는 lombok.config 의 copyableAnnotations 가 생성자 파라미터로 복사한다. */
     @Qualifier(LinkExtractionStrategy.PLAIN)
@@ -61,12 +70,18 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     ) {
         // 이 서비스의 운영 비상 차단. 꺼져 있으면 승격 자체가 없어 정적 fetch 결과가 그대로 나간다.
         if (!headlessProperties.enabled()) {
-            return plain.extract(link, authorized, model, identity, blockedDomains);
+            try {
+                return plain.extract(link, authorized, model, identity, blockedDomains);
+            } catch (OriginalPriceHiddenException e) {
+                return e.lastResort();
+            }
         }
 
         ProductSnapshot plainSnapshot;
         try {
             plainSnapshot = plain.extract(link, authorized, model, identity, blockedDomains);
+        } catch (OriginalPriceHiddenException e) {
+            return revealOriginalPrice(e, link, authorized, model, identity, blockedDomains);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
@@ -121,6 +136,77 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             );
             throw headlessFailure;
         }
+    }
+
+    /**
+     * 렌더 결과에서 정가만 가져온다 — 판매가가 plain 과 다르면 다른 옵션의 가격 쌍일 수 있어 버린다. 이름·이미지·
+     * 판매가·출처는 이미 성공한 plain 것을 유지한다. 렌더가 같은 판매가로 끝났으면 그쪽 파이프라인이 정가 LLM 까지
+     * 물은 것이라 거기서 멈추고, 그 밖에는 plain 문서로 마지막 수단을 쓴다. escalation 카운터에는 세지 않는다:
+     * 그 카운터의 outcome 은 "요청을 살렸는가" 인데 이 요청은 이미 살아 있다.
+     */
+    private ProductSnapshot revealOriginalPrice(
+        OriginalPriceHiddenException hidden,
+        ProductLink link,
+        boolean authorized,
+        String model,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
+        ProductSnapshot plainSnapshot = hidden.plainSnapshot();
+        if (!fitsRemainingBudget()) {
+            log.info("extract escalate=headless outcome=skipped_deadline plainCategory={} url={}",
+                CATEGORY_ORIGINAL_PRICE_HIDDEN, link.safeLogString());
+            return hidden.lastResort();
+        }
+        log.info("extract escalate=headless plainCategory={} url={}", CATEGORY_ORIGINAL_PRICE_HIDDEN, link.safeLogString());
+        ProductSnapshot rendered;
+        try {
+            rendered = headless.extract(link, authorized, model, identity, blockedDomains);
+        } catch (RuntimeException headlessFailure) {
+            log.info(
+                "extract escalate=headless outcome=failed plainCategory={} headlessCause={} url={}",
+                CATEGORY_ORIGINAL_PRICE_HIDDEN,
+                headlessFailure instanceof ExtractionException coded
+                    ? coded.code().name()
+                    : headlessFailure.getClass().getSimpleName(),
+                link.safeLogString()
+            );
+            return hidden.lastResort();
+        }
+        boolean samePrice = Objects.equals(rendered.currentPrice(), plainSnapshot.currentPrice());
+        ProductSnapshot revealed = samePrice ? plainSnapshot.withOriginalPrice(rendered.originalPrice()) : plainSnapshot;
+        log.info(
+            "extract escalate=headless outcome={} plainCategory={} discounted={} url={}",
+            revealedOutcome(rendered, samePrice, revealed),
+            CATEGORY_ORIGINAL_PRICE_HIDDEN,
+            revealed.originalPrice() != null && revealed.originalPrice() > revealed.currentPrice(),
+            link.safeLogString()
+        );
+        return samePrice ? revealed : hidden.lastResort();
+    }
+
+    /**
+     * 필수 승격은 잃을 것이 없어 기한을 넘겨도 시작하지만, 이 승격은 완성된 응답을 쥐고 있다. 렌더와 렌더 뒤
+     * 정가 LLM 의 최악 합이 남은 시간에 안 들어가면 시작하지 않는다 — 넘치면 성공이던 요청이 일시 실패가 된다.
+     */
+    private boolean fitsRemainingBudget() {
+        OptionalLong remaining = ExtractionDeadline.remainingMillis();
+        if (remaining.isEmpty()) {
+            return true;
+        }
+        long worstMillis = headlessProperties.connectTimeout().plus(headlessProperties.readTimeout()).toMillis()
+            + GeminiHttpClient.READ_TIMEOUT_MS;
+        return remaining.getAsLong() >= worstMillis;
+    }
+
+    private static String revealedOutcome(ProductSnapshot rendered, boolean samePrice, ProductSnapshot revealed) {
+        if (rendered.missingReadyField()) {
+            return "rendered_incomplete";
+        }
+        if (!samePrice) {
+            return "price_mismatch";
+        }
+        return revealed.originalPrice() == null ? "unchanged" : "revealed";
     }
 
     private Counter escalationCounter(String outcome, String category) {

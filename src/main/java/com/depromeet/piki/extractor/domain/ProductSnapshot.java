@@ -39,7 +39,7 @@ public record ProductSnapshot(
     }
 
     /**
-     * 구조화 파싱 뒤 LLM 이 보강한 정가를 얹은 사본. 신뢰 규칙은 fromExtracted 와 같되 예외를 던지지 않는다 —
+     * 추출이 끝난 뒤 따로 얻은 정가(LLM 보강·렌더 승격)를 얹은 사본. 신뢰 규칙은 fromExtracted 와 같되 예외를 던지지 않는다 —
      * 보강은 부가 정보라 그 값이 이상해도 이미 성공한 추출을 잃지 않는다.
      */
     public ProductSnapshot withOriginalPrice(Integer enrichedOriginalPrice) {
