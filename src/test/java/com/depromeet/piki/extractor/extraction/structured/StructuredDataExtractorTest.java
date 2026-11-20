@@ -491,6 +491,93 @@ class StructuredDataExtractorTest {
         assertEquals("상품명 | 사이트", snapshotOrNull(extractor.extract(pageOf(html))).name());
     }
 
+    // --- JSON-LD 결과의 정가를 OpenGraph 로 보충 ---
+
+    private static final String JSON_LD_PRICE_ONLY = """
+        <script type="application/ld+json">
+        {"@type":"Product","name":"플리스 재킷","image":"https://cdn.example.com/p.jpg",
+         "offers":{"@type":"Offer","price":"%s","priceCurrency":"KRW"}}
+        </script>""";
+
+    private String jsonLdWithOpenGraph(String jsonLdPrice, String openGraphTags) {
+        return "<html><head>" + JSON_LD_PRICE_ONLY.formatted(jsonLdPrice) + openGraphTags + "</head><body></body></html>";
+    }
+
+    @Test
+    @DisplayName("JSON-LD 에 판매가만 있고 og 의 정가와 판매가가 같으면 할인 없음(정가 = 판매가)으로 채운다")
+    void fillsOriginalPriceFromOpenGraphWhenNoDiscount() {
+        String html = jsonLdWithOpenGraph("138000", """
+            <meta property="product:price:amount" content="138000"/>
+            <meta property="product:sale_price:amount" content="138000"/>""");
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(138_000, snapshot.currentPrice());
+        assertEquals(138_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 판매가가 og 의 sale_price 와 같으면 og 의 price:amount 를 정가로 채운다")
+    void fillsOriginalPriceFromOpenGraphWhenDiscounted() {
+        String html = jsonLdWithOpenGraph("107100", """
+            <meta property="product:price:amount" content="119000"/>
+            <meta property="product:sale_price:amount" content="107100"/>""");
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(107_100, snapshot.currentPrice());
+        assertEquals(119_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 판매가가 og 의 판매가와 다르면 다른 옵션의 가격 쌍일 수 있어 정가를 모름으로 둔다")
+    void keepsOriginalPriceUnknownWhenOpenGraphPriceDiffers() {
+        String html = jsonLdWithOpenGraph("99000", """
+            <meta property="product:price:amount" content="119000"/>
+            <meta property="product:sale_price:amount" content="107100"/>""");
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(99_000, snapshot.currentPrice());
+        assertNull(snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("og 에 판매가만 있고 정가 태그가 없으면 JSON-LD 결과의 정가는 모름 그대로다")
+    void keepsOriginalPriceUnknownWhenOpenGraphHasNoOriginalPrice() {
+        String html = jsonLdWithOpenGraph("200000", """
+            <meta property="product:price:amount" content="200000"/>""");
+
+        assertNull(snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 판매가가 og 의 price:amount 와 같으면 og 의 정가 태그(normal_price)를 정가로 채운다")
+    void fillsOriginalPriceFromOpenGraphNormalPriceTag() {
+        String html = jsonLdWithOpenGraph("27900", """
+            <meta property="product:price:amount" content="27900"/>
+            <meta property="product:price:normal_price" content="36200"/>""");
+
+        assertEquals(36_200, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
+    @Test
+    @DisplayName("JSON-LD 가 정가를 직접 주면 og 의 값으로 덮지 않는다")
+    void keepsJsonLdOriginalPriceOverOpenGraph() {
+        String html = """
+            <html><head>
+            <script type="application/ld+json">
+            {"@type":"Product","name":"플리스 재킷","image":"https://cdn.example.com/p.jpg",
+             "offers":{"@type":"Offer","price":"107100","priceCurrency":"KRW",
+              "priceSpecification":{"@type":"UnitPriceSpecification","priceType":"https://schema.org/ListPrice","price":"125000"}}}
+            </script>
+            <meta property="product:price:amount" content="119000"/>
+            <meta property="product:sale_price:amount" content="107100"/>
+            </head><body></body></html>""";
+
+        assertEquals(125_000, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
     // --- 실패 사유(reason) 분류 ---
 
     @Test
