@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.jsoup.nodes.Document;
@@ -52,12 +53,12 @@ public class StructuredDataExtractor {
      * Gemini fallback 과 안전하게 공유된다.
      *
      * <p>JSON-LD 를 먼저 보는 이유는 구조적 가격을 정확히 들고 있기 때문이고, OpenGraph 는 가격 표준 태그가
-     * 없어 보조에 그친다.
+     * 없어 보조에 그친다. 단 JSON-LD 가 정가를 안 주면 OG 의 정가로 보충한다.
      */
     public StructuredExtraction extract(Document document, ProductLink link) {
         StructuredExtraction fromJsonLd = fromJsonLd(document, link);
-        if (fromJsonLd instanceof StructuredExtraction.Extracted) {
-            return fromJsonLd;
+        if (fromJsonLd instanceof StructuredExtraction.Extracted extracted) {
+            return withOpenGraphOriginalPrice(extracted, document);
         }
         StructuredExtraction fromOpenGraph = fromOpenGraph(document, link);
         if (fromOpenGraph instanceof StructuredExtraction.Extracted) {
@@ -77,6 +78,29 @@ public class StructuredDataExtractor {
     /** 이름과 달리 "데이터에 더 근접한(=정보량이 큰) 쪽"을 고른다 — 보강 여지를 알려주는 사유가 남아야 하기 때문이다. */
     private StructuredExtraction.Miss worse(StructuredExtraction.Miss a, StructuredExtraction.Miss b) {
         return a.rank() >= b.rank() ? a : b;
+    }
+
+    /**
+     * JSON-LD 에는 판매가만, OG 에는 정가와 판매가를 둘 다 싣는 몰이 있다(cafe24 계열 실측 — 할인이 없으면 두 OG 값이
+     * 같다). OG 판매가가 JSON-LD 판매가와 같을 때만 정가를 가져온다: 다르면 다른 옵션의 가격 쌍일 수 있다.
+     */
+    private StructuredExtraction.Extracted withOpenGraphOriginalPrice(
+        StructuredExtraction.Extracted jsonLd,
+        Document document
+    ) {
+        ProductSnapshot snapshot = jsonLd.snapshot();
+        if (snapshot.originalPrice() != null) {
+            return jsonLd;
+        }
+        Optional<ResolvedPrice> openGraph = openGraphTagPrice(document);
+        if (openGraph.isEmpty() || openGraph.get().originalPrice() == null) {
+            return jsonLd;
+        }
+        if (!snapshot.currentPrice().equals(parsePrice(openGraph.get().price()))) {
+            return jsonLd;
+        }
+        Integer originalPrice = parsePrice(openGraph.get().originalPrice());
+        return new StructuredExtraction.Extracted(snapshot.withOriginalPrice(originalPrice));
     }
 
     // --- JSON-LD (schema.org/Product) ---
@@ -322,6 +346,21 @@ public class StructuredDataExtractor {
      * 안 맞는 사이트를 파서가 직접 건진다. OG 표준 가격 태그가 있으면 불필요한 state 파싱을 하지 않는다.
      */
     private ResolvedPrice resolvePrice(Document document) {
+        Optional<ResolvedPrice> openGraph = openGraphTagPrice(document);
+        if (openGraph.isPresent()) {
+            return openGraph.get();
+        }
+        String ogCurrency = metaContent(document, "product:price:currency");
+        ResolvedPrice embedded = priceFromEmbeddedState(document);
+        if (embedded == null) {
+            return new ResolvedPrice(null, null, ogCurrency);
+        }
+        String currency = embedded.currency() != null ? embedded.currency() : ogCurrency;
+        return new ResolvedPrice(embedded.price(), null, currency);
+    }
+
+    /** OG 가격 태그만 읽는다. 가격 태그가 하나도 없으면 empty. */
+    private Optional<ResolvedPrice> openGraphTagPrice(Document document) {
         String ogCurrency = metaContent(document, "product:price:currency");
         String ogSaleAmount = metaContent(document, "product:sale_price:amount");
         String ogAmount = metaContent(document, "product:price:amount");
@@ -329,17 +368,13 @@ public class StructuredDataExtractor {
         if (ogSaleAmount != null) {
             String saleCurrency = metaContent(document, "product:sale_price:currency");
             String originalPrice = ogAmount != null ? ogAmount : originalPriceTag(document);
-            return new ResolvedPrice(ogSaleAmount, originalPrice, saleCurrency != null ? saleCurrency : ogCurrency);
+            return Optional.of(
+                new ResolvedPrice(ogSaleAmount, originalPrice, saleCurrency != null ? saleCurrency : ogCurrency));
         }
         if (ogAmount != null) {
-            return new ResolvedPrice(ogAmount, originalPriceTag(document), ogCurrency);
+            return Optional.of(new ResolvedPrice(ogAmount, originalPriceTag(document), ogCurrency));
         }
-        ResolvedPrice embedded = priceFromEmbeddedState(document);
-        if (embedded == null) {
-            return new ResolvedPrice(null, null, ogCurrency);
-        }
-        String currency = embedded.currency() != null ? embedded.currency() : ogCurrency;
-        return new ResolvedPrice(embedded.price(), null, currency);
+        return Optional.empty();
     }
 
     /** 정가 태그는 표준(original_price)과 무신사의 비표준(normal_price) 둘 다 실측돼 둘 다 본다. */
