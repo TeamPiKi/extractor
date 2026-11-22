@@ -240,6 +240,156 @@ class DataScriptOriginalPriceTest {
     }
 
     @Test
+    @DisplayName("가격 칸이 객체면 그 안의 판매가와 정가를 읽는다")
+    void readsNestedPriceObject() {
+        OptionalInt found = find("""
+            {"resource":{"name":"GANNI Naplack Penny Loafer","price":{"original":280000,"sale":200000},
+              "discount":{"type":"percentage","value":28},
+              "variants":[{"price":{"original":280000,"sale":200000}},{"price":{"original":280000,"sale":200000}}]}}""",
+            200_000);
+
+        assertEquals(OptionalInt.of(280_000), found);
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체의 정가와 판매가가 같으면 할인 없음으로 읽는다")
+    void readsNoDiscountFromNestedPriceObject() {
+        OptionalInt found = find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":200000,"sale":200000},"discounts":[]}""",
+            200_000);
+
+        assertEquals(OptionalInt.of(200_000), found);
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체의 정가 칸이 비었는데 상품 객체에 할인 정보가 있으면 읽지 않는다")
+    void doesNotReadNoDiscountFromNestedPriceObjectWhenProductHasDiscount() {
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":null,"sale":200000},
+             "discount":{"type":"percentage","value":20}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":null,"sale":200000,"retail":250000}}""",
+            200_000).isEmpty());
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체의 정가 칸이 비었고 할인 정보가 빈 객체·빈 배열이면 할인 없음으로 읽는다")
+    void readsNoDiscountWhenDiscountContainersAreEmpty() {
+        OptionalInt found = find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":null,"sale":200000},"discount":{},"discounts":[]}""",
+            200_000);
+
+        assertEquals(OptionalInt.of(200_000), found);
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체의 판매가가 다르면 읽지 않는다")
+    void requiresSamePriceInNestedPriceObject() {
+        OptionalInt found = find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":280000,"sale":210000}}""",
+            200_000);
+
+        assertTrue(found.isEmpty());
+    }
+
+    @Test
+    @DisplayName("이름이 다른 객체의 안쪽 가격 객체는 읽지 않는다")
+    void requiresSameNameForNestedPriceObject() {
+        OptionalInt found = find("""
+            {"name":"다른 로퍼","price":{"original":280000,"sale":200000}}""",
+            200_000);
+
+        assertTrue(found.isEmpty());
+    }
+
+    @Test
+    @DisplayName("같은 상품 객체가 스크립트에 두 번 실려 있어도 답이 같으면 그 값을 읽는다")
+    void readsNestedPriceObjectRepeatedInOneScript() {
+        OptionalInt found = find("""
+            {"queries":[{"data":{"name":"GANNI Naplack Penny Loafer","price":{"original":280000,"sale":200000}}},
+                        {"data":{"name":"GANNI Naplack Penny Loafer","price":{"original":280000,"sale":200000}}}]}""",
+            200_000);
+
+        assertEquals(OptionalInt.of(280_000), found);
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체 안에 할인 흔적이 있으면 정가 칸이 비어도 할인 없음으로 읽지 않는다")
+    void doesNotReadNoDiscountWhenNestedPriceObjectCarriesDiscount() {
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":null,"sale":200000,"discountRate":20}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":0,"sale":200000,"discount":50000}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":null,"sale":200000,"compareAt":{"amount":250000}}}""",
+            200_000).isEmpty());
+    }
+
+    @Test
+    @DisplayName("price 가 아닌 다른 가격 객체(배송비·회원가)는 값이 판매가와 같아도 읽지 않는다")
+    void readsOnlyThePriceObject() {
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":200000,"marketPrice":250000,
+             "shippingPrice":{"sale":200000,"original":200000}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":200000,"memberPrice":{"sale":200000,"original":230000}}""",
+            200_000).isEmpty());
+    }
+
+    @Test
+    @DisplayName("안쪽 가격 객체에 판매가보다 싼 금액이 있으면 정가와 판매가가 같아도 할인 없음으로 읽지 않는다")
+    void doesNotReadNoDiscountWhenNestedPriceObjectHasCheaperAmount() {
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":200000,"sale":200000,"discounted":150000}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"sale":200000,"final":150000,"original":200000}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","salePrice":150000,"price":{"sale":200000,"original":200000}}""",
+            200_000).isEmpty());
+    }
+
+    @Test
+    @DisplayName("정가와 판매가가 같게 적혀 있어도 할인 정보에 양수가 있으면 할인 없음으로 읽지 않는다")
+    void doesNotReadNoDiscountWhenEqualPricesContradictDiscount() {
+        assertTrue(find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":200000,"sale":200000},
+             "discount":{"type":"percentage","value":40,"discounted":80000}}""",
+            200_000).isEmpty());
+        assertTrue(find("""
+            {"title":"GANNI Naplack Penny Loafer","price":200000,"originalPrice":200000,"discountRate":40}""",
+            200_000).isEmpty());
+    }
+
+    @Test
+    @DisplayName("0 으로 채운 할인 객체와 빈 할인 배열은 할인의 흔적으로 보지 않는다")
+    void treatsZeroFilledDiscountAsNoDiscount() {
+        assertEquals(OptionalInt.of(200_000), find("""
+            {"name":"GANNI Naplack Penny Loafer","price":{"original":200000,"sale":200000},
+             "discount":{"type":null,"discounted":0,"value":0},"discounts":[{"value":0}]}""",
+            200_000));
+        assertEquals(OptionalInt.of(200_000), find("""
+            {"title":"GANNI Naplack Penny Loafer","price":200000,"originalPrice":null,"discounts":[]}""",
+            200_000));
+    }
+
+    @Test
+    @DisplayName("한 객체의 나란한 가격 칸과 안쪽 가격 객체가 서로 다른 정가를 말하면 읽지 않는다")
+    void givesUpWhenFlatAndNestedAnswersDisagree() {
+        OptionalInt found = find("""
+            [{"name":"GANNI Naplack Penny Loafer","salePrice":200000,"originalPrice":250000},
+             {"name":"GANNI Naplack Penny Loafer","price":{"sale":200000,"original":280000}}]""",
+            200_000);
+
+        assertTrue(found.isEmpty());
+    }
+
+    @Test
     @DisplayName("깨진 JSON 스크립트는 건너뛰고 JSON-LD 스크립트는 보지 않는다")
     void skipsBrokenJsonAndIgnoresJsonLd() {
         String html = "<html><head>"
