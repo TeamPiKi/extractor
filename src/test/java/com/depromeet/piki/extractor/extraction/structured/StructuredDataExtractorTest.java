@@ -578,6 +578,58 @@ class StructuredDataExtractorTest {
         assertEquals(125_000, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
     }
 
+    // --- 데이터 스크립트의 정가로 보충 (읽는 조건의 분기는 DataScriptOriginalPriceTest) ---
+
+    private static final String PRODUCT_DATA_SCRIPT = """
+        <script id="__APOLLO_STATE__" type="application/json">
+        {"ProductNotMine:1":{"title":"플리스 재킷","price":75000,"original_price":125000,"discount_rate":40}}
+        </script>""";
+
+    @Test
+    @DisplayName("JSON-LD 와 og 에 정가가 없으면 데이터 스크립트의 같은 상품 객체에서 정가를 채운다")
+    void fillsOriginalPriceFromDataScript() {
+        String html = jsonLdWithOpenGraph("75000", "<meta property=\"product:price:amount\" content=\"75000\"/>"
+            + PRODUCT_DATA_SCRIPT);
+
+        ProductSnapshot snapshot = snapshotOrNull(extractor.extract(pageOf(html)));
+
+        assertEquals(75_000, snapshot.currentPrice());
+        assertEquals(125_000, snapshot.originalPrice());
+    }
+
+    @Test
+    @DisplayName("og 로 뽑은 결과도 정가가 없으면 데이터 스크립트의 정가로 채운다")
+    void fillsOriginalPriceFromDataScriptOnOpenGraphPath() {
+        String html = """
+            <html><head>
+            <meta property="og:title" content="플리스 재킷"/>
+            <meta property="og:image" content="https://cdn.example.com/og.jpg"/>
+            <meta property="product:price:amount" content="75000"/>
+            """ + PRODUCT_DATA_SCRIPT + "</head><body></body></html>";
+
+        assertEquals(125_000, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
+    @Test
+    @DisplayName("og 의 판매가가 JSON-LD 와 달라 og 정가를 못 쓰면 데이터 스크립트의 정가로 채운다")
+    void fallsThroughToDataScriptWhenOpenGraphPriceDiffers() {
+        String html = jsonLdWithOpenGraph("75000", """
+            <meta property="product:price:amount" content="99000"/>
+            <meta property="product:sale_price:amount" content="80000"/>""" + PRODUCT_DATA_SCRIPT);
+
+        assertEquals(125_000, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
+    @Test
+    @DisplayName("og 가 정가를 주면 데이터 스크립트의 값으로 덮지 않는다")
+    void keepsOpenGraphOriginalPriceOverDataScript() {
+        String html = jsonLdWithOpenGraph("75000", """
+            <meta property="product:price:amount" content="99000"/>
+            <meta property="product:sale_price:amount" content="75000"/>""" + PRODUCT_DATA_SCRIPT);
+
+        assertEquals(99_000, snapshotOrNull(extractor.extract(pageOf(html))).originalPrice());
+    }
+
     // --- 실패 사유(reason) 분류 ---
 
     @Test

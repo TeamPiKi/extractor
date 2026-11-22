@@ -10,8 +10,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.springframework.stereotype.Component;
@@ -27,6 +29,7 @@ import tools.jackson.databind.ObjectMapper;
  * <p>jsoup 은 마크업에서 {@code <script ld+json>}·{@code <meta og:*>} 블록을 정확히 꺼내는 책임만 지고,
  * JSON-LD 값 자체는 Jackson 트리(JsonNode)로 다룬다.
  */
+@Slf4j
 @RequiredArgsConstructor
 @Component
 public class StructuredDataExtractor {
@@ -53,16 +56,16 @@ public class StructuredDataExtractor {
      * Gemini fallback 과 안전하게 공유된다.
      *
      * <p>JSON-LD 를 먼저 보는 이유는 구조적 가격을 정확히 들고 있기 때문이고, OpenGraph 는 가격 표준 태그가
-     * 없어 보조에 그친다. 단 JSON-LD 가 정가를 안 주면 OG 의 정가로 보충한다.
+     * 없어 보조에 그친다. 단 JSON-LD 가 정가를 안 주면 OG 의 정가로, 그래도 없으면 데이터 스크립트의 정가로 보충한다.
      */
     public StructuredExtraction extract(Document document, ProductLink link) {
         StructuredExtraction fromJsonLd = fromJsonLd(document, link);
         if (fromJsonLd instanceof StructuredExtraction.Extracted extracted) {
-            return withOpenGraphOriginalPrice(extracted, document);
+            return withDataScriptOriginalPrice(withOpenGraphOriginalPrice(extracted, document, link), document, link);
         }
         StructuredExtraction fromOpenGraph = fromOpenGraph(document, link);
-        if (fromOpenGraph instanceof StructuredExtraction.Extracted) {
-            return fromOpenGraph;
+        if (fromOpenGraph instanceof StructuredExtraction.Extracted extracted) {
+            return withDataScriptOriginalPrice(extracted, document, link);
         }
         return worse((StructuredExtraction.Miss) fromJsonLd, (StructuredExtraction.Miss) fromOpenGraph);
     }
@@ -86,7 +89,8 @@ public class StructuredDataExtractor {
      */
     private StructuredExtraction.Extracted withOpenGraphOriginalPrice(
         StructuredExtraction.Extracted jsonLd,
-        Document document
+        Document document,
+        ProductLink link
     ) {
         ProductSnapshot snapshot = jsonLd.snapshot();
         if (snapshot.originalPrice() != null) {
@@ -99,8 +103,40 @@ public class StructuredDataExtractor {
         if (!snapshot.currentPrice().equals(parsePrice(openGraph.get().price()))) {
             return jsonLd;
         }
-        Integer originalPrice = parsePrice(openGraph.get().originalPrice());
-        return new StructuredExtraction.Extracted(snapshot.withOriginalPrice(originalPrice));
+        ProductSnapshot merged = snapshot.withOriginalPrice(parsePrice(openGraph.get().originalPrice()));
+        if (merged.originalPrice() == null) {
+            return jsonLd;
+        }
+        return filled(merged, "open_graph", link);
+    }
+
+    /** 표준 태그에 정가가 없을 때의 마지막 결정론 수단. 읽는 조건은 {@link DataScriptOriginalPrice} 가 정본이다. */
+    private StructuredExtraction.Extracted withDataScriptOriginalPrice(
+        StructuredExtraction.Extracted extracted,
+        Document document,
+        ProductLink link
+    ) {
+        ProductSnapshot snapshot = extracted.snapshot();
+        if (snapshot.originalPrice() != null) {
+            return extracted;
+        }
+        OptionalInt originalPrice =
+            DataScriptOriginalPrice.find(document, objectMapper, snapshot.name(), snapshot.currentPrice());
+        if (originalPrice.isEmpty()) {
+            return extracted;
+        }
+        return filled(snapshot.withOriginalPrice(originalPrice.getAsInt()), "data_script", link);
+    }
+
+    /** 전 몰 공통 규칙이라 오탐은 운영 로그로만 찾을 수 있다 — LLM 보강 로그와 같은 머리말로 출처를 남긴다. */
+    private StructuredExtraction.Extracted filled(ProductSnapshot snapshot, String source, ProductLink link) {
+        log.info(
+            "extract originalPrice via={} discounted={} url={}",
+            source,
+            snapshot.originalPrice() != null && snapshot.originalPrice() > snapshot.currentPrice(),
+            link.safeLogString()
+        );
+        return new StructuredExtraction.Extracted(snapshot);
     }
 
     // --- JSON-LD (schema.org/Product) ---
