@@ -61,6 +61,10 @@ dependencies {
     // 이미지(OCR) 경로: S3 raw 읽기 + 크롭 결과 업로드 (이관 6단계). 버전은 위 BOM 이 관리.
     implementation("software.amazon.awssdk:s3")
 
+    // 몰별 규칙 배포본(운영 Redis) 읽기. Spring Data Redis 가 아닌 이유는 RedisRuleSnapshotReader 의 Javadoc.
+    // 버전은 Spring Boot BOM 관리.
+    implementation("io.lettuce:lettuce-core")
+
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
     implementation("com.google.protobuf:protobuf-java-util:$protobufVersion")
 

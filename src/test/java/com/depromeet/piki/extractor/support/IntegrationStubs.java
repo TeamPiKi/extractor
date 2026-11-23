@@ -41,4 +41,10 @@ public class IntegrationStubs {
     StubHeadlessRenderer headlessRenderer() {
         return new StubHeadlessRenderer();
     }
+
+    @Bean
+    @Primary
+    StubRuleSnapshotReader ruleSnapshotReader() {
+        return new StubRuleSnapshotReader();
+    }
 }
