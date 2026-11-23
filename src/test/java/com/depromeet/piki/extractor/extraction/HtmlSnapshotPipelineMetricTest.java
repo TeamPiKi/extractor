@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
+import com.depromeet.piki.extractor.extraction.rule.MallRules;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
@@ -36,7 +37,9 @@ class HtmlSnapshotPipelineMetricTest {
         HtmlSnapshotPipeline pipeline = new HtmlSnapshotPipeline(
             new StructuredDataExtractor(new ObjectMapper()),
             new GeminiHtmlExtractor(stubGemini),
-            registry
+            registry,
+            () -> MallRules.NONE,
+            new ObjectMapper()
         );
 
         String structuredHtml = "<html><head><script type=\"application/ld+json\">"

@@ -9,7 +9,6 @@ import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
-import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,13 +36,12 @@ import org.springframework.stereotype.Component;
 public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
 
     private final HeadlessRenderer headlessRenderer;
-    private final StructuredDataExtractor structuredDataExtractor;
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
 
-    private record Candidate(RenderedHop hop, String html) {
+    private record Candidate(RenderedHop hop, String html, boolean dom) {
     }
 
-    private record Chosen(Candidate candidate, PageContent page, StructuredExtraction result) {
+    private record Chosen(Candidate candidate, PageContent page, HtmlSnapshotPipeline.Parsed parsed) {
     }
 
     @Override
@@ -71,9 +69,9 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
                 blocked |= HeadlessBlockSignal.isChallenge(page.document());
                 continue;
             }
-            StructuredExtraction result = structuredDataExtractor.extract(page);
-            if (result instanceof StructuredExtraction.Extracted) {
-                return htmlSnapshotPipeline.extract(page, result, timing, model);
+            HtmlSnapshotPipeline.Parsed parsed = htmlSnapshotPipeline.parse(page, candidate.dom());
+            if (parsed.result() instanceof StructuredExtraction.Extracted) {
+                return htmlSnapshotPipeline.extract(page, parsed, timing, model);
             }
             boolean challenge = HeadlessBlockSignal.isChallenge(page.document());
             blocked |= challenge;
@@ -81,10 +79,10 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
                 continue;
             }
             if (first == null) {
-                first = new Chosen(candidate, page, result);
+                first = new Chosen(candidate, page, parsed);
             }
             if (fallback == null && !LlmInputGate.hasNothingForLlm(page.document())) {
-                fallback = new Chosen(candidate, page, result);
+                fallback = new Chosen(candidate, page, parsed);
             }
         }
         Chosen chosen = fallback != null ? fallback : first;
@@ -113,7 +111,7 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         String model
     ) {
         try {
-            return htmlSnapshotPipeline.extract(chosen.page(), chosen.result(), timing, model);
+            return htmlSnapshotPipeline.extract(chosen.page(), chosen.parsed(), timing, model);
         } catch (ProductSnapshotException e) {
             RenderedHop hop = chosen.candidate().hop();
             log.info(
@@ -134,16 +132,34 @@ public class HeadlessProductLinkExtractor implements LinkExtractionStrategy {
         }
     }
 
+    /** 시험 추출용 — 채택 판단 없이 렌더된 dom 후보를 {@link #extract} 와 같은 순서로 돌려준다. 사이트 루트 착지는 뺀다. */
+    List<PageContent> renderedPages(
+        ProductLink link,
+        boolean authorized,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
+        List<PageContent> pages = candidates(headlessRenderer.render(link, authorized, identity, blockedDomains)).stream()
+            .filter(Candidate::dom)
+            .map(candidate -> PageContent.of(link, candidate.html(), candidate.hop().url()))
+            .filter(page -> link.isSiteRoot() || !page.finalUrl().isSiteRoot())
+            .toList();
+        if (pages.isEmpty()) {
+            throw HeadlessRenderException.upstream("렌더 HTML 이 없다", null);
+        }
+        return pages;
+    }
+
     private static List<Candidate> candidates(List<RenderedHop> hops) {
         List<Candidate> candidates = new ArrayList<>();
         for (RenderedHop hop : hops.reversed()) {
             if (!hop.dom().isBlank()) {
-                candidates.add(new Candidate(hop, hop.dom()));
+                candidates.add(new Candidate(hop, hop.dom(), true));
             }
         }
         for (RenderedHop hop : hops.reversed()) {
             if (!hop.body().isBlank() && !hop.body().equals(hop.dom())) {
-                candidates.add(new Candidate(hop, hop.body()));
+                candidates.add(new Candidate(hop, hop.body(), false));
             }
         }
         return candidates;

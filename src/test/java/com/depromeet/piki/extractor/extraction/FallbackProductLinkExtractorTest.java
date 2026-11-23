@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.extraction;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.depromeet.piki.extractor.common.exception.ExtractionErrorCode;
 import com.depromeet.piki.extractor.domain.BlockedDomains;
@@ -9,7 +10,10 @@ import com.depromeet.piki.extractor.domain.DeclaredIdentity;
 import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
+import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
+import com.depromeet.piki.extractor.extraction.rule.MallRules;
+import com.depromeet.piki.extractor.extraction.rule.RuleFixtures;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
@@ -77,8 +81,68 @@ class FallbackProductLinkExtractorTest {
             plain,
             headless,
             meterRegistry,
-            HeadlessExtractionProperties.of(headlessEnabled)
+            HeadlessExtractionProperties.of(headlessEnabled),
+            () -> rules
         );
+    }
+
+    private MallRules rules = MallRules.NONE;
+
+    private static final String RENDER_RULE = "{\"id\": 3, \"host\": \"example.com\", \"fetch\": \"RENDER\"}";
+
+    @Test
+    @DisplayName("입력 주소가 렌더 지정 규칙의 host 면 정적 fetch 없이 곧바로 렌더한다")
+    void renderRuleSkipsPlainFetch() {
+        rules = RuleFixtures.rules(RENDER_RULE);
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw new IllegalStateException("plain 은 호출되면 안 됨");
+        });
+        FakeStrategy headless = new FakeStrategy(l -> snapshot);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+
+        ProductSnapshot result = fallback(true, plain, headless, registry)
+            .extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(snapshot, result);
+        assertEquals(0, plain.calls);
+        assertEquals(1, headless.calls);
+        assertTrue(registry.find("product.extract.escalation").counters().isEmpty());
+    }
+
+    @Test
+    @DisplayName("headless 가 꺼져 있으면 렌더 지정 규칙이 있어도 정적 fetch 로 끝낸다")
+    void renderRuleIgnoredWhenHeadlessOff() {
+        rules = RuleFixtures.rules(RENDER_RULE);
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw new RenderRequiredByRuleException(3, () -> snapshot);
+        });
+        FakeStrategy headless = new FakeStrategy(l -> {
+            throw new IllegalStateException("headless 는 호출되면 안 됨");
+        });
+
+        ProductSnapshot result = fallback(false, plain, headless)
+            .extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(snapshot, result);
+        assertEquals(0, headless.calls);
+    }
+
+    @Test
+    @DisplayName("정적 문서를 받고서야 렌더 지정 규칙의 대상임을 알면 렌더로 넘기고, 렌더가 실패하면 정적 문서로 끝낸다")
+    void rendersAfterPlainWhenRuleMatchesTheFetchedDocument() {
+        ProductSnapshot rendered = new ProductSnapshot(link, "렌더 결과", "https://cdn.example.com/r.png", 1000, "KRW");
+        FakeStrategy plain = new FakeStrategy(l -> {
+            throw new RenderRequiredByRuleException(3, () -> snapshot);
+        });
+
+        ProductSnapshot success = fallback(true, plain, new FakeStrategy(l -> rendered))
+            .extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+        ProductSnapshot failure = fallback(true, plain, new FakeStrategy(l -> {
+            throw HeadlessRenderException.upstream("렌더 실패", null);
+        })).extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE);
+
+        assertEquals(rendered, success);
+        assertEquals(snapshot, failure);
     }
 
     private FallbackProductLinkExtractor fallback(boolean headlessEnabled, FakeStrategy plain, FakeStrategy headless) {

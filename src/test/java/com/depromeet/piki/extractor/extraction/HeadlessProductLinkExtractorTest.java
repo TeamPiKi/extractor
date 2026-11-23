@@ -15,9 +15,10 @@ import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderer;
 import com.depromeet.piki.extractor.extraction.headless.RenderedHop;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
+import com.depromeet.piki.extractor.extraction.rule.MallRules;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
-import com.depromeet.piki.extractor.support.StubHeadlessRenderer;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
+import com.depromeet.piki.extractor.support.StubHeadlessRenderer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.Map;
@@ -63,8 +64,13 @@ class HeadlessProductLinkExtractorTest {
         StructuredDataExtractor structured = new StructuredDataExtractor(new ObjectMapper());
         return new HeadlessProductLinkExtractor(
             renderer,
-            structured,
-            new HtmlSnapshotPipeline(structured, new GeminiHtmlExtractor(stubGemini), new SimpleMeterRegistry())
+            new HtmlSnapshotPipeline(
+                structured,
+                new GeminiHtmlExtractor(stubGemini),
+                new SimpleMeterRegistry(),
+                () -> MallRules.NONE,
+                new ObjectMapper()
+            )
         );
     }
 
