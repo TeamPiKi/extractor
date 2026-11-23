@@ -7,9 +7,12 @@ import com.depromeet.piki.extractor.domain.ProductLink;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiHttpClient;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
+import com.depromeet.piki.extractor.extraction.rule.MallRule;
+import com.depromeet.piki.extractor.extraction.rule.MallRuleSource;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalLong;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -59,6 +62,7 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
     private final LinkExtractionStrategy headless;
     private final MeterRegistry meterRegistry;
     private final HeadlessExtractionProperties headlessProperties;
+    private final MallRuleSource mallRuleSource;
 
     @Override
     public ProductSnapshot extract(
@@ -74,7 +78,16 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
                 return plain.extract(link, authorized, model, identity, blockedDomains);
             } catch (OriginalPriceHiddenException e) {
                 return e.lastResort();
+            } catch (RenderRequiredByRuleException e) {
+                return e.withoutRender();
             }
+        }
+
+        // 입력 주소만으로 렌더가 필요한 몰임을 알면 버려질 정적 fetch 를 하지 않는다
+        Optional<MallRule> renderFirst = mallRuleSource.current().renderFirst(link);
+        if (renderFirst.isPresent()) {
+            log.info("extract rule={} fetch=render url={}", renderFirst.get().id(), link.safeLogString());
+            return headless.extract(link, authorized, model, identity, blockedDomains);
         }
 
         ProductSnapshot plainSnapshot;
@@ -82,6 +95,8 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             plainSnapshot = plain.extract(link, authorized, model, identity, blockedDomains);
         } catch (OriginalPriceHiddenException e) {
             return revealOriginalPrice(e, link, authorized, model, identity, blockedDomains);
+        } catch (RenderRequiredByRuleException e) {
+            return renderForRule(e, link, authorized, model, identity, blockedDomains);
         } catch (RuntimeException e) {
             if (!shouldEscalate(e)) {
                 throw e;
@@ -96,6 +111,39 @@ public class FallbackProductLinkExtractor implements ProductLinkExtractor {
             return escalateToHeadless(link, CATEGORY_INCOMPLETE_SNAPSHOT, authorized, model, identity, blockedDomains);
         }
         return plainSnapshot;
+    }
+
+    /**
+     * 정적 문서를 받고서야 렌더 지정 규칙의 대상임을 안 경우다(단축링크, marker 규칙). escalation 카운터에는 세지
+     * 않는다 — 그 카운터는 plain 이 못 끝낸 요청의 구제율인데 이 요청은 규칙이 고른 경로다. 렌더가 실패하면 받아 둔
+     * 정적 문서로 끝낸다.
+     */
+    private ProductSnapshot renderForRule(
+        RenderRequiredByRuleException required,
+        ProductLink link,
+        boolean authorized,
+        String model,
+        DeclaredIdentity identity,
+        BlockedDomains blockedDomains
+    ) {
+        // 필수 승격과 달리 정적 문서로 답할 수 있어, 기한이 지났으면 렌더를 새로 시작하지 않는다
+        if (ExtractionDeadline.passed()) {
+            return required.withoutRender();
+        }
+        log.info("extract rule={} fetch=render after=plain url={}", required.ruleId(), link.safeLogString());
+        try {
+            return headless.extract(link, authorized, model, identity, blockedDomains);
+        } catch (RuntimeException headlessFailure) {
+            log.info(
+                "extract rule={} fetch=render outcome=failed headlessCause={} url={}",
+                required.ruleId(),
+                headlessFailure instanceof ExtractionException coded
+                    ? coded.code().name()
+                    : headlessFailure.getClass().getSimpleName(),
+                link.safeLogString()
+            );
+            return required.withoutRender();
+        }
     }
 
     /**

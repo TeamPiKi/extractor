@@ -7,6 +7,9 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
+import com.depromeet.piki.extractor.extraction.rule.MallRule;
+import com.depromeet.piki.extractor.extraction.rule.MallRuleSource;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -24,6 +27,7 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
     private final PageFetcher pageFetcher;
     private final HtmlSnapshotPipeline htmlSnapshotPipeline;
     private final SiteConcurrencyLimiter siteLimiter;
+    private final MallRuleSource mallRuleSource;
 
     @Override
     public ProductSnapshot extract(
@@ -36,7 +40,20 @@ public class DefaultProductLinkExtractor implements LinkExtractionStrategy {
         long fetchStart = System.nanoTime();
         PageContent page = siteLimiter.call(link, () -> pageFetcher.fetch(link, identity, blockedDomains));
         long fetchMs = (System.nanoTime() - fetchStart) / 1_000_000;
+        Optional<MallRule> renderRule = mallRuleSource.current().forPage(page).filter(MallRule::render);
+        if (renderRule.isPresent()) {
+            throw new RenderRequiredByRuleException(renderRule.get().id(), () -> {
+                try {
+                    return extractFrom(page, fetchMs, model);
+                } catch (OriginalPriceHiddenException e) {
+                    return e.lastResort();
+                }
+            });
+        }
+        return extractFrom(page, fetchMs, model);
+    }
 
+    private ProductSnapshot extractFrom(PageContent page, long fetchMs, String model) {
         HtmlSnapshotPipeline.Result result;
         try {
             result = htmlSnapshotPipeline.extractDeferringHiddenOriginalPrice(page, "fetch=" + fetchMs + "ms", model);

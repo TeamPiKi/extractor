@@ -18,6 +18,8 @@ import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionResult;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiOriginalPriceResult;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.extraction.http.SiteConcurrencyLimiter;
+import com.depromeet.piki.extractor.extraction.rule.MallRules;
+import com.depromeet.piki.extractor.extraction.rule.RuleFixtures;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -51,6 +53,23 @@ class DefaultProductLinkExtractorTest {
 
     private final StubGeminiClient stubGemini = new StubGeminiClient();
 
+    private MallRules rules = MallRules.NONE;
+
+    @Test
+    @DisplayName("받은 문서가 렌더 지정 규칙의 대상이면 파싱하지 않고 렌더가 필요하다고 알린다")
+    void signalsRenderRequiredByRule() {
+        rules = RuleFixtures.rules("{\"id\": 3, \"host\": \"store.kakao.com\", \"fetch\": \"RENDER\"}");
+
+        RenderRequiredByRuleException required = assertThrows(
+            RenderRequiredByRuleException.class,
+            () -> extractorFetching("<html><body><p>본문</p></body></html>")
+                .extract(link, false, null, DeclaredIdentity.DEFAULT, BlockedDomains.NONE)
+        );
+
+        assertEquals(3, required.ruleId());
+        assertEquals(0, stubGemini.invocations());
+    }
+
     private DefaultProductLinkExtractor extractorFetching(String html) {
         PageFetcher fetcher = (l, identity, blockedDomains) -> PageContent.of(l, html);
         return new DefaultProductLinkExtractor(
@@ -58,9 +77,12 @@ class DefaultProductLinkExtractorTest {
             new HtmlSnapshotPipeline(
                 new StructuredDataExtractor(new ObjectMapper()),
                 new GeminiHtmlExtractor(stubGemini),
-                new SimpleMeterRegistry()
+                new SimpleMeterRegistry(),
+                () -> rules,
+                new ObjectMapper()
             ),
-            new SiteConcurrencyLimiter(2, Duration.ofSeconds(15))
+            new SiteConcurrencyLimiter(2, Duration.ofSeconds(15)),
+            () -> rules
         );
     }
 

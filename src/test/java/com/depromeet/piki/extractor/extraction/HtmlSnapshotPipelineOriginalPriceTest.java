@@ -11,6 +11,7 @@ import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiExtractionRequest;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiOriginalPriceResult;
+import com.depromeet.piki.extractor.extraction.rule.MallRules;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.support.StubGeminiClient;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -57,7 +58,9 @@ class HtmlSnapshotPipelineOriginalPriceTest {
         return new HtmlSnapshotPipeline(
             new StructuredDataExtractor(new ObjectMapper()),
             new GeminiHtmlExtractor(stubGemini),
-            new SimpleMeterRegistry()
+            new SimpleMeterRegistry(),
+            () -> MallRules.NONE,
+            new ObjectMapper()
         );
     }
 

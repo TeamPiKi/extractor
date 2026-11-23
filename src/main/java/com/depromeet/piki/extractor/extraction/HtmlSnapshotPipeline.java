@@ -4,14 +4,19 @@ import com.depromeet.piki.extractor.domain.ExtractionMethod;
 import com.depromeet.piki.extractor.domain.ProductSnapshot;
 import com.depromeet.piki.extractor.domain.ProductSnapshotException;
 import com.depromeet.piki.extractor.extraction.gemini.GeminiApiException;
+import com.depromeet.piki.extractor.extraction.rule.MallRule;
+import com.depromeet.piki.extractor.extraction.rule.MallRuleSource;
+import com.depromeet.piki.extractor.extraction.rule.RuleApplication;
 import com.depromeet.piki.extractor.extraction.structured.StructuredDataExtractor;
 import com.depromeet.piki.extractor.extraction.structured.StructuredExtraction;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.Optional;
 import java.util.OptionalInt;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * HTML → ProductSnapshot 의 공통 후반부: 구조화 데이터(JSON-LD/OpenGraph) 우선, 미달이면 같은 HTML 을 Gemini 로
@@ -41,6 +46,65 @@ public class HtmlSnapshotPipeline {
     private final StructuredDataExtractor structuredDataExtractor;
     private final GeminiHtmlExtractor geminiHtmlExtractor;
     private final MeterRegistry meterRegistry;
+    private final MallRuleSource mallRuleSource;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * 몰별 규칙과 공통 규칙으로 읽은 결과. LLM 은 아직 부르지 않았다.
+     *
+     * @param ruleKept 규칙이 일부 필드만 읽어 READY 에 못 미친 값. LLM 이 나머지를 채워도 이 값은 덮지 않는다.
+     * @param applied 이 문서에 적용한 규칙. 없으면 null. 로그는 이 문서가 채택됐을 때만 남긴다 — 헤드리스 전략은
+     *     버릴 후보(중간 홉·챌린지)도 파싱하므로 여기서 남기면 "몰의 구조가 바뀜" 경고가 오탐으로 울린다.
+     */
+    public record Parsed(StructuredExtraction result, ProductSnapshot ruleKept, RuleApplication applied) {
+    }
+
+    /**
+     * 순서는 몰별 규칙, 공통 규칙이다(TeamPiKi/infra contracts/extraction-api.md 7절). 규칙이 못 읽으면 공통 규칙의
+     * 결과로 내려가고 요청은 실패하지 않는다.
+     *
+     * @param renderedDom 브라우저가 스크립트를 실행한 뒤의 문서인가. 렌더 지정 규칙은 그런 문서에만 적용한다 —
+     *     스크립트가 그리는 정가 자리가 아직 없는 문서에서 "자리 없음" 을 할인 없음으로 읽지 않기 위해서다.
+     */
+    public Parsed parse(PageContent page, boolean renderedDom) {
+        StructuredExtraction common = structuredDataExtractor.extract(page.document(), page.link());
+        Optional<MallRule> rule = mallRuleSource.current().forPage(page).filter(found -> renderedDom || !found.render());
+        if (rule.isEmpty()) {
+            return new Parsed(common, null, null);
+        }
+        RuleApplication applied = RuleApplication.apply(rule.get(), page, common, objectMapper);
+        if (applied.discarded()) {
+            return new Parsed(common, null, applied);
+        }
+        ProductSnapshot merged = applied.merged();
+        if (!merged.missingReadyField() || common instanceof StructuredExtraction.Extracted) {
+            return new Parsed(new StructuredExtraction.Extracted(merged), null, applied);
+        }
+        return new Parsed(common, merged.hasNoExtractedValue() ? null : merged, applied);
+    }
+
+    private static void logRule(RuleApplication applied, PageContent page) {
+        if (applied == null) {
+            return;
+        }
+        if (applied.discarded()) {
+            // 몰의 구조가 바뀌었다는 신호다. 알림이 이 줄을 센다
+            log.warn(
+                "extract rule={} result=discarded unread={} url={}",
+                applied.rule().id(),
+                String.join("+", applied.reading().unreadFields()),
+                page.link().safeLogString()
+            );
+            return;
+        }
+        log.info(
+            "extract rule={} result=applied noDiscount={} missing={} url={}",
+            applied.rule().id(),
+            applied.noDiscountApplied(),
+            applied.merged().missingFieldNames(),
+            page.link().safeLogString()
+        );
+    }
 
     /**
      * @param timing 호출 전략이 채우는 로그 조각({@code "fetch=123ms"} / {@code "render=5534ms"}) — HTML 획득 비용을
@@ -50,12 +114,12 @@ public class HtmlSnapshotPipeline {
      *     내려갈 때만 소비된다.
      */
     public ProductSnapshot extract(PageContent page, String timing, String model) {
-        return extract(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model);
+        return extract(page, parse(page, true), timing, model);
     }
 
-    /** 호출 전략이 후보 선별에 쓴 구조화 결과를 그대로 받는다 — 같은 Document 를 두 번 파싱하지 않는다. */
-    public ProductSnapshot extract(PageContent page, StructuredExtraction result, String timing, String model) {
-        return run(page, result, timing, model, false).snapshot();
+    /** 호출 전략이 후보 선별에 쓴 결과를 그대로 받는다 — 같은 Document 를 두 번 파싱하지 않는다. */
+    public ProductSnapshot extract(PageContent page, Parsed parsed, String timing, String model) {
+        return run(page, parsed, timing, model, false).snapshot();
     }
 
     /**
@@ -71,7 +135,7 @@ public class HtmlSnapshotPipeline {
 
     /** 정적 fetch 전략용 — 렌더로 정가를 볼 수 있는 페이지면 정가 LLM 을 미루고 그 사실을 함께 돌려준다. */
     Result extractDeferringHiddenOriginalPrice(PageContent page, String timing, String model) {
-        return run(page, structuredDataExtractor.extract(page.document(), page.link()), timing, model, true);
+        return run(page, parse(page, false), timing, model, true);
     }
 
     /** 미뤄 둔 정가 LLM 을 지금 묻는다 — 렌더가 정가를 못 보탰을 때의 마지막 수단. */
@@ -81,7 +145,7 @@ public class HtmlSnapshotPipeline {
 
     private Result run(
         PageContent page,
-        StructuredExtraction result,
+        Parsed parsed,
         String timing,
         String model,
         boolean deferHiddenOriginalPrice
@@ -89,10 +153,16 @@ public class HtmlSnapshotPipeline {
         // 수신 단계가 이미 파싱해 둔 Document 를 구조화 파서·게이트·Gemini fallback 이 그대로 공유한다.
         // baseUri 는 html 의 출처인 최종 URL 기준 — redirect 를 따라갔으면 원본 link 와 host 가 다를 수 있다.
         Document document = page.document();
+        logRule(parsed.applied(), page);
 
         // 게이트 판정은 sanitize(GeminiHtmlExtractor) 전이어야 한다 — sanitize 는 공유 Document 에서 script 를
         // 제거하므로, 순서가 뒤집히면 데이터 script 존재 판정이 깨진다.
-        boolean nothingForLlm = result instanceof StructuredExtraction.Miss && LlmInputGate.hasNothingForLlm(document);
+        boolean shell = parsed.result() instanceof StructuredExtraction.Miss && LlmInputGate.hasNothingForLlm(document);
+        // LLM 에 보여 줄 것이 없어도 규칙이 읽은 값이 있으면 그것으로 답한다 — 부분값은 성공이다
+        StructuredExtraction result = shell && parsed.ruleKept() != null
+            ? new StructuredExtraction.Extracted(parsed.ruleKept())
+            : parsed.result();
+        boolean nothingForLlm = shell && parsed.ruleKept() == null;
 
         countExtract(result, nothingForLlm);
 
@@ -100,8 +170,27 @@ public class HtmlSnapshotPipeline {
             case StructuredExtraction.Extracted extracted ->
                 structuredSnapshot(extracted, page, timing, model, deferHiddenOriginalPrice);
             case StructuredExtraction.Miss miss when nothingForLlm -> throw skippedShell(miss, page, timing);
-            case StructuredExtraction.Miss miss -> llmResult(llmSnapshot(miss, document, page, timing, model), document);
+            case StructuredExtraction.Miss miss -> llmResult(
+                keepingRuleValues(llmSnapshot(miss, document, page, timing, model), parsed.ruleKept()), document);
         };
+    }
+
+    /** 규칙이 판매가를 읽었으면 정가도 규칙 쪽 것만 쓴다 — LLM 의 정가는 LLM 이 본 판매가와 짝이다. */
+    private static ProductSnapshot keepingRuleValues(ProductSnapshot llm, ProductSnapshot kept) {
+        if (kept == null) {
+            return llm;
+        }
+        boolean rulePrice = kept.currentPrice() != null;
+        return new ProductSnapshot(
+            llm.link(),
+            kept.name() != null ? kept.name() : llm.name(),
+            kept.imageUrl() != null ? kept.imageUrl() : llm.imageUrl(),
+            rulePrice ? kept.currentPrice() : llm.currentPrice(),
+            null,
+            kept.currency() != null ? kept.currency() : llm.currency(),
+            llm.finalUrl(),
+            llm.method()
+        ).withOriginalPrice(rulePrice ? kept.originalPrice() : llm.originalPrice());
     }
 
     /**
