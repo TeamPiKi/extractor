@@ -25,6 +25,11 @@ public final class ExtractionDeadline {
     private ExtractionDeadline() {
     }
 
+    /** 스트림 소비자가 이어받기 기준과 대조한다. */
+    public static Duration linkBudget() {
+        return LINK_BUDGET;
+    }
+
     public static <T> T withinLinkBudget(Supplier<T> body) {
         return within(LINK_BUDGET, body);
     }
