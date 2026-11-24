@@ -151,6 +151,18 @@ jobs:
             --ports-file shared-infra/contracts/ports.json --service renderer)
           echo "service-port=$PORT" >> "$GITHUB_OUTPUT"
           echo "renderer-url=$RENDERER_URL" >> "$GITHUB_OUTPUT"
+          # 몰별 규칙 배포본이 놓인 운영 Redis(TeamPiKi/core infra/compose/db.yml). 서비스 포트 정본의 대상이 아니라
+          # 서버만 Name 태그로 찾는다. 규칙은 없어도 추출이 되는 의존이라, 못 찾으면 배포를 멈추지 않고 비워 둔다.
+          REDIS_IPS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=piki-prod-db" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[].Instances[].PrivateIpAddress' --output text) || REDIS_IPS=""
+          read -r -a REDIS_IP_LIST <<< "$REDIS_IPS"
+          if [ "${#REDIS_IP_LIST[@]}" -eq 1 ]; then
+            echo "rules-redis-address=${REDIS_IP_LIST[0]}:6379" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::piki-prod-db 인스턴스가 정확히 하나가 아니다(${#REDIS_IP_LIST[@]}개) - 몰별 규칙 없이 배포한다"
+            echo "rules-redis-address=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Prepare SSH over SSM
         id: box
@@ -202,6 +214,7 @@ jobs:
           IMAGE_TAG: ${{ steps.built.outputs.sha }}
           SERVICE_PORT: ${{ steps.addr.outputs.service-port }}
           RENDERER_URL: ${{ steps.addr.outputs.renderer-url }}
+          RULES_REDIS_ADDRESS: ${{ steps.addr.outputs.rules-redis-address }}
           SCRIPT: |
             set -euo pipefail
 
@@ -225,7 +238,8 @@ jobs:
             # 아래 튜닝·관측 값을 파일 끝에 덧붙이므로 같은 이름의 SSM 키는 예약으로 막는다.
             if ! PARAM_COUNT="$(printf '%s' "$PARAMS_JSON" | bash /tmp/piki-blocks/ssm_env.sh --out "$ENV_FILE" \
               --reserve JAVA_TOOL_OPTIONS --reserve TRACING_OTLP_ENABLED --reserve OTLP_ENDPOINT \
-              --reserve LOGGING_STRUCTURED_FORMAT_CONSOLE --reserve PRODUCT_EXTRACT_HEADLESS_BASE_URL)"; then
+              --reserve LOGGING_STRUCTURED_FORMAT_CONSOLE --reserve PRODUCT_EXTRACT_HEADLESS_BASE_URL \
+              --reserve PRODUCT_EXTRACT_RULES_REDIS_ADDRESS)"; then
               echo "::error::SSM 파라미터 -> env 파일 변환 실패 (파라미터 0개 · 다중행 값 · 예약 이름 충돌 - 블록 stderr 참조)"
               exit 1
             fi
@@ -240,6 +254,8 @@ jobs:
             echo "OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces" >> "$ENV_FILE"
             echo "LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs" >> "$ENV_FILE"
             echo "PRODUCT_EXTRACT_HEADLESS_BASE_URL=$RENDERER_URL" >> "$ENV_FILE"
+            # 비밀번호(PRODUCT_EXTRACT_RULES_REDIS_PASSWORD)는 위 SSM 경로에서 온다. 그 값이 없으면 앱은 Redis 를 읽지 않는다.
+            echo "PRODUCT_EXTRACT_RULES_REDIS_ADDRESS=$RULES_REDIS_ADDRESS" >> "$ENV_FILE"
             echo "SSM 에서 $PARAM_COUNT 개 파라미터 로드 (/piki-extractor/app/)"
 
             # ECR 레지스트리는 온박스에서 도출한다. 계정번호를 워크플로에 안 박는다 (core 와 동일).
@@ -273,9 +289,11 @@ jobs:
             # 배포 끝에서 정리하면 디스크가 찬 상태에서 pull 이 먼저 죽는다(renderer 2026-09-13). 규칙 정본은 infra conventions/infra.md.
             bash /tmp/piki-blocks/prune_images.sh
 
-            # 컨테이너가 내부 대역으로 여는 새 연결을 서버가 거절한다. 새 슬롯보다 먼저 건다. 이 서비스가 부르는 renderer 만 예외다.
-            sudo bash /tmp/piki-blocks/egress_wall.sh --ranges-file /tmp/piki-blocks/internal-ranges.txt \
-              --allow-tcp "${RENDERER_URL#http://}"
+            # 컨테이너가 내부 대역으로 여는 새 연결을 서버가 거절한다. 새 슬롯보다 먼저 건다. 예외는 이 서비스가 부르는
+            # renderer 와 몰별 규칙을 읽는 Redis 둘이다.
+            WALL_ALLOW=(--allow-tcp "${RENDERER_URL#http://}")
+            [ -z "$RULES_REDIS_ADDRESS" ] || WALL_ALLOW+=(--allow-tcp "$RULES_REDIS_ADDRESS")
+            sudo bash /tmp/piki-blocks/egress_wall.sh --ranges-file /tmp/piki-blocks/internal-ranges.txt "${WALL_ALLOW[@]}"
 
             bash /tmp/piki-blocks/deploy_slot.sh \
               --state-file /etc/nginx/piki-extractor-upstream.conf \
@@ -286,4 +304,4 @@ jobs:
               --memory 640m --memory-swap 640m \
               --add-host host.docker.internal:host-gateway \
               --label piki.observe=true --label piki.service=piki-extractor --label piki.metrics.path=/actuator/prometheus
-        run: ssh -n "$HOST" "export IMAGE_TAG=$IMAGE_TAG SERVICE_PORT=$SERVICE_PORT RENDERER_URL=$RENDERER_URL; $SCRIPT"
+        run: ssh -n "$HOST" "export IMAGE_TAG=$IMAGE_TAG SERVICE_PORT=$SERVICE_PORT RENDERER_URL=$RENDERER_URL RULES_REDIS_ADDRESS=$RULES_REDIS_ADDRESS; $SCRIPT"
