@@ -2,6 +2,7 @@ package com.depromeet.piki.extractor.stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.StreamMessage;
 import io.lettuce.core.XReadArgs;
@@ -35,7 +36,10 @@ class ParseStreamConsumersE2ETest {
                 2, Duration.ofMillis(200), Duration.ofSeconds(5), Duration.ofSeconds(15), Duration.ofSeconds(60),
                 Duration.ofMillis(100), Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofHours(1));
             ParseStreamConsumers consumers = new ParseStreamConsumers(
-                properties, new LettuceParseStreamConnector(properties), new ParseRequestProcessor(null, null));
+                properties,
+                new LettuceParseStreamConnector(properties),
+                new ParseRequestProcessor(null, null),
+                new HeadlessExtractionProperties(false, "", Duration.ofSeconds(2), Duration.ofSeconds(20), true, ""));
             consumers.start();
             try {
                 redis.xadd(ParseStreamContract.REQUEST_STREAM, Map.of("requestId", "7", "inputType", "VIDEO", "inputValue", "x"));

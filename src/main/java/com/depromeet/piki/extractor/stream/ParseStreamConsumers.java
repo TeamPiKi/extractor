@@ -1,6 +1,8 @@
 package com.depromeet.piki.extractor.stream;
 
 import com.depromeet.piki.extractor.extraction.ExtractionDeadline;
+import com.depromeet.piki.extractor.extraction.HeadlessExtractionProperties;
+import com.depromeet.piki.extractor.extraction.gemini.GeminiHttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,12 +36,13 @@ public class ParseStreamConsumers implements SmartLifecycle {
     public ParseStreamConsumers(
         ParseStreamProperties properties,
         ParseStreamConnector connector,
-        ParseRequestProcessor processor
+        ParseRequestProcessor processor,
+        HeadlessExtractionProperties headless
     ) {
-        // 작으면 아직 도는 요청을 다른 소비자가 다시 꺼내 간다
-        if (ParseStreamContract.REDELIVERY_AFTER.compareTo(ExtractionDeadline.linkBudget()) <= 0) {
-            throw new IllegalStateException("계약의 redelivery_after_seconds 가 추출 한 건의 최대 시간보다 커야 한다");
-        }
+        Duration llmCall = Duration.ofMillis(GeminiHttpClient.READ_TIMEOUT_MS);
+        Duration render = headless.connectTimeout().plus(headless.readTimeout());
+        ParseStreamContract.requireHonored(
+            ExtractionDeadline.linkBudget(), llmCall.compareTo(render) > 0 ? llmCall : render, properties.reclaimInterval());
         this.properties = properties;
         this.connector = connector;
         this.processor = processor;
