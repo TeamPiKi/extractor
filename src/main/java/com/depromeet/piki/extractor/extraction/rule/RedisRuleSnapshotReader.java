@@ -49,7 +49,11 @@ public class RedisRuleSnapshotReader implements RuleSnapshotReader {
 
     private StatefulRedisConnection<String, String> connection() {
         if (client == null) {
-            client = RedisClient.create(RedisURI.create(properties.redisUrl()));
+            client = RedisClient.create(RedisURI.builder()
+                .withHost(properties.redisHost())
+                .withPort(properties.redisPort())
+                .withAuthentication(properties.redisUsername(), properties.redisPassword().toCharArray())
+                .build());
             client.setOptions(ClientOptions.builder()
                 .socketOptions(SocketOptions.builder().connectTimeout(properties.timeout()).keepAlive(true).build())
                 .timeoutOptions(TimeoutOptions.enabled(properties.timeout()))
