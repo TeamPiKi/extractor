@@ -2,9 +2,9 @@ package com.depromeet.piki.extractor.extraction.rule;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.util.Optional;
@@ -28,8 +28,13 @@ class RefreshingMallRuleSourceTest {
     private RefreshingMallRuleSource source() {
         return new RefreshingMallRuleSource(
             () -> stored.get(),
-            new MallRuleProperties("redis://reader:secret@redis.test:6379", Duration.ofSeconds(60), Duration.ofSeconds(2))
+            properties("redis.test:6379", "secret")
         );
+    }
+
+    private static MallRuleProperties properties(String address, String password) {
+        return new MallRuleProperties(
+            address, "extraction-rules-reader", password, Duration.ofSeconds(60), Duration.ofSeconds(2));
     }
 
     @Test
@@ -135,32 +140,24 @@ class RefreshingMallRuleSourceTest {
     }
 
     @Test
-    @DisplayName("Redis 주소를 해석하지 못하는 설정은 부팅에서 실패한다")
-    void rejectsBrokenRedisUrl() {
-        assertThrows(
-            IllegalStateException.class,
-            () -> new MallRuleProperties("redis.test:6379", Duration.ofSeconds(60), Duration.ofSeconds(2))
-        );
+    @DisplayName("host:port 형태가 아닌 주소는 부팅에서 실패한다")
+    void rejectsBrokenRedisAddress() {
+        assertThrows(IllegalStateException.class, () -> properties("redis://redis.test:6379", "secret"));
+        assertThrows(IllegalStateException.class, () -> properties("redis.test", "secret"));
     }
 
     @Test
-    @DisplayName("깨진 주소의 부팅 실패 메시지와 설정의 문자열 표현에 비밀번호가 실리지 않는다")
-    void doesNotLeakPassword() {
-        IllegalStateException unencodedSpace = assertThrows(
-            IllegalStateException.class,
-            () -> new MallRuleProperties("redis://reader:s3 cret@host:6379", Duration.ofSeconds(60), Duration.ofSeconds(2))
-        );
-        IllegalStateException unencodedHash = assertThrows(
-            IllegalStateException.class,
-            () -> new MallRuleProperties("redis://reader:s3#cret@host:6379", Duration.ofSeconds(60), Duration.ofSeconds(2))
-        );
-        MallRuleProperties valid =
-            new MallRuleProperties("redis://reader:s3cret@host:6379", Duration.ofSeconds(60), Duration.ofSeconds(2));
+    @DisplayName("주소나 비밀번호가 없으면 읽지 않는다")
+    void disabledWithoutAddressOrPassword() {
+        assertFalse(properties("", "secret").enabled());
+        assertFalse(properties("10.0.1.45:6379", "").enabled());
+        assertTrue(properties("10.0.1.45:6379", "secret").enabled());
+    }
 
-        assertFalse(unencodedSpace.getMessage().contains("cret"));
-        assertNull(unencodedSpace.getCause());
-        assertFalse(unencodedHash.getMessage().contains("s3"));
-        assertFalse(valid.toString().contains("s3cret"));
+    @Test
+    @DisplayName("설정의 문자열 표현에 비밀번호가 실리지 않는다")
+    void doesNotLeakPassword() {
+        assertFalse(properties("10.0.1.45:6379", "s3cret").toString().contains("s3cret"));
     }
 
     @Test
