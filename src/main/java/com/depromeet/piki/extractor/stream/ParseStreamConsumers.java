@@ -51,16 +51,18 @@ public class ParseStreamConsumers implements SmartLifecycle {
     @Override
     public void start() {
         running = true;
-        if (properties.sources().isEmpty()) {
-            log.info("parse stream sources=none");
+        List<ParseStreamProperties.Source> sources =
+            properties.sources().stream().filter(ParseStreamProperties.Source::enabled).toList();
+        if (sources.isEmpty()) {
+            log.info("parse stream sources=none configured={}", properties.sources());
             return;
         }
         String consumerName = "extractor-" + UUID.randomUUID();
         handlers = Executors.newVirtualThreadPerTaskExecutor();
         // Redis 하나가 느려도 다른 환경의 주기 작업이 밀리지 않게 환경마다 스레드를 준다
         scheduler = Executors.newScheduledThreadPool(
-            properties.sources().size(), Thread.ofPlatform().daemon().name("parse-stream-schedule-", 0).factory());
-        for (ParseStreamProperties.Source source : properties.sources()) {
+            sources.size(), Thread.ofPlatform().daemon().name("parse-stream-schedule-", 0).factory());
+        for (ParseStreamProperties.Source source : sources) {
             ParseStreamWorker worker = new ParseStreamWorker(
                 source.name(), connector.connect(source, consumerName), processor, properties, handlers);
             workers.add(worker);

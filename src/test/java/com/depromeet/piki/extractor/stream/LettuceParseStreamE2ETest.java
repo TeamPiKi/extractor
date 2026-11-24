@@ -22,19 +22,26 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 /**
  * 실제 Redis 에 명령이 계약대로 나가는지 확인한다. 확인 응답에 쓰는 XACKDEL 은 Redis 8.2 이상에만 있다.
  * 스트림과 정책 키를 지우므로 비어 있는 Redis 에만 붙인다
- * ({@code docker run --rm -p 6390:6379 redis:8-alpine} 뒤 {@code PARSE_STREAM_E2E_REDIS_URL=redis://localhost:6390}).
+ * ({@code docker run --rm -p 6390:6379 redis:8-alpine --requirepass e2e-password} 뒤
+ * {@code PARSE_STREAM_E2E_REDIS_ADDRESS=localhost:6390}).
  */
-@EnabledIfEnvironmentVariable(named = "PARSE_STREAM_E2E_REDIS_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "PARSE_STREAM_E2E_REDIS_ADDRESS", matches = ".+")
 class LettuceParseStreamE2ETest {
 
-    private static final String URL = System.getenv("PARSE_STREAM_E2E_REDIS_URL");
+    /** 계정을 따로 주면 운영과 같은 권한의 계정으로 돌려 볼 수 있다. 준비와 확인은 늘 기본 계정으로 한다. */
+    private static final ParseStreamProperties.Source SOURCE = new ParseStreamProperties.Source(
+        "e2e",
+        System.getenv("PARSE_STREAM_E2E_REDIS_ADDRESS"),
+        System.getenv().getOrDefault("PARSE_STREAM_E2E_REDIS_USERNAME", "default"),
+        System.getenv().getOrDefault("PARSE_STREAM_E2E_REDIS_PASSWORD", "e2e-password"));
+    private static final String URL = "redis://default:e2e-password@" + System.getenv("PARSE_STREAM_E2E_REDIS_ADDRESS");
     private static final Map<String, String> REQUEST = Map.of("requestId", "42", "inputType", "LINK", "inputValue", "https://shop.example.com/p/1");
 
     @Test
     @DisplayName("꺼낸 요청에 결과를 쓰고 확인 응답을 보내면 요청은 대기 목록과 스트림에서 사라진다")
     void roundTrip() {
         try (Redis redis = new Redis()) {
-            ParseStream stream = new LettuceParseStream(URL, "e2e-a", Duration.ofSeconds(5));
+            ParseStream stream = new LettuceParseStream(SOURCE, "e2e-a", Duration.ofSeconds(5));
             stream.ensureGroup();
             stream.ensureGroup();
             redis.commands.xadd(ParseStreamContract.REQUEST_STREAM, REQUEST);
@@ -59,7 +66,7 @@ class LettuceParseStreamE2ETest {
     @DisplayName("다른 소비자가 꺼내고 남긴 요청을 배달 횟수와 함께 찾아 이어받는다")
     void reclaim() {
         try (Redis redis = new Redis()) {
-            ParseStream stream = new LettuceParseStream(URL, "e2e-b", Duration.ofSeconds(5));
+            ParseStream stream = new LettuceParseStream(SOURCE, "e2e-b", Duration.ofSeconds(5));
             stream.ensureGroup();
             redis.commands.xadd(ParseStreamContract.REQUEST_STREAM, REQUEST);
             redis.commands.xreadgroup(
@@ -82,7 +89,7 @@ class LettuceParseStreamE2ETest {
     @DisplayName("정책 키가 없으면 empty, 있으면 그 문자열을 읽는다")
     void policy() {
         try (Redis redis = new Redis()) {
-            ParseStream stream = new LettuceParseStream(URL, "e2e-c", Duration.ofSeconds(5));
+            ParseStream stream = new LettuceParseStream(SOURCE, "e2e-c", Duration.ofSeconds(5));
 
             assertTrue(stream.readPolicy().isEmpty());
             redis.commands.set(ParseStreamContract.POLICY_KEY, "{\"version\": \"1\"}");
@@ -95,7 +102,7 @@ class LettuceParseStreamE2ETest {
     @DisplayName("대기 목록이 빈 다른 소비자 이름만 지우고, 요청을 쥔 이름과 자기 이름은 남긴다")
     void removesIdleConsumers() {
         try (Redis redis = new Redis()) {
-            ParseStream stream = new LettuceParseStream(URL, "e2e-d", Duration.ofSeconds(5));
+            ParseStream stream = new LettuceParseStream(SOURCE, "e2e-d", Duration.ofSeconds(5));
             stream.ensureGroup();
             stream.readNew(Duration.ofMillis(50));
             redis.commands.xgroupCreateconsumer(

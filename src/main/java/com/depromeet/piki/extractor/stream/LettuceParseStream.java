@@ -30,7 +30,7 @@ import java.util.function.Function;
  */
 final class LettuceParseStream implements ParseStream {
 
-    private final String redisUrl;
+    private final ParseStreamProperties.Source source;
     private final Duration timeout;
     private final Consumer<String> consumer;
     private final Link reading = new Link();
@@ -38,8 +38,8 @@ final class LettuceParseStream implements ParseStream {
     private RedisClient client;
     private boolean closed;
 
-    LettuceParseStream(String redisUrl, String consumerName, Duration timeout) {
-        this.redisUrl = redisUrl;
+    LettuceParseStream(ParseStreamProperties.Source source, String consumerName, Duration timeout) {
+        this.source = source;
         this.timeout = timeout;
         this.consumer = Consumer.from(ParseStreamContract.REQUEST_GROUP, consumerName);
     }
@@ -142,7 +142,11 @@ final class LettuceParseStream implements ParseStream {
             throw new IllegalStateException("종료 중이다");
         }
         if (client == null) {
-            client = RedisClient.create(RedisURI.create(redisUrl));
+            client = RedisClient.create(RedisURI.builder()
+                .withHost(source.redisHost())
+                .withPort(source.redisPort())
+                .withAuthentication(source.redisUsername(), source.redisPassword().toCharArray())
+                .build());
             client.setOptions(ClientOptions.builder()
                 .socketOptions(SocketOptions.builder().connectTimeout(timeout).keepAlive(true).build())
                 .timeoutOptions(TimeoutOptions.enabled(timeout))

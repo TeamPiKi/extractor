@@ -19,10 +19,16 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
  * 읽기 스레드와 종료까지 실제 Redis 에 붙여 한 바퀴 돌린다. 붙이는 Redis 의 조건은 LettuceParseStreamE2ETest 와 같다.
  * 추출 없이 닫히는 요청(모르는 입력 종류)을 써서 추출 파이프라인은 타지 않는다.
  */
-@EnabledIfEnvironmentVariable(named = "PARSE_STREAM_E2E_REDIS_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "PARSE_STREAM_E2E_REDIS_ADDRESS", matches = ".+")
 class ParseStreamConsumersE2ETest {
 
-    private static final String URL = System.getenv("PARSE_STREAM_E2E_REDIS_URL");
+    /** 계정을 따로 주면 운영과 같은 권한의 계정으로 돌려 볼 수 있다. 준비와 확인은 늘 기본 계정으로 한다. */
+    private static final ParseStreamProperties.Source SOURCE = new ParseStreamProperties.Source(
+        "e2e",
+        System.getenv("PARSE_STREAM_E2E_REDIS_ADDRESS"),
+        System.getenv().getOrDefault("PARSE_STREAM_E2E_REDIS_USERNAME", "default"),
+        System.getenv().getOrDefault("PARSE_STREAM_E2E_REDIS_PASSWORD", "e2e-password"));
+    private static final String URL = "redis://default:e2e-password@" + System.getenv("PARSE_STREAM_E2E_REDIS_ADDRESS");
 
     @Test
     @DisplayName("기동하면 그룹을 만들어 들어온 요청의 결과를 결과 스트림에 쓰고 요청을 지운다")
@@ -32,7 +38,7 @@ class ParseStreamConsumersE2ETest {
             RedisCommands<String, String> redis = connection.sync();
             redis.del(ParseStreamContract.REQUEST_STREAM, ParseStreamContract.RESULT_STREAM, ParseStreamContract.POLICY_KEY);
             ParseStreamProperties properties = new ParseStreamProperties(
-                List.of(new ParseStreamProperties.Source("e2e", URL)),
+                List.of(SOURCE),
                 2, Duration.ofMillis(200), Duration.ofSeconds(5), Duration.ofSeconds(15), Duration.ofSeconds(60),
                 Duration.ofMillis(100), Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofHours(1));
             ParseStreamConsumers consumers = new ParseStreamConsumers(

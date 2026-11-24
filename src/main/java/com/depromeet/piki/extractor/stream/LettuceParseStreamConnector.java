@@ -11,6 +11,6 @@ public class LettuceParseStreamConnector implements ParseStreamConnector {
 
     @Override
     public ParseStream connect(ParseStreamProperties.Source source, String consumerName) {
-        return new LettuceParseStream(source.redisUrl(), consumerName, properties.commandTimeout());
+        return new LettuceParseStream(source, consumerName, properties.commandTimeout());
     }
 }
