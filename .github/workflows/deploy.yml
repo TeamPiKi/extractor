@@ -163,16 +163,16 @@ jobs:
             echo "::warning::piki-prod-db 인스턴스가 정확히 하나가 아니다(${#REDIS_IP_LIST[@]}개) - 몰별 규칙 없이 배포한다"
             echo "rules-redis-address=" >> "$GITHUB_OUTPUT"
           fi
-          # 파싱 스트림은 환경마다 그 환경의 Redis 에 있다. 운영은 위의 DB 서버, dev 는 dev 앱 서버(TeamPiKi/core
-          # infra/scripts/provision-runtime.sh)다. 못 찾은 환경은 비워 두고, 앱은 주소가 빈 환경의 스트림을 읽지 않는다.
+          # 파싱 스트림은 환경마다 그 환경의 Redis 에 있다. 운영은 위의 DB 서버, dev 는 dev DB 서버다(둘 다 TeamPiKi/core
+          # infra/compose/db.yml). 못 찾은 환경은 비워 두고, 앱은 주소가 빈 환경의 스트림을 읽지 않는다.
           DEV_REDIS_IPS=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=piki-dev-app" "Name=instance-state-name,Values=running" \
+            --filters "Name=tag:Name,Values=piki-dev-db" "Name=instance-state-name,Values=running" \
             --query 'Reservations[].Instances[].PrivateIpAddress' --output text) || DEV_REDIS_IPS=""
           read -r -a DEV_REDIS_IP_LIST <<< "$DEV_REDIS_IPS"
           if [ "${#DEV_REDIS_IP_LIST[@]}" -eq 1 ]; then
             echo "dev-redis-address=${DEV_REDIS_IP_LIST[0]}:6379" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::piki-dev-app 인스턴스가 정확히 하나가 아니다(${#DEV_REDIS_IP_LIST[@]}개) - dev 파싱 스트림 없이 배포한다"
+            echo "::warning::piki-dev-db 인스턴스가 정확히 하나가 아니다(${#DEV_REDIS_IP_LIST[@]}개) - dev 파싱 스트림 없이 배포한다"
             echo "dev-redis-address=" >> "$GITHUB_OUTPUT"
           fi
 
