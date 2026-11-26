@@ -126,6 +126,11 @@ jobs:
           IMAGE_SHA: ${{ steps.ecr_login.outputs.registry }}/piki-extractor:${{ steps.built.outputs.sha }}
         run: |
           docker build -t "$IMAGE_LATEST" -t "$IMAGE_SHA" .
+          # HEIC 변환 명령은 이 이미지에만 있고 CI 테스트는 그 경로를 건너뛴다. 기반 이미지가 바뀌어 명령이나
+          # 디코더 플러그인이 빠지면 조용히 원본 저장으로 돌아가므로, 올리기 전에 실제로 한 장을 풀어 본다.
+          docker run --rm --entrypoint heif-dec \
+            -v "$PWD/src/test/resources:/samples:ro" \
+            "$IMAGE_SHA" /samples/image-sample-887x404.heic /tmp/out.png
           docker push "$IMAGE_LATEST"
           docker push "$IMAGE_SHA"
 

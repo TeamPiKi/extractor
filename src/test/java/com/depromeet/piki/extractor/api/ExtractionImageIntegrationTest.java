@@ -124,9 +124,9 @@ class ExtractionImageIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("크롭할 수 없는 포맷은 원본 확장자·content-type 으로 올린다 - png 로 위장하지 않는다")
     void uploadsOriginalFormatWhenCropIsImpossible() throws Exception {
-        // HEIC 은 ImageIO 에 디코더가 없어 크롭이 건너뛰어진다(의도된 fallback). 그때 원본 바이트를 .png ·
+        // 풀 수 없는 바이트는 크롭이 건너뛰어진다(의도된 fallback). 그때 원본 바이트를 .png ·
         // image/png 로 올리면 브라우저가 렌더링하지 못하는 파일이 저장된다 — prod 에서 실제로 그랬다(#35).
-        // 등록이 허용하는 5개 포맷 중 webp·heic·heif 셋이 이 경로를 탄다.
+        // webp 와, 변환에 실패한 heic·heif 가 이 경로를 탄다.
         stubGeminiClient.reset();
         stubImageStorage.lastUploadedKey = null;
         stubImageStorage.lastUploadedContentType = null;

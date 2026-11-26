@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 
 class ImageCropperTest {
 
-    private final ImageCropper cropper = new ImageCropper();
+    private final ImageCropper cropper = new ImageCropper(new HeifDecoder(HeifProperties.defaults()));
 
     private byte[] pngBytes(int width, int height) throws IOException {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
