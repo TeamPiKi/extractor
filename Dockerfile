@@ -3,6 +3,12 @@
 # 빌드: ./gradlew bootJar && docker build -t piki-extractor .
 FROM eclipse-temurin:25-jre
 
+# HEIC·HEIF 사진의 크롭용 변환 명령(heif-dec). 디코더 플러그인(libde265)은 recommends 라 따로 적는다 —
+# 빠지면 명령은 설치되는데 HEVC 를 풀지 못한다.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libheif-examples libheif-plugin-libde265 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY build/libs/piki-extractor-*.jar app.jar
 

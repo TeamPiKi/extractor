@@ -5,29 +5,29 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Optional;
 import javax.imageio.ImageIO;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * ImageIO 가 디코딩하는 포맷(PNG/JPEG)만 실제로 크롭된다 — HEIC/WebP 등 디코딩 불가·실패 시 null 을 돌려
- * 호출자가 크롭을 건너뛰게 한다.
+ * PNG·JPEG 는 ImageIO 로, HEIC·HEIF 는 {@link HeifDecoder} 로 풀어 크롭한다. WebP 처럼 풀 수 없는 포맷과
+ * 디코딩 실패는 null 을 돌려 호출자가 크롭을 건너뛰게 한다.
  */
 @Slf4j
+@RequiredArgsConstructor
 @Component
 public class ImageCropper {
 
+    private final HeifDecoder heifDecoder;
+
     public byte[] crop(byte[] bytes, BoundingBox boundingBox) {
-        // ImageIO.read 는 디코더가 없으면(HEIC 등) null 을 반환한다 — 예외가 아니라 null 분기.
-        BufferedImage source;
-        try {
-            source = ImageIO.read(new ByteArrayInputStream(bytes));
-        } catch (IOException e) {
+        Optional<BufferedImage> decoded = decode(bytes);
+        if (decoded.isEmpty()) {
             return null;
         }
-        if (source == null) {
-            return null;
-        }
+        BufferedImage source = decoded.get();
 
         int cropX = scale(boundingBox.xMin(), source.getWidth());
         int cropY = scale(boundingBox.yMin(), source.getHeight());
@@ -50,6 +50,19 @@ public class ImageCropper {
             log.warn("이미지 크롭 실패: {}", e.getMessage());
             return null;
         }
+    }
+
+    /** ImageIO.read 는 디코더가 없으면 예외가 아니라 null 을 준다. 그때만 HEIF 변환을 시도한다. */
+    private Optional<BufferedImage> decode(byte[] bytes) {
+        try {
+            BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (decoded != null) {
+                return Optional.of(decoded);
+            }
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+        return heifDecoder.decode(bytes);
     }
 
     private int scale(int normalized, int dimension) {
