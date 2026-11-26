@@ -38,6 +38,9 @@ public enum ExtractionErrorCode {
     HEADLESS_BLOCKED,
     HEADLESS_UPSTREAM,
 
+    /** 스트림 경로 전용: 요청을 끝내지 못하고 닫는다(ParseRequestException). */
+    DELIVERY_EXHAUSTED,
+
     /** 모델 프로브 전용: 그런 모델이 없다(404). 오타이거나 폐기돼 사라진 모델이다. */
     MODEL_NOT_FOUND,
 

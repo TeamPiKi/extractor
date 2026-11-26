@@ -12,6 +12,7 @@ import com.depromeet.piki.extractor.extraction.headless.HeadlessRenderException;
 import com.depromeet.piki.extractor.extraction.http.PageFetchException;
 import com.depromeet.piki.extractor.image.domain.ProductImageException;
 import com.depromeet.piki.extractor.probe.ModelProbeException;
+import com.depromeet.piki.extractor.stream.ParseRequestException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -228,6 +229,10 @@ class ExtractionErrorCodeCatalogTest {
 
             new FactoryCase("ImageStorageException.uploadFailed", ImageStorageException.uploadFailed(cause)),
             new FactoryCase("ImageStorageException.downloadFailed", ImageStorageException.downloadFailed(cause)),
+
+            new FactoryCase("ParseRequestException.deliveryExhausted", ParseRequestException.deliveryExhausted()),
+            new FactoryCase("ParseRequestException.unknownInputType", ParseRequestException.unknownInputType()),
+            new FactoryCase("ParseRequestException.imageBucketMissing", ParseRequestException.imageBucketMissing()),
 
             // probe 전용 code. 추출 경로가 아니라 escalatable 축 밖이다.
             new FactoryCase("ModelProbeException.notFound", ModelProbeException.notFound()),

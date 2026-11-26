@@ -47,4 +47,10 @@ public class IntegrationStubs {
     StubRuleSnapshotReader ruleSnapshotReader() {
         return new StubRuleSnapshotReader();
     }
+
+    @Bean
+    @Primary
+    StubParseStreamConnector parseStreamConnector() {
+        return new StubParseStreamConnector();
+    }
 }
