@@ -58,12 +58,12 @@ public class ImageExtractionService {
     }
 
     /**
-     * 업로드할 결과물. 크롭이 실제로 일어났으면 PNG 인코딩 결과이고, 크롭 불가 포맷(HEIC·WebP·HEIF 는 ImageIO 에
-     * 디코더가 없다)이면 원본 바이트 그대로다.
+     * 업로드할 결과물. 크롭이 실제로 일어났으면 PNG 인코딩 결과이고, 풀 수 없는 이미지(WebP, 변환에 실패한
+     * HEIC·HEIF)면 원본 바이트 그대로다.
      *
      * <p>확장자·content-type 을 결과물과 함께 나르는 이유: 예전에는 둘 다 png 로 하드코딩돼 있어, 크롭을 건너뛴
      * HEIC 바이트가 {@code .png} · {@code image/png} 로 위장돼 저장됐다. 브라우저 대부분이 그 파일을 렌더링하지
-     * 못한다. 등록이 허용하는 5개 포맷 중 셋이 이 경로를 탄다(#35).
+     * 못한다(#35).
      */
     private record UploadTarget(byte[] bytes, String extension, String mimeType, boolean cropped) {}
 
